@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "npm: build:extension",
+            "detail": "Construit l'extension (page + hôte) avant F5",
+            "type": "npm",
+            "script": "build:extension",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "npm: check",
+            "detail": "Lint, types et tests",
+            "type": "npm",
+            "script": "check",
+            "group": "test",
+            "problemMatcher": []
+        }
+    ]
+}

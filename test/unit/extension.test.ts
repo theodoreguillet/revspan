@@ -13,6 +13,14 @@ describe('manifeste de l\'extension', () => {
     it('même version que le projet (la release vérifie le tag contre package.json)', () => {
         expect(readJson('extension/package.json').version).toBe(readJson('package.json').version);
     });
+
+    it('commandes et vues déclarées = commandes et vues enregistrées par extension.ts', () => {
+        const manifest = readJson('extension/package.json') as { contributes: { commands: { command: string }[]; views: Record<string, { id: string }[]> } };
+        const source = fs.readFileSync(new URL('../../src/extension/extension.ts', import.meta.url), 'utf8');
+        const registered = (pattern: RegExp): string[] => [...source.matchAll(pattern)].map((m) => m[1] ?? '').sort();
+        expect(registered(/registerCommand\('([^']+)'/g)).toEqual(manifest.contributes.commands.map((c) => c.command).sort());
+        expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
+    });
 });
 
 describe('HTML du panneau', () => {

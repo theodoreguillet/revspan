@@ -5,7 +5,8 @@
             "name": "Extension Strata",
             "type": "extensionHost",
             "request": "launch",
-            "args": ["--extensionDevelopmentPath=${workspaceFolder}/extension"]
+            "args": ["--extensionDevelopmentPath=${workspaceFolder}/extension"],
+            "preLaunchTask": "npm: build:extension"
         }
     ]
 }

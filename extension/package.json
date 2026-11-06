@@ -14,10 +14,26 @@
         "url": "https://github.com/theodoreguillet/strata/issues"
     },
     "homepage": "https://github.com/theodoreguillet/strata#readme",
+    "pricing": "Free",
     "engines": {
         "vscode": "^1.95.0"
     },
-    "categories": ["SCM Providers", "Other"],
+    "categories": ["Other"],
+    "keywords": ["bitbucket", "pull request", "code review", "amend", "rebase", "force push", "interdiff"],
+    "galleryBanner": {
+        "color": "#1f2b46",
+        "theme": "dark"
+    },
+    "extensionKind": ["workspace"],
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": true
+        },
+        "virtualWorkspaces": {
+            "supported": "limited",
+            "description": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne."
+        }
+    },
     "main": "./dist/extension.cjs",
     "contributes": {
         "commands": [
