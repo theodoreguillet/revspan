@@ -126,3 +126,7 @@ celles de l'auteur restent. Détails : [docs/DESIGN.md](docs/DESIGN.md). Routes 
 `~/.config/strata/` (`%APPDATA%\strata` sous Windows ; `STRATA_CONFIG_DIR` pour changer) :
 `config.json` (e-mail, dépôts), `state.json` (versions relues, fichiers vus), `cache/` (contenus immuables par commit,
 peut être supprimé sans risque).
+
+## Licence
+
+[MIT](LICENSE). Historique des versions : [CHANGELOG.md](CHANGELOG.md).

@@ -2,7 +2,17 @@
     "name": "strata",
     "version": "2.0.0",
     "private": true,
-    "description": "Relecture des PR Bitbucket version par version (amend, rebase) — outil local",
+    "description": "Relire les PR Bitbucket couche par couche, malgré les amends et les rebases — outil local et extension VS Code",
+    "license": "MIT",
+    "author": "Théodore Guillet",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/theodoreguillet/strata.git"
+    },
+    "bugs": {
+        "url": "https://github.com/theodoreguillet/strata/issues"
+    },
+    "homepage": "https://github.com/theodoreguillet/strata#readme",
     "type": "module",
     "engines": {
         "node": ">=22.18"
@@ -21,7 +31,7 @@
         "build:extension": "npm run build:web && node --disable-warning=ExperimentalWarning scripts/build-extension.ts",
         "start": "node bin/strata.js",
         "extension:dev": "npm run build:extension && code --new-window --extensionDevelopmentPath=\"$PWD/extension\"",
-        "package:extension": "npm run build:extension && cd extension && vsce package --no-dependencies --skip-license --allow-missing-repository --out ../dist/strata.vsix",
+        "package:extension": "npm run build:extension && cd extension && vsce package --no-dependencies --out ../dist/strata.vsix",
         "extension:install": "npm run package:extension && code --install-extension dist/strata.vsix --force",
         "lint": "eslint --max-warnings=0 .",
         "lint:fix": "eslint --fix .",

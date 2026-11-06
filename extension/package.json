@@ -1,11 +1,19 @@
 {
     "name": "strata",
     "displayName": "Strata",
-    "description": "Relire les PR Bitbucket version par version (amend, rebase), dans VS Code",
+    "description": "Relire les PR Bitbucket couche par couche, malgré les amends et les rebases, dans VS Code",
     "version": "2.0.0",
     "publisher": "theodoreguillet",
-    "private": true,
-    "license": "UNLICENSED",
+    "license": "MIT",
+    "icon": "media/icon.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/theodoreguillet/strata.git"
+    },
+    "bugs": {
+        "url": "https://github.com/theodoreguillet/strata/issues"
+    },
+    "homepage": "https://github.com/theodoreguillet/strata#readme",
     "engines": {
         "vscode": "^1.95.0"
     },

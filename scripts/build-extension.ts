@@ -1,4 +1,5 @@
 // Construit l'extension VS Code dans extension/dist : bundle de l'hôte (extension.cjs) + page (web/).
+// Copie aussi LICENSE et CHANGELOG.md à côté du manifeste (vsce les cherche dans extension/).
 // Prérequis : la page est construite (npm run build:web).
 import fs from 'node:fs';
 import { build } from 'vite';
@@ -13,4 +14,7 @@ if (!fs.existsSync(`${WEB}/index.html`)) {
 fs.rmSync(OUT, { recursive: true, force: true });
 await build({ configFile: 'vite.extension.config.ts', logLevel: 'warn' });
 fs.cpSync(WEB, `${OUT}/web`, { recursive: true });
+for (const file of ['LICENSE', 'CHANGELOG.md']) {
+    fs.copyFileSync(file, `extension/${file}`);
+}
 console.log(`Extension construite dans ${OUT}`);
