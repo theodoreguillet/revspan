@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Home, PrCard } from '../../src/shared/api.ts';
@@ -5,6 +6,14 @@ import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib
 import { currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
+
+describe('manifeste de l\'extension', () => {
+    const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
+
+    it('même version que le projet (la release vérifie le tag contre package.json)', () => {
+        expect(readJson('extension/package.json').version).toBe(readJson('package.json').version);
+    });
+});
 
 describe('HTML du panneau', () => {
     const index = '<!doctype html><html><head>\n<title>Strata</title><script type="module" src="./assets/a.js"></script></head><body></body></html>';

@@ -85,6 +85,10 @@ Le `.npmrc` du projet contient `ignore-scripts=true` : npm n'exécute aucun scri
 (aucune n'en a besoin). Les tests Playwright utilisent Python 3.10 de macOS par défaut (autre interpréteur via la
 variable `PYTHON`).
 
+La CI GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) lance lint, types, tests et tests UI, et
+construit le `.vsix` (artefact téléchargeable). Pousser un tag `vX.Y.Z` égal à la version de `package.json` crée une
+release GitHub avec le `.vsix` ; penser au CHANGELOG avant.
+
 ```
 src/shared/api.ts      contrat de l'API (types partagés serveur ↔ page)
 src/server/
