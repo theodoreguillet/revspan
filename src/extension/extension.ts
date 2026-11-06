@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import { parsePrUrl } from '../shared/pr-url.ts';
-import { createExtensionApp } from './app-context.ts';
+import { createExtensionApp, REPOS_SETTING } from './app-context.ts';
 import { DiffDocuments } from './diff-documents.ts';
 import { HomeTreeProvider } from './home-tree-provider.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
@@ -36,6 +36,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             const target = ref ?? await askPrRef();
             if (target) {
                 panel.show(prRoute(target));
+            }
+        }),
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration(REPOS_SETTING.id)) {
+                tree.refresh();
             }
         }),
     );

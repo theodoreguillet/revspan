@@ -26,6 +26,17 @@
             { "command": "strata.openSettings", "title": "Réglages (jeton, dépôts)", "category": "Strata", "icon": "$(gear)" },
             { "command": "strata.refresh", "title": "Actualiser", "category": "Strata", "icon": "$(refresh)" }
         ],
+        "configuration": {
+            "title": "Strata",
+            "properties": {
+                "strata.repositories": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "markdownDescription": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Strata."
+                }
+            }
+        },
         "viewsContainers": {
             "activitybar": [
                 { "id": "strata", "title": "Strata", "icon": "media/icon.svg" }

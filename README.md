@@ -30,7 +30,9 @@ dans un panneau, et deux actions sur chaque fichier du diff :
   les mêmes deux côtés que la page (version rejouée sur la nouvelle base après un rebase).
 
 Pas de serveur ni de port : l'extension appelle l'application en mémoire. Le jeton est rangé dans le stockage sécurisé
-de VS Code (⚙ Réglages du panneau ou commande « Strata : Réglages »), séparément de la version web.
+de VS Code (⚙ Réglages du panneau ou commande « Strata : Réglages »), séparément de la version web. Les dépôts suivis
+sont le réglage VS Code `strata.repositories` : modifiable aussi depuis les Réglages de VS Code, synchronisé par
+Settings Sync, propre à chaque profil.
 
 ```bash
 npm run extension:install            # construit dist/strata.vsix et l'installe dans VS Code (puis recharger la fenêtre)

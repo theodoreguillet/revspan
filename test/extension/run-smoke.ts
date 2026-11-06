@@ -111,6 +111,13 @@ try {
         });
         child.on('close', (exitCode) => resolve(exitCode ?? 1));
     });
+    // Les dépôts suivis sont rangés dans le réglage VS Code strata.repositories (réglages utilisateur du profil).
+    const userSettings = JSON.parse(fs.readFileSync(path.join(userData, 'User', 'settings.json'), 'utf8')) as Record<string, unknown>;
+    const reposSaved = JSON.stringify(userSettings['strata.repositories']) === JSON.stringify([`${WS}/${REPO}`]);
+    console.log(`${reposSaved ? 'PASS' : 'FAIL'}  réglage VS Code strata.repositories écrit`);
+    if (!reposSaved) {
+        status = 1;
+    }
 } catch (error) {
     console.error((error as Error).message);
 } finally {

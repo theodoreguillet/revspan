@@ -1,5 +1,6 @@
 // Assemblage côté extension : les mêmes services et la même application HTTP que le serveur local,
-// avec le jeton dans le stockage sécurisé de VS Code et les données dans le stockage global de l'extension.
+// avec le jeton dans le stockage sécurisé de VS Code, les dépôts suivis dans le réglage strata.repositories
+// et les autres données dans le stockage global de l'extension.
 import path from 'node:path';
 import * as vscode from 'vscode';
 import type { Hono } from 'hono';
@@ -7,7 +8,7 @@ import type { SecretStore } from '../server/infra/secrets.ts';
 import { DEFAULT_BASE_URL } from '../server/bitbucket/client.ts';
 import { createHttpApp } from '../server/http/app.ts';
 import { Cache } from '../server/infra/cache.ts';
-import { Store } from '../server/infra/config.ts';
+import { Store, type RepoSource } from '../server/infra/config.ts';
 import { createServices, type Services } from '../server/services/index.ts';
 import { IN_MEMORY_HOST } from './lib/bridge.ts';
 
@@ -16,7 +17,23 @@ export interface ExtensionApp {
     http: Hono;
 }
 
+/** Réglage VS Code des dépôts suivis : visible dans les Réglages, synchronisé par Settings Sync, propre au profil. */
+export const REPOS_SETTING = { section: 'strata', key: 'repositories', id: 'strata.repositories' } as const;
+
 const TOKEN_KEY_PREFIX = 'strata.bitbucket-token:';
+
+function vscodeRepoSource(): RepoSource {
+    const config = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(REPOS_SETTING.section);
+    return {
+        get() {
+            const value = config().get<unknown>(REPOS_SETTING.key);
+            return Array.isArray(value) ? value.filter((repo): repo is string => typeof repo === 'string') : [];
+        },
+        async set(repos) {
+            await config().update(REPOS_SETTING.key, repos, vscode.ConfigurationTarget.Global);
+        },
+    };
+}
 
 function vscodeSecretStore(secrets: vscode.SecretStorage): SecretStore {
     const key = (account: string): string => `${TOKEN_KEY_PREFIX}${account}`;
@@ -52,7 +69,7 @@ function testOverrides(mode: vscode.ExtensionMode): { baseUrl?: string; email?: 
 
 export async function createExtensionApp(context: vscode.ExtensionContext): Promise<ExtensionApp> {
     const dir = context.globalStorageUri.fsPath;
-    const store = new Store(dir);
+    const store = new Store(dir, { repoSource: vscodeRepoSource() });
     const cache = new Cache(path.join(dir, 'cache'));
     const overrides = testOverrides(context.extensionMode);
     const services = createServices({ store, secrets: vscodeSecretStore(context.secrets), cache, baseUrl: overrides.baseUrl ?? DEFAULT_BASE_URL });

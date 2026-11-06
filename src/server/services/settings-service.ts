@@ -49,7 +49,7 @@ export class SettingsService {
         if (patch.repos !== undefined) {
             next.repos = normalizeRepos(patch.repos);
         }
-        store.saveConfig(next);
+        await store.saveConfig(next);
 
         if (patch.token !== undefined) {
             const { email } = store.config;

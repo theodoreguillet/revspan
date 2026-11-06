@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, shallowRef } from 'vue';
 import type { Settings } from '../../shared/api.ts';
 import { api } from '../services/api.ts';
+import { isVsCode } from '../services/host.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
 import TopNav from '../components/TopNav.vue';
 import { showError } from '../composables/useErrors.ts';
@@ -148,7 +149,10 @@ onMounted(async () => {
                 <div class="rv-field">
                     <label for="set-repos">Dépôts suivis</label>
                     <textarea id="set-repos" v-model="repos" spellcheck="false" placeholder="mon-workspace/mon-depot&#10;mon-workspace/autre-depot" />
-                    <div class="help">Un « workspace/dépôt » par ligne, ou l'adresse Bitbucket du dépôt. Leurs PR ouvertes apparaissent sur l'accueil.</div>
+                    <div class="help">
+                        Un « workspace/dépôt » par ligne, ou l'adresse Bitbucket du dépôt. Leurs PR ouvertes apparaissent sur l'accueil.
+                        <template v-if="isVsCode">Enregistrés dans le réglage VS Code <code>strata.repositories</code>.</template>
+                    </div>
                 </div>
                 <div class="rv-form-acts">
                     <button class="rv-btn rv-btn-primary" type="submit" :disabled="saving">Enregistrer</button>

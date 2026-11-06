@@ -54,15 +54,23 @@ function readJson<T>(file: string, fallback: T): T {
 
 const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: state.viewed ?? {}, kinds: state.kinds ?? {} });
 
+/** Liste des dépôts tenue ailleurs que dans config.json (extension VS Code : réglage strata.repositories). */
+export interface RepoSource {
+    get(): readonly string[];
+    set(repos: string[]): Promise<void>;
+}
+
 export class Store {
     readonly dir: string;
     private readonly configPath: string;
     private readonly statePath: string;
+    private readonly repoSource: RepoSource | null;
     private configValue: AppConfig;
     private readonly state: StateFile;
 
-    constructor(dir: string) {
+    constructor(dir: string, { repoSource = null }: { repoSource?: RepoSource | null } = {}) {
         this.dir = dir;
+        this.repoSource = repoSource;
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
         this.configPath = path.join(dir, 'config.json');
         this.statePath = path.join(dir, 'state.json');
@@ -71,13 +79,19 @@ export class Store {
     }
 
     get config(): Readonly<AppConfig> {
-        return this.configValue;
+        return this.repoSource ? { ...this.configValue, repos: normalizeRepos(this.repoSource.get()) } : this.configValue;
     }
 
-    saveConfig(patch: Partial<AppConfig>): AppConfig {
-        this.configValue = { ...this.configValue, ...patch };
+    async saveConfig({ repos, ...rest }: Partial<AppConfig>): Promise<AppConfig> {
+        if (repos !== undefined && this.repoSource) {
+            await this.repoSource.set(repos);
+        }
+        this.configValue = { ...this.configValue, ...rest };
+        if (repos !== undefined && !this.repoSource) {
+            this.configValue.repos = repos;
+        }
         writeJsonAtomic(this.configPath, this.configValue);
-        return this.configValue;
+        return { ...this.config };
     }
 
     /** État local d'une PR (vide si elle n'a jamais été ouverte). */
