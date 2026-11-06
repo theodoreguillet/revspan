@@ -1,0 +1,9 @@
+// Navigation vers une PR (l'analyse des URL Bitbucket est dans src/shared/pr-url.ts).
+import type { PrRef } from '../../shared/api.ts';
+
+export const PR_URL_HINT = 'URL attendue : https://bitbucket.org/<workspace>/<dépôt>/pull-requests/<numéro>';
+
+/** Emplacement de route de la page PR (route nommée « pr » de router.ts). */
+export function prRoute(ref: PrRef, query?: Record<string, string>): { name: 'pr'; params: Record<string, string>; query?: Record<string, string> } {
+    return { name: 'pr', params: { ws: ref.workspace, repo: ref.repo, id: String(ref.id) }, ...(query ? { query } : {}) };
+}

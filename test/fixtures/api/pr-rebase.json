@@ -1,0 +1,239 @@
+{
+  "pr": {
+    "workspace": "acme",
+    "repo": "records-export",
+    "id": 118,
+    "title": "DEMO-118 - fix(report): trim labels in the PDF report",
+    "description": "",
+    "state": "OPEN",
+    "author": {
+      "uuid": "{12121212-2222-4333-8444-955555555555}",
+      "displayName": "Jules Mercier",
+      "nickname": "jmercier"
+    },
+    "sourceBranch": "fix/DEMO-118-trim-labels",
+    "destBranch": "master",
+    "createdOn": "2026-10-31T09:00:00Z",
+    "updatedOn": "2026-11-05T08:15:00Z",
+    "url": "https://bitbucket.org/acme/records-export/pull-requests/118"
+  },
+  "me": {
+    "uuid": "{me-uuid}",
+    "displayName": "Thomas Girard",
+    "nickname": "tgirard"
+  },
+  "versions": [
+    {
+      "index": 1,
+      "hash": "3afb01c3481f79776e70b3783b46820f2cb5c091",
+      "shortHash": "3afb01c",
+      "pushedAt": "2026-10-31T09:00:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "base": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "baseShort": "11b7943",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 2,
+      "hash": "86801839010c3f1d4cec568cf7250f7629407833",
+      "shortHash": "8680183",
+      "pushedAt": "2026-10-31T10:12:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "base": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "baseShort": "11b7943",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 3,
+      "hash": "139c2e2e041ca917ab77df5bd14f8856d6b4ba1b",
+      "shortHash": "139c2e2",
+      "pushedAt": "2026-11-02T08:40:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "base": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "baseShort": "11b7943",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 4,
+      "hash": "4e0f4ac17430d0271e1314f3fbfcc9180b0f14ff",
+      "shortHash": "4e0f4ac",
+      "pushedAt": "2026-11-02T15:05:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "base": "11b7943148b7f0bd1c2e272be52604a4b17be668",
+      "baseShort": "11b7943",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 5,
+      "hash": "7cca5bab81683557be4dc5567aca2b7c2f688dd0",
+      "shortHash": "7cca5ba",
+      "pushedAt": "2026-11-03T09:21:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "9d367498578c3e7d5e56e7463fe66c91cf3073aa",
+      "base": "9d367498578c3e7d5e56e7463fe66c91cf3073aa",
+      "baseShort": "9d36749",
+      "isRebase": true,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 6,
+      "hash": "e6ff8de264f6321769ed15a66820732c33178eca",
+      "shortHash": "e6ff8de",
+      "pushedAt": "2026-11-03T11:44:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "9d367498578c3e7d5e56e7463fe66c91cf3073aa",
+      "base": "9d367498578c3e7d5e56e7463fe66c91cf3073aa",
+      "baseShort": "9d36749",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 7,
+      "hash": "9fb3fe631dd12bf2e596345d63a899a318ce2780",
+      "shortHash": "9fb3fe6",
+      "pushedAt": "2026-11-04T08:02:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "base": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "baseShort": "5d191a4",
+      "isRebase": true,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 8,
+      "hash": "4361099d756e2f2443760ea46d0c0e2c1cc52d30",
+      "shortHash": "4361099",
+      "pushedAt": "2026-11-04T08:30:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "base": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "baseShort": "5d191a4",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 9,
+      "hash": "13abe7356ef35df5822a7424a0d25f126bacc564",
+      "shortHash": "3859268",
+      "pushedAt": "2026-11-04T16:10:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "base": "5d191a4d0a9a10d686dfe8244bc0437e48d14cf9",
+      "baseShort": "5d191a4",
+      "isRebase": false,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    },
+    {
+      "index": 10,
+      "hash": "46fb257f613d5a0d8c17fda072a9c2b5021b14e6",
+      "shortHash": "46fb257",
+      "pushedAt": "2026-11-05T08:15:00Z",
+      "pushedBy": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "destHash": "2e2b73501b9916f1b5cc2d6cc12ee489a9d17cea",
+      "base": "2e2b73501b9916f1b5cc2d6cc12ee489a9d17cea",
+      "baseShort": "2e2b735",
+      "isRebase": true,
+      "message": "DEMO-118 - fix(report): trim labels in the PDF report",
+      "messageChanged": false
+    }
+  ],
+  "participants": [
+    {
+      "user": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "role": "REVIEWER",
+      "approved": true,
+      "state": "approved",
+      "approvedVersion": 9
+    },
+    {
+      "user": {
+        "uuid": "{me-uuid}",
+        "displayName": "Thomas Girard",
+        "nickname": "tgirard"
+      },
+      "role": "REVIEWER",
+      "approved": true,
+      "state": "approved",
+      "approvedVersion": 9
+    },
+    {
+      "user": {
+        "uuid": "{12121212-2222-4333-8444-955555555555}",
+        "displayName": "Jules Mercier",
+        "nickname": "jmercier"
+      },
+      "role": "PARTICIPANT",
+      "approved": false,
+      "state": null,
+      "approvedVersion": null
+    }
+  ],
+  "review": {
+    "lastReviewed": 9,
+    "lastReviewedSource": "approval",
+    "lastReviewedAt": "2026-11-04T17:10:00.000Z",
+    "viewed": {}
+  },
+  "threads": []
+}

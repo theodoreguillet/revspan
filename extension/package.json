@@ -1,0 +1,52 @@
+{
+    "name": "strata",
+    "displayName": "Strata",
+    "description": "Relire les PR Bitbucket version par version (amend, rebase), dans VS Code",
+    "version": "2.0.0",
+    "publisher": "theodoreguillet",
+    "private": true,
+    "license": "UNLICENSED",
+    "engines": {
+        "vscode": "^1.95.0"
+    },
+    "categories": ["SCM Providers", "Other"],
+    "main": "./dist/extension.cjs",
+    "contributes": {
+        "commands": [
+            { "command": "strata.openHome", "title": "Ouvrir l'accueil", "category": "Strata", "icon": "$(home)" },
+            { "command": "strata.openPr", "title": "Ouvrir une PR (URL)", "category": "Strata", "icon": "$(link-external)" },
+            { "command": "strata.openSettings", "title": "Réglages (jeton, dépôts)", "category": "Strata", "icon": "$(gear)" },
+            { "command": "strata.refresh", "title": "Actualiser", "category": "Strata", "icon": "$(refresh)" }
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                { "id": "strata", "title": "Strata", "icon": "media/icon.svg" }
+            ]
+        },
+        "views": {
+            "strata": [
+                { "id": "strata.home", "name": "Mes PR" }
+            ]
+        },
+        "viewsWelcome": [
+            {
+                "view": "strata.home",
+                "contents": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:strata.openSettings)",
+                "when": "strata.needsToken"
+            },
+            {
+                "view": "strata.home",
+                "contents": "Aucun dépôt suivi.\n[Choisir les dépôts](command:strata.openSettings)",
+                "when": "strata.noRepos && !strata.needsToken"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                { "command": "strata.refresh", "when": "view == strata.home", "group": "navigation@1" },
+                { "command": "strata.openPr", "when": "view == strata.home", "group": "navigation@2" },
+                { "command": "strata.openHome", "when": "view == strata.home", "group": "navigation@3" },
+                { "command": "strata.openSettings", "when": "view == strata.home", "group": "navigation@4" }
+            ]
+        }
+    }
+}

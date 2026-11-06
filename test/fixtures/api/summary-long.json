@@ -1,0 +1,233 @@
+{
+  "versions": [
+    {
+      "index": 1,
+      "kind": "creation",
+      "added": 540,
+      "removed": 15,
+      "files": [
+        {
+          "path": "src/records/DeleteRecord/DeleteRecord.ts",
+          "added": 92,
+          "removed": 5,
+          "category": "code"
+        },
+        {
+          "path": "src/records/UpdateRecord/UpdateRecord.ts",
+          "added": 48,
+          "removed": 2,
+          "category": "code"
+        },
+        {
+          "path": "src/records/CreateRecord/CreateRecord.ts",
+          "added": 34,
+          "removed": 1,
+          "category": "code"
+        },
+        {
+          "path": "tests/unit/records/DeleteRecordSpec.ts",
+          "added": 205,
+          "removed": 0,
+          "category": "code"
+        },
+        {
+          "path": "tests/unit/records/UpdateRecordSpec.ts",
+          "added": 67,
+          "removed": 1,
+          "category": "code"
+        },
+        {
+          "path": "tests/unit/records/CreateRecordSpec.ts",
+          "added": 61,
+          "removed": 0,
+          "category": "code"
+        },
+        {
+          "path": "docs/openapi.yaml",
+          "added": 20,
+          "removed": 0,
+          "category": "code"
+        },
+        {
+          "path": "coverage.config.json",
+          "added": 4,
+          "removed": 4,
+          "category": "code"
+        },
+        {
+          "path": "package.json",
+          "added": 1,
+          "removed": 1,
+          "category": "deps"
+        },
+        {
+          "path": "package-lock.json",
+          "added": 8,
+          "removed": 1,
+          "category": "deps"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    },
+    {
+      "index": 2,
+      "kind": "deps",
+      "added": 5,
+      "removed": 5,
+      "files": [
+        {
+          "path": "package.json",
+          "added": 1,
+          "removed": 1,
+          "category": "deps"
+        },
+        {
+          "path": "package-lock.json",
+          "added": 4,
+          "removed": 4,
+          "category": "deps"
+        }
+      ],
+      "masterFiles": 22,
+      "conflicts": 1
+    },
+    {
+      "index": 3,
+      "kind": "deps",
+      "added": 23,
+      "removed": 20,
+      "files": [
+        {
+          "path": "package.json",
+          "added": 6,
+          "removed": 3,
+          "category": "deps"
+        },
+        {
+          "path": "package-lock.json",
+          "added": 17,
+          "removed": 17,
+          "category": "deps"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    },
+    {
+      "index": 4,
+      "kind": "code",
+      "added": 35,
+      "removed": 14,
+      "files": [
+        {
+          "path": "src/records/UpdateRecord/UpdateRecord.ts",
+          "added": 10,
+          "removed": 1,
+          "category": "code"
+        },
+        {
+          "path": "tests/unit/records/UpdateRecordSpec.ts",
+          "added": 21,
+          "removed": 1,
+          "category": "code"
+        },
+        {
+          "path": "coverage.config.json",
+          "added": 4,
+          "removed": 4,
+          "category": "code"
+        },
+        {
+          "path": "docs/openapi.yaml",
+          "added": 0,
+          "removed": 8,
+          "category": "code"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    },
+    {
+      "index": 5,
+      "kind": "rebase-only",
+      "added": 0,
+      "removed": 0,
+      "files": [],
+      "masterFiles": 3,
+      "conflicts": 0
+    },
+    {
+      "index": 6,
+      "kind": "rebase-only",
+      "added": 0,
+      "removed": 0,
+      "files": [],
+      "masterFiles": 3,
+      "conflicts": 0
+    },
+    {
+      "index": 7,
+      "kind": "deps",
+      "added": 4,
+      "removed": 4,
+      "files": [
+        {
+          "path": "package-lock.json",
+          "added": 4,
+          "removed": 4,
+          "category": "deps"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    },
+    {
+      "index": 8,
+      "kind": "rebase-only",
+      "added": 0,
+      "removed": 0,
+      "files": [],
+      "masterFiles": 137,
+      "conflicts": 0
+    },
+    {
+      "index": 9,
+      "kind": "deps",
+      "added": 4,
+      "removed": 4,
+      "files": [
+        {
+          "path": "package-lock.json",
+          "added": 4,
+          "removed": 4,
+          "category": "deps"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    },
+    {
+      "index": 10,
+      "kind": "code",
+      "added": 2,
+      "removed": 2,
+      "files": [
+        {
+          "path": "src/records/CreateRecord/CreateRecord.ts",
+          "added": 1,
+          "removed": 1,
+          "category": "code"
+        },
+        {
+          "path": "coverage.config.json",
+          "added": 1,
+          "removed": 1,
+          "category": "code"
+        }
+      ],
+      "masterFiles": 0,
+      "conflicts": 0
+    }
+  ]
+}

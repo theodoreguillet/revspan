@@ -1,0 +1,59 @@
+{
+    "name": "strata",
+    "version": "2.0.0",
+    "private": true,
+    "description": "Relecture des PR Bitbucket version par version (amend, rebase) — outil local",
+    "type": "module",
+    "engines": {
+        "node": ">=22.18"
+    },
+    "bin": {
+        "strata": "bin/strata.js"
+    },
+    "scripts": {
+        "dev": "node --disable-warning=ExperimentalWarning scripts/dev.ts",
+        "dev:server": "node --watch --disable-warning=ExperimentalWarning src/server/main.ts --no-open",
+        "dev:web": "vite",
+        "dev:fake": "node --disable-warning=ExperimentalWarning test/support/dev-fake.ts",
+        "build": "npm run build:web && npm run build:server",
+        "build:web": "vite build",
+        "build:server": "tsc -p tsconfig.build.json",
+        "build:extension": "npm run build:web && node --disable-warning=ExperimentalWarning scripts/build-extension.ts",
+        "start": "node bin/strata.js",
+        "extension:dev": "npm run build:extension && code --new-window --extensionDevelopmentPath=\"$PWD/extension\"",
+        "package:extension": "npm run build:extension && cd extension && vsce package --no-dependencies --skip-license --allow-missing-repository --out ../dist/strata.vsix",
+        "extension:install": "npm run package:extension && code --install-extension dist/strata.vsix --force",
+        "lint": "eslint --max-warnings=0 .",
+        "lint:fix": "eslint --fix .",
+        "typecheck": "vue-tsc --build",
+        "check": "npm run lint && npm run typecheck && npm test",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:e2e": "npm run build && node --disable-warning=ExperimentalWarning test/e2e/run-against-fake.ts",
+        "test:extension": "npm run build:extension && node --disable-warning=ExperimentalWarning test/extension/run-smoke.ts",
+        "test:live": "STRATA_LIVE=1 vitest run --project live",
+        "clean": "node -e \"for (const dir of ['dist', 'extension/dist']) require('fs').rmSync(dir, { recursive: true, force: true })\""
+    },
+    "dependencies": {
+        "@hono/node-server": "^2.1.6",
+        "hono": "^4.6.0",
+        "vue": "3.5.43",
+        "vue-router": "5.3.1",
+        "zod": "^4.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "22.20.4",
+        "@types/vscode": "1.95.0",
+        "@vitejs/plugin-vue": "6.0.9",
+        "@vscode/vsce": "3.9.2",
+        "@vue/tsconfig": "0.9.1",
+        "eslint": "^9.0.0",
+        "eslint-plugin-vue": "^10.12.0",
+        "happy-dom": "^21.0.4",
+        "typescript": "5.9.3",
+        "typescript-eslint": "^8.72.1",
+        "vite": "^8.3.6",
+        "vitest": "^5.0.1",
+        "vue-tsc": "3.3.11"
+    }
+}

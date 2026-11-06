@@ -1,0 +1,497 @@
+{
+  "pr": {
+    "workspace": "acme",
+    "repo": "records-api",
+    "id": 212,
+    "title": "DEMO-212 - feat(records): archive records in bulk",
+    "description": "Archive several records at once from the list (`POST /records/archive`).",
+    "state": "OPEN",
+    "author": {
+      "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+      "displayName": "Camille Durand",
+      "nickname": "cdurand"
+    },
+    "sourceBranch": "feature/DEMO-212-archive-records",
+    "destBranch": "master",
+    "createdOn": "2026-10-14T09:10:00Z",
+    "updatedOn": "2026-11-05T12:20:00Z",
+    "url": "https://bitbucket.org/acme/records-api/pull-requests/212"
+  },
+  "me": {
+    "uuid": "{me-uuid}",
+    "displayName": "Thomas Girard",
+    "nickname": "tgirard"
+  },
+  "versions": [
+    {
+      "index": 1,
+      "hash": "8e1996b16bfc73b82ee43452cf7feb983e132967",
+      "shortHash": "8e1996b",
+      "pushedAt": "2026-10-14T09:10:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "23a898a6aed5b9ecbd07ed08f3fb59c7818b5dd5",
+      "base": "e1d4f609d11407caade745afc092066edb1673d8",
+      "baseShort": "e1d4f60",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 2,
+      "hash": "656b9911353368d0b5063b7f22a92ab7860196f9",
+      "shortHash": "656b991",
+      "pushedAt": "2026-10-29T14:58:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "a7571f2fbd197f8df15c39b1b0b170ee1cb533ff",
+      "base": "a7571f2fbd197f8df15c39b1b0b170ee1cb533ff",
+      "baseShort": "a7571f2",
+      "isRebase": true,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 3,
+      "hash": "6c7f861b4adf39570be4f1e5ceb4366bfadfc1f6",
+      "shortHash": "6c7f861",
+      "pushedAt": "2026-10-29T15:16:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "a7571f2fbd197f8df15c39b1b0b170ee1cb533ff",
+      "base": "a7571f2fbd197f8df15c39b1b0b170ee1cb533ff",
+      "baseShort": "a7571f2",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 4,
+      "hash": "1c20e0ce0fae533b2cc560132684e282ac4dbfc6",
+      "shortHash": "1c20e0c",
+      "pushedAt": "2026-10-29T16:41:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "b409d52bd768b0b4d48bafb4584c6136a495ec6e",
+      "base": "a7571f2fbd197f8df15c39b1b0b170ee1cb533ff",
+      "baseShort": "a7571f2",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 5,
+      "hash": "038bb06cba2b9bac6fb9d1d8a441a990788ec60b",
+      "shortHash": "038bb06",
+      "pushedAt": "2026-11-02T12:55:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "976c9bcc8168c5914eb44086f88c7389b06d1a5c",
+      "base": "976c9bcc8168c5914eb44086f88c7389b06d1a5c",
+      "baseShort": "976c9bc",
+      "isRebase": true,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 6,
+      "hash": "7ac4c72760f1165600b1a8bb8ec43b7e3f9d28b8",
+      "shortHash": "7ac4c72",
+      "pushedAt": "2026-11-03T14:42:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "e69769e6eed2a5e1604d138593e9a69330901fd4",
+      "base": "e69769e6eed2a5e1604d138593e9a69330901fd4",
+      "baseShort": "e69769e",
+      "isRebase": true,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 7,
+      "hash": "a0a11ce8b26ec7f1309a1b65b4a8f8ec9cd4efe4",
+      "shortHash": "a0a11ce",
+      "pushedAt": "2026-11-03T14:43:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "e69769e6eed2a5e1604d138593e9a69330901fd4",
+      "base": "e69769e6eed2a5e1604d138593e9a69330901fd4",
+      "baseShort": "e69769e",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 8,
+      "hash": "e437672fbb9b2078b88ef472d886c9da41156125",
+      "shortHash": "e437672",
+      "pushedAt": "2026-11-05T10:24:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "070b8d3651a68d48f50aab888a7dc1664631d257",
+      "base": "070b8d3651a68d48f50aab888a7dc1664631d257",
+      "baseShort": "070b8d3",
+      "isRebase": true,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 9,
+      "hash": "2a2fc200e7bce7e7e6b631cc0503fbeadecb79bb",
+      "shortHash": "2a2fc20",
+      "pushedAt": "2026-11-05T10:26:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "070b8d3651a68d48f50aab888a7dc1664631d257",
+      "base": "070b8d3651a68d48f50aab888a7dc1664631d257",
+      "baseShort": "070b8d3",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    },
+    {
+      "index": 10,
+      "hash": "178703aea2723967e5fe7e7eadf622200be4fe71",
+      "shortHash": "178703a",
+      "pushedAt": "2026-11-05T12:17:00Z",
+      "pushedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "destHash": "fd56ecccd34fcaffd8093b529f532ef512a40a30",
+      "base": "070b8d3651a68d48f50aab888a7dc1664631d257",
+      "baseShort": "070b8d3",
+      "isRebase": false,
+      "message": "DEMO-212 - feat(records): archive records in bulk",
+      "messageChanged": false
+    }
+  ],
+  "participants": [
+    {
+      "user": {
+        "uuid": "{c354edb8-5b47-4f3a-8e60-58e21d98a476}",
+        "displayName": "Yann Bernard",
+        "nickname": "ybernard"
+      },
+      "role": "REVIEWER",
+      "approved": true,
+      "state": "approved",
+      "approvedVersion": 10
+    },
+    {
+      "user": {
+        "uuid": "{0db23cf7-5432-4e10-9fed-d2cb3f7a91e5}",
+        "displayName": "William Etienne",
+        "nickname": "wetienne"
+      },
+      "role": "REVIEWER",
+      "approved": true,
+      "state": "approved",
+      "approvedVersion": 7
+    },
+    {
+      "user": {
+        "uuid": "{me-uuid}",
+        "displayName": "Thomas Girard",
+        "nickname": "tgirard"
+      },
+      "role": "REVIEWER",
+      "approved": false,
+      "state": null,
+      "approvedVersion": null
+    },
+    {
+      "user": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "role": "PARTICIPANT",
+      "approved": false,
+      "state": null,
+      "approvedVersion": null
+    },
+    {
+      "user": {
+        "uuid": "{45c5c5c5-0000-4000-8000-c5c5c5c5c5c5}",
+        "displayName": "review-bot",
+        "nickname": "review-bot"
+      },
+      "role": "PARTICIPANT",
+      "approved": false,
+      "state": null,
+      "approvedVersion": null
+    }
+  ],
+  "review": {
+    "lastReviewed": 7,
+    "lastReviewedSource": "local",
+    "lastReviewedAt": "2026-11-03T15:30:00Z",
+    "viewed": {
+      "coverage.config.json": "3ba94dfefce2f5b2",
+      "package-lock.json": "7166b175e234868a"
+    }
+  },
+  "threads": [
+    {
+      "id": 101,
+      "path": "src/records/UpdateRecord/UpdateRecord.ts",
+      "anchor": {
+        "to": 72,
+        "from": null
+      },
+      "version": 1,
+      "resolved": true,
+      "resolvedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "comments": [
+        {
+          "id": 101,
+          "user": {
+            "uuid": "{45c5c5c5-0000-4000-8000-c5c5c5c5c5c5}",
+            "displayName": "review-bot",
+            "nickname": "review-bot"
+          },
+          "createdOn": "2026-10-14T09:18:12Z",
+          "version": 1,
+          "html": "<p><strong>Potential issue</strong>: <code>findArchivedAt</code> may return <code>undefined</code> for a record that was never archived. Consider handling that case explicitly.</p>",
+          "raw": "**Potential issue**: `findArchivedAt` may return `undefined`…",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        },
+        {
+          "id": 102,
+          "user": {
+            "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+            "displayName": "Camille Durand",
+            "nickname": "cdurand"
+          },
+          "createdOn": "2026-10-29T15:02:00Z",
+          "version": 2,
+          "html": "<p>no</p>",
+          "raw": "no",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "path": "src/records/UpdateRecord/UpdateRecord.ts",
+      "anchor": {
+        "to": 80,
+        "from": null
+      },
+      "version": 1,
+      "resolved": true,
+      "resolvedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "comments": [
+        {
+          "id": 103,
+          "user": {
+            "uuid": "{45c5c5c5-0000-4000-8000-c5c5c5c5c5c5}",
+            "displayName": "review-bot",
+            "nickname": "review-bot"
+          },
+          "createdOn": "2026-10-14T09:18:30Z",
+          "version": 1,
+          "html": "<p><strong>Suggestion</strong>: archiving and reindexing are not atomic. If <code>reindex</code> fails, the record is archived but still listed.</p>",
+          "raw": "**Suggestion**: archiving and reindexing are not atomic…",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        },
+        {
+          "id": 104,
+          "user": {
+            "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+            "displayName": "Camille Durand",
+            "nickname": "cdurand"
+          },
+          "createdOn": "2026-10-29T15:03:00Z",
+          "version": 2,
+          "html": "<p>no</p>",
+          "raw": "no",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "path": "src/records/UpdateRecord/UpdateRecord.ts",
+      "anchor": {
+        "to": 84,
+        "from": null
+      },
+      "version": 1,
+      "resolved": true,
+      "resolvedBy": {
+        "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+        "displayName": "Camille Durand",
+        "nickname": "cdurand"
+      },
+      "comments": [
+        {
+          "id": 105,
+          "user": {
+            "uuid": "{45c5c5c5-0000-4000-8000-c5c5c5c5c5c5}",
+            "displayName": "review-bot",
+            "nickname": "review-bot"
+          },
+          "createdOn": "2026-10-14T09:18:47Z",
+          "version": 1,
+          "html": "<p><strong>Security</strong>: the bulk endpoint does not check the owner of each record. A user could archive the records of another team.</p>",
+          "raw": "**Security**: the bulk endpoint does not check each owner…",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        },
+        {
+          "id": 106,
+          "user": {
+            "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+            "displayName": "Camille Durand",
+            "nickname": "cdurand"
+          },
+          "createdOn": "2026-10-29T15:05:00Z",
+          "version": 2,
+          "html": "<p>Ownership is checked by the batch loader before the loop, and a list with an unknown id is rejected as a whole.</p>",
+          "raw": "Ownership is checked by the batch loader…",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "path": null,
+      "anchor": null,
+      "version": 1,
+      "resolved": false,
+      "resolvedBy": null,
+      "comments": [
+        {
+          "id": 110,
+          "user": {
+            "uuid": "{45c5c5c5-0000-4000-8000-c5c5c5c5c5c5}",
+            "displayName": "review-bot",
+            "nickname": "review-bot"
+          },
+          "createdOn": "2026-10-14T09:19:05Z",
+          "version": 1,
+          "html": "<h2 id=\"markdown-header-test-impact\">🔍 Test impact</h2><p onclick=\"window.__xss=1\"><strong>Scope</strong>: bulk archiving, <code>POST /records/archive</code> with a list of ids.</p><table style=\"border:5px solid red\"><thead><tr><th>Area</th><th>Risk</th><th>Suggested test</th></tr></thead><tbody><tr><td>Bulk archive</td><td>High</td><td>Archive three records, check they leave the list</td></tr><tr><td>Unknown id</td><td>Medium</td><td>Send an unknown id: expect <code>404</code></td></tr><tr><td>Empty list</td><td>Low</td><td>Send an empty list: expect <code>400</code></td></tr></tbody></table><p>Regression candidates:</p><ul><li><code>UpdateRecordSpec.ts</code></li><li><code>CreateRecordSpec.ts</code></li></ul><p>See the <a href=\"https://bitbucket.org/acme/records-api/src/main/docs/openapi.yaml\" onmouseover=\"window.__xss=1\">API spec</a>.</p><img src=\"x\" onerror=\"window.__xss=1\"><script>window.__xss=1</script>",
+          "raw": "## 🔍 Test impact\n\n**Scope**: bulk archiving…",
+          "isNew": false,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        }
+      ]
+    },
+    {
+      "id": 120,
+      "path": "src/records/CreateRecord/CreateRecord.ts",
+      "anchor": {
+        "to": 40,
+        "from": null
+      },
+      "version": 9,
+      "resolved": false,
+      "resolvedBy": null,
+      "comments": [
+        {
+          "id": 120,
+          "user": {
+            "uuid": "{c354edb8-5b47-4f3a-8e60-58e21d98a476}",
+            "displayName": "Yann Bernard",
+            "nickname": "ybernard"
+          },
+          "createdOn": "2026-11-05T11:02:00Z",
+          "version": 9,
+          "html": "<p>can we reuse the batch loader here ?</p>",
+          "raw": "can we reuse the batch loader here ?",
+          "isNew": true,
+          "deleted": false,
+          "mine": false,
+          "reactions": []
+        },
+        {
+          "id": 121,
+          "user": {
+            "uuid": "{967d5cae-8d3e-4b07-9a21-d180a4f2b655}",
+            "displayName": "Camille Durand",
+            "nickname": "cdurand"
+          },
+          "createdOn": "2026-11-05T12:20:00Z",
+          "version": 10,
+          "html": "<p>Done, it now uses <code>buildIdFromPayload</code>.</p>",
+          "raw": "Done, it now uses `buildIdFromPayload`.",
+          "isNew": true,
+          "deleted": false,
+          "mine": false,
+          "reactions": [
+            {
+              "emoji": "👍",
+              "users": [
+                {
+                  "uuid": "{me-uuid}",
+                  "displayName": "Thomas Girard",
+                  "nickname": "tgirard"
+                }
+              ],
+              "myCommentIds": [
+                131
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
