@@ -4,6 +4,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selo
 
 ## [Non publié]
 
+### Ajouts
+
+- Extension VS Code : dépôts suivis dans le réglage `strata.repositories` (Réglages de VS Code, Settings Sync, propre à
+  chaque profil), toujours modifiables depuis ⚙ Réglages du panneau.
+- Extension VS Code : fonctionne en espace de travail non approuvé ; en espace virtuel, tout sauf « Ouvrir le fichier ».
+- Licence MIT, icône, CI GitHub Actions (lint, types, tests, tests UI, `.vsix`) et release GitHub sur tag `v*`.
+
 ## [2.0.0] - 2026-11-06
 
 Première version publiée sous le nom Strata.
