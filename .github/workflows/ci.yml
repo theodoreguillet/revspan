@@ -66,19 +66,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      # A step's `if` cannot read `secrets`: expose it through the job's env.
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      # .npmrc: ignore-scripts=true, no install script is run.
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           name: revspan-vsix
           path: dist
+      - name: Publish to the VS Code Marketplace
+        run: |
+          if [ -z "$VSCE_PAT" ]; then echo "VSCE_PAT not set, skipping Marketplace publish"; exit 0; fi
+          node_modules/.bin/vsce publish --packagePath dist/revspan.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
       - name: Release with the .vsix
         run: gh release create "$GITHUB_REF_NAME" dist/revspan.vsix --title "Revspan $GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Publish to the VS Code Marketplace
-        if: env.VSCE_PAT != ''
-        run: npx --no-install vsce publish --packagePath dist/revspan.vsix

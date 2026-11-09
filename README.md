@@ -46,8 +46,8 @@ in a panel, and two actions on each file of the diff:
 There is no server or port: the extension calls the application in memory. The token is stored in VS Code's secure
 storage (⚙ Settings of the panel or the "Revspan: Settings" command), separately from the web version; VS Code
 shares it across profiles. The tracked repositories are the VS Code setting `revspan.repositories`: it can also be
-edited from VS Code's Settings, is synced by Settings Sync and is specific to each profile (unlike the token). After "Reload Window", VS Code reopens the Revspan panel on the page
-that was displayed.
+edited from VS Code's Settings, is synced by Settings Sync and is specific to each profile (unlike the token). After "Reload Window", VS Code
+reopens the Revspan panel on the page that was displayed.
 
 ```bash
 npm run extension:install            # builds dist/revspan.vsix and installs it in VS Code (then reload the window)

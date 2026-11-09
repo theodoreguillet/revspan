@@ -8,7 +8,8 @@ versions, without the noise brought in by rebases.
 
 ## Features
 
-- **"My PRs" view** in the activity bar: your open PRs and the PRs waiting for your review, in the repositories you follow.
+- **"My PRs" view** in the activity bar: your open PRs and the PRs waiting for your review, in the repositories you
+  follow.
 - **Version timeline**: one dot per push, rebases detected, with a summary of each version (code, dependencies only,
   rebase only, message only).
 - **Comparison of any two versions**, or of a version with its base, with the rebase noise removed.
@@ -30,7 +31,8 @@ versions, without the noise brought in by rebases.
 
 ## Getting started
 
-1. Click the Revspan icon in the activity bar, then **Set up the token** (or run **Revspan: Settings (token, repositories)**).
+1. Click the Revspan icon in the activity bar, then **Set up the token** (or run
+   **Revspan: Settings (token, repositories)**).
 2. In ⚙ Settings, enter your Atlassian e-mail and the token, then click "Test connection".
 3. List the repositories to follow, one `workspace/repository` per line.
 4. Pick a PR in "My PRs", or run **Revspan: Open a PR (URL)** and paste a pull request URL.
