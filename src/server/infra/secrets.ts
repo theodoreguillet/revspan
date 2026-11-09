@@ -49,7 +49,7 @@ const commandExists = (cmd: string): Promise<boolean> => new Promise((resolve) =
 
 function assertSafe(value: string, what: string): void {
     if (!SAFE_VALUE.test(value)) {
-        throw new Error(`${what} invalide (guillemets, antislash ou retour à la ligne interdits)`);
+        throw new Error(`Invalid ${what} (quotes, backslashes and line breaks are not allowed)`);
     }
 }
 
@@ -66,13 +66,13 @@ function keychainStore(service: string): SecretStore {
             return code === 0 ? stripNewline(stdout) : null;
         },
         async set(account, token) {
-            assertSafe(account, 'E-mail');
-            assertSafe(token, 'Jeton');
+            assertSafe(account, 'email');
+            assertSafe(token, 'token');
             // Mode interactif : la commande (donc le jeton) passe par stdin, pas par la liste des processus.
             const { code, stderr } = await run('security', ['-i'],
                 `add-generic-password -U -a "${account}" -s "${service}" -l "${LABEL}" -w "${token}"\n`);
             if (code !== 0 || /error/i.test(stderr)) {
-                throw new Error(`Enregistrement dans le trousseau impossible : ${stderr.trim() || `code ${code}`}`);
+                throw new Error(`Could not save to the keychain: ${stderr.trim() || `code ${code}`}`);
             }
         },
         async remove(account) {
@@ -96,7 +96,7 @@ function secretToolStore(service: string): SecretStore {
         async set(account, token) {
             const { code, stderr } = await run('secret-tool', ['store', `--label=${LABEL}`, 'service', service, 'account', account], token);
             if (code !== 0) {
-                throw new Error(`Enregistrement via secret-tool impossible : ${stderr.trim() || `code ${code}`}`);
+                throw new Error(`Could not save with secret-tool: ${stderr.trim() || `code ${code}`}`);
             }
         },
         async remove(account) {

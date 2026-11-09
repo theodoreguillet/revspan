@@ -5,16 +5,18 @@ import type { BbPullRequest } from '../bitbucket/types.ts';
 import { approvalHoldsSince, buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
+import { errorPayload } from '../errors.ts';
 import type { BitbucketSession } from './session.ts';
 
 const HOME_TTL_MS = 60000;
 
+// English titles: the page and the extension translate the group key themselves.
 const GROUP_TITLES: Record<HomeGroupKey, string> = {
-    'to-review': 'À relire',
-    'rebase-only': 'Réapprobation rapide · seulement des rebases',
-    'up-to-date': 'À jour',
-    'mine': 'Mes PR',
-    'others': 'Autres PR ouvertes',
+    'to-review': 'To review',
+    'rebase-only': 'Quick re-approval · rebases only',
+    'up-to-date': 'Up to date',
+    'mine': 'My PRs',
+    'others': 'Other open PRs',
 };
 
 interface Card {
@@ -53,7 +55,7 @@ export class HomeService {
                 const list = await client.openPullRequests(workspace, repo);
                 cards.push(...await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw))));
             } catch (error) {
-                errors.push({ repo: fullName, message: (error as Error).message });
+                errors.push({ repo: fullName, ...errorPayload(error) });
             }
         }));
 

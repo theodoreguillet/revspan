@@ -6,7 +6,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { ApiErrorBody, ErrorCode, Health, PrRef } from '../../shared/api.ts';
+import type { ApiErrorBody, ErrorCode, ErrorParams, Health, PrRef } from '../../shared/api.ts';
 import { MUTATION_HEADER } from '../../shared/api.ts';
 import { parsePrUrl } from '../../shared/pr-url.ts';
 import { AppError } from '../errors.ts';
@@ -43,12 +43,12 @@ async function jsonBody(c: Context): Promise<unknown> {
     try {
         return JSON.parse(text) as unknown;
     } catch {
-        throw new AppError(400, 'BAD_REQUEST', 'Corps JSON invalide.');
+        throw new AppError(400, 'BAD_REQUEST', 'Invalid JSON body.');
     }
 }
 
-function errorResponse(c: Context, status: ContentfulStatusCode, code: ErrorCode, message: string): Response {
-    return c.json<ApiErrorBody>({ error: { code, message } }, status);
+function errorResponse(c: Context, status: ContentfulStatusCode, code: ErrorCode, message: string, params?: ErrorParams): Response {
+    return c.json<ApiErrorBody>({ error: params ? { code, message, params } : { code, message } }, status);
 }
 
 export function createHttpApp({ version, settings, home, prs, webDir, allowedHosts }: HttpDeps): Hono {
@@ -59,12 +59,12 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
         // En HTTP, l'en-tête Host est toujours présent ; un appel en mémoire (extension) n'a que l'URL.
         const host = c.req.header('host') ?? new URL(c.req.url).host;
         if (!hosts.includes(host)) {
-            return errorResponse(c, 403, 'FORBIDDEN', 'Hôte refusé.');
+            return errorResponse(c, 403, 'FORBIDDEN', 'Host refused.');
         }
         if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
             const origin = c.req.header('origin');
             if (c.req.header(MUTATION_HEADER) !== '1' || (origin && !hosts.some((h) => origin === `http://${h}`))) {
-                return errorResponse(c, 403, 'FORBIDDEN', `Requête refusée (en-tête ${MUTATION_HEADER} manquant ou origine étrangère).`);
+                return errorResponse(c, 403, 'FORBIDDEN', `Request refused (missing ${MUTATION_HEADER} header or foreign origin).`);
             }
         }
         await next();
@@ -87,15 +87,15 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     app.use('/api/*', bodyLimit({
         maxSize: MAX_BODY_BYTES,
-        onError: (c) => errorResponse(c, 413, 'BAD_REQUEST', 'Requête trop volumineuse.'),
+        onError: (c) => errorResponse(c, 413, 'BAD_REQUEST', 'Request too large.'),
     }));
 
     app.onError((error, c) => {
         if (error instanceof AppError) {
-            return errorResponse(c, error.status, error.code, error.message);
+            return errorResponse(c, error.status, error.code, error.message, error.params);
         }
         console.error('revspan:', error);
-        return errorResponse(c, 500, 'INTERNAL', `Erreur interne : ${error.message}`);
+        return errorResponse(c, 500, 'INTERNAL', `Internal error: ${error.message}`, { detail: error.message });
     });
 
     // ---------- API ----------
@@ -127,7 +127,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.post(`${PR_ROUTE}/reviewed`, async (c) => c.json(await prs.markReviewed(refOf(c), parse(reviewedSchema, await jsonBody(c)).version)));
     app.post(`${PR_ROUTE}/viewed`, async (c) => c.json(prs.markViewed(refOf(c), parse(viewedSchema, await jsonBody(c)))));
 
-    app.all('/api/*', (c) => errorResponse(c, 404, 'NOT_FOUND', `Route inconnue : ${c.req.method} ${c.req.path}`));
+    app.all('/api/*', (c) => errorResponse(c, 404, 'NOT_FOUND', `Unknown route: ${c.req.method} ${c.req.path}`));
 
     // ---------- Page ----------
 
@@ -140,7 +140,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     if (webDir) {
         app.use('/*', serveStatic({ root: webDir }));
     }
-    app.notFound((c) => errorResponse(c, 404, 'NOT_FOUND', 'Fichier introuvable.'));
+    app.notFound((c) => errorResponse(c, 404, 'NOT_FOUND', 'File not found.'));
 
     return app;
 }

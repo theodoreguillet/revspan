@@ -7,8 +7,8 @@ const NAME = /^[A-Za-z0-9._-]+$/;
 const notDotSegment = (s: string): boolean => s !== '.' && s !== '..';
 
 export const prRefSchema: z.ZodType<PrRef> = z.object({
-    workspace: z.string().regex(NAME).refine(notDotSegment, 'Workspace invalide.'),
-    repo: z.string().regex(NAME).refine(notDotSegment, 'Dépôt invalide.'),
+    workspace: z.string().regex(NAME).refine(notDotSegment, 'Invalid workspace.'),
+    repo: z.string().regex(NAME).refine(notDotSegment, 'Invalid repository.'),
     id: z.coerce.number().int().positive(),
 });
 
@@ -25,7 +25,7 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
 });
 
 export const newCommentSchema: z.ZodType<NewComment> = z.object({
-    raw: z.string().trim().min(1, 'Le commentaire est vide.').max(32000),
+    raw: z.string().trim().min(1, 'The comment is empty.').max(32000),
     parentId: z.number().int().positive().optional(),
     inline: z.object({ path: z.string().min(1).max(4096), to: z.number().int().positive() }).optional(),
 });
@@ -46,7 +46,7 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
     if (!result.success) {
         const issue = result.error.issues[0];
         const where = issue?.path.length ? ` (${issue.path.join('.')})` : '';
-        throw badRequest(`${issue?.message ?? 'Requête invalide.'}${where}`);
+        throw badRequest(`${issue?.message ?? 'Invalid request.'}${where}`);
     }
     return result.data;
 }

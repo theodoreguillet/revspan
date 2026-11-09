@@ -38,16 +38,16 @@ interface RequestOptions {
 }
 
 function errorFor(status: number, path: string, detail: string): AppError {
-    const suffix = detail ? ` : ${detail}` : '';
+    const details = detail ? { detail } : {};
     switch (status) {
         case 401:
-            return new AppError(401, 'BB_UNAUTHORIZED', 'Bitbucket refuse le jeton (invalide ou expiré). Renouvelle-le dans les réglages.');
+            return new AppError(401, 'BB_UNAUTHORIZED', 'Bitbucket rejected the token (invalid or expired). Renew it in the settings.');
         case 403:
-            return new AppError(403, 'BB_FORBIDDEN', `Droit manquant sur Bitbucket pour cette action${suffix}.`);
+            return new AppError(403, 'BB_FORBIDDEN', detail ? `Missing Bitbucket permission for this action: ${detail}` : 'Missing Bitbucket permission for this action.', details);
         case 404:
-            return new AppError(404, 'BB_NOT_FOUND', `Introuvable sur Bitbucket : ${path}`);
+            return new AppError(404, 'BB_NOT_FOUND', `Not found on Bitbucket: ${path}`, { path });
         default:
-            return new AppError(502, 'BB_ERROR', `Erreur Bitbucket ${status} sur ${path}${suffix}`);
+            return new AppError(502, 'BB_ERROR', `Bitbucket error ${status} on ${path}${detail ? `: ${detail}` : ''}`, { status, path, ...details });
     }
 }
 
@@ -84,7 +84,7 @@ const mergeBaseKey = (ws: string, repo: string, a: string, b: string): string =>
 function encodePath(filePath: string): string {
     const segments = filePath.split('/');
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-        throw badRequest(`Chemin de fichier invalide : ${filePath}`);
+        throw badRequest(`Invalid file path: ${filePath}`);
     }
     return segments.map(encodeURIComponent).join('/');
 }
@@ -150,7 +150,7 @@ export class BitbucketClient {
                         await sleep(500 * (attempt + 1));
                         continue;
                     }
-                    throw new AppError(502, 'BB_UNREACHABLE', `Bitbucket injoignable (${(error as Error).message})`);
+                    throw new AppError(502, 'BB_UNREACHABLE', `Bitbucket unreachable (${(error as Error).message})`, { detail: (error as Error).message });
                 }
                 const retryable = response.status === 429 || (idempotent && response.status >= 500);
                 if (retryable && attempt < 3) {
@@ -194,7 +194,7 @@ export class BitbucketClient {
                 return response;
             }
             if (init.method !== 'GET' || hops >= MAX_REDIRECTS) {
-                throw new AppError(502, 'BB_ERROR', `Redirection Bitbucket refusée sur ${new URL(url).pathname}`);
+                throw new AppError(502, 'BB_ERROR', `Bitbucket redirect refused on ${new URL(url).pathname}`);
             }
             current = new URL(location, current).toString();
         }
@@ -212,14 +212,14 @@ export class BitbucketClient {
         try {
             return JSON.parse(text) as T;
         } catch {
-            throw errorFor(502, path.replace(/\?.*$/, ''), 'réponse non JSON');
+            throw errorFor(502, path.replace(/\?.*$/, ''), 'non-JSON response');
         }
     }
 
     private async getJson<T>(path: string, query?: Query): Promise<T> {
         const value = await this.json<T>('GET', path, query ? { query } : {});
         if (value === null) {
-            throw errorFor(502, path, 'réponse vide');
+            throw errorFor(502, path, 'empty response');
         }
         return value;
     }
@@ -236,7 +236,7 @@ export class BitbucketClient {
             }
             // Le jeton ne suit jamais une URL de pagination hors de l'API configurée.
             if (!page.next.startsWith(`${this.baseUrl}/`)) {
-                throw new AppError(502, 'BB_ERROR', `Pagination Bitbucket inattendue : ${new URL(page.next).origin}`);
+                throw new AppError(502, 'BB_ERROR', `Unexpected Bitbucket pagination: ${new URL(page.next).origin}`);
             }
             page = await this.getJson<BbPage<T>>(page.next);
         }
@@ -399,7 +399,7 @@ export class BitbucketClient {
         }
         const created = await this.json<BbComment>('POST', `${this.prPath(ws, repo, id)}/comments`, { body });
         if (!created) {
-            throw errorFor(502, 'comments', 'réponse vide');
+            throw errorFor(502, 'comments', 'empty response');
         }
         return created;
     }

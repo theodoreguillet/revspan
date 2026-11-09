@@ -132,7 +132,7 @@ export class PrService {
         const { versions } = await this.load(ref);
         const target = versions[version - 1];
         if (!target) {
-            throw badRequest(`Version inconnue : ${version}`);
+            throw badRequest(`Unknown version: ${version}`);
         }
         this.store.updatePrState(prKeyOf(ref), (state) => {
             state.reviewedHash = target.hash;
@@ -165,7 +165,7 @@ export class PrService {
         const updates = extractUpdates(activity, pr);
         const versions = await loadVersions(client, ref, updates);
         if (versions.length === 0) {
-            throw new AppError(404, 'BB_NOT_FOUND', 'Aucune version trouvée pour cette PR.');
+            throw new AppError(404, 'BB_NOT_FOUND', 'No version found for this pull request.', { reason: 'no-versions' });
         }
         const meUuid = me?.uuid ?? null;
         const review = computeReview({ versions, activity, comments, meUuid, local: this.store.prState(prKeyOf(ref)) });
@@ -243,16 +243,16 @@ async function loadVersions(client: BitbucketClient, ref: PrRef, updates: readon
 }
 
 const unavailableMessage = (index: number): string =>
-    `La version v${index} n'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).`;
+    `Version v${index} is no longer available: Bitbucket deleted its commit (version overwritten by a force-push).`;
 
 /** Bornes valides et versions lisibles (une version dont Bitbucket a effacé le commit ne peut pas être comparée). */
 function assertComparable(versions: readonly Version[], from: number, to: number): void {
     if (to > versions.length || from >= to) {
-        throw badRequest(`Comparaison invalide : de ${from} à ${to} (versions 1 à ${versions.length}).`);
+        throw badRequest(`Invalid comparison: from ${from} to ${to} (versions 1 to ${versions.length}).`);
     }
     const unreadable = [from, to].find((index) => index > 0 && !isReadable(versions[index - 1]));
     if (unreadable !== undefined) {
-        throw new AppError(410, 'VERSION_UNAVAILABLE', unavailableMessage(unreadable));
+        throw new AppError(410, 'VERSION_UNAVAILABLE', unavailableMessage(unreadable), { version: unreadable });
     }
 }
 
@@ -261,7 +261,7 @@ class VersionPurgedError extends AppError {
     readonly version: Version;
 
     constructor(version: Version) {
-        super(410, 'VERSION_UNAVAILABLE', unavailableMessage(version.index));
+        super(410, 'VERSION_UNAVAILABLE', unavailableMessage(version.index), { version: version.index });
         this.version = version;
     }
 }

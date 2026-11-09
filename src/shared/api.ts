@@ -16,8 +16,31 @@ export type ErrorCode =
     | 'NOT_FOUND'
     | 'INTERNAL';
 
+/** Finer cause within an error code, so the page can show a specific translated message. */
+export type ErrorReason = 'invalid-email' | 'email-required' | 'profile-unreadable' | 'no-versions';
+
+/** Machine-readable details of an error: the page translates the message from the code and these values. */
+export interface ErrorParams {
+    reason?: ErrorReason;
+    /** Bitbucket API path concerned (BB_NOT_FOUND, BB_ERROR). */
+    path?: string;
+    /** HTTP status returned by Bitbucket (BB_ERROR). */
+    status?: number;
+    /** Text from Bitbucket or from the system, shown as is (BB_FORBIDDEN, BB_ERROR, BB_UNREACHABLE, INTERNAL). */
+    detail?: string;
+    /** Version concerned (VERSION_UNAVAILABLE). */
+    version?: number;
+}
+
+/** An error: stable code, English message (also read in the terminal), optional parameters for translation. */
+export interface ErrorPayload {
+    code: ErrorCode;
+    message: string;
+    params?: ErrorParams;
+}
+
 export interface ApiErrorBody {
-    error: { code: ErrorCode; message: string };
+    error: ErrorPayload;
 }
 
 export interface User {
@@ -78,6 +101,7 @@ export interface PrCard extends PrRef {
 
 export interface HomeGroup {
     key: HomeGroupKey;
+    /** English title (the page and the extension show their own translation of the key). */
     title: string;
     prs: PrCard[];
 }
@@ -87,7 +111,8 @@ export interface Home {
     /** Dépôts suivis (réglages) ; vide tant que l'utilisateur n'en a pas choisi. */
     repos: string[];
     groups: HomeGroup[];
-    errors: { repo: string; message: string }[];
+    /** Repositories that could not be read, with the error (same shape as an API error). */
+    errors: ({ repo: string } & ErrorPayload)[];
 }
 
 // ---------- PR ----------

@@ -32,7 +32,7 @@ export class SettingsService {
         if (patch.email !== undefined) {
             const email = patch.email.trim();
             if (email && !EMAIL_PATTERN.test(email)) {
-                throw badRequest('Adresse e-mail invalide.');
+                throw badRequest('Invalid email address.', { reason: 'invalid-email' });
             }
             if (email !== previousEmail) {
                 // Le jeton suit l'e-mail (il est rangé sous ce compte).
@@ -56,7 +56,7 @@ export class SettingsService {
             const token = patch.token.trim();
             if (token) {
                 if (!email) {
-                    throw badRequest('Renseigne d\'abord l\'adresse e-mail du compte Atlassian.');
+                    throw badRequest('Enter the Atlassian account email first.', { reason: 'email-required' });
                 }
                 await secrets.set(email, token).catch((error: Error) => {
                     throw badRequest(error.message);
@@ -74,12 +74,19 @@ export class SettingsService {
         try {
             const me = await this.session.me();
             if (!me) {
-                return { ok: false, error: { code: 'BB_FORBIDDEN', message: 'Connexion OK mais profil illisible : ajoute le droit read:user:bitbucket au jeton.' } };
+                return {
+                    ok: false,
+                    error: {
+                        code: 'BB_FORBIDDEN',
+                        message: 'Connected, but the profile cannot be read: add the read:user:bitbucket scope to the token.',
+                        params: { reason: 'profile-unreadable' },
+                    },
+                };
             }
             return { ok: true, me };
         } catch (error) {
             if (error instanceof AppError) {
-                return { ok: false, error: { code: error.code, message: error.message } };
+                return { ok: false, error: error.toPayload() };
             }
             throw error;
         }

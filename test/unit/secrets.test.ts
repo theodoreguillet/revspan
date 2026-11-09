@@ -35,7 +35,7 @@ describe('stockage du jeton', () => {
                 expect(await store.get(account)).toBe(token);
                 await store.set(account, 'second-token');
                 expect(await store.get(account)).toBe('second-token');
-                await expect(store.set(account, 'bad"token')).rejects.toThrow('invalide');
+                await expect(store.set(account, 'bad"token')).rejects.toThrow('Invalid token');
             } finally {
                 await store.remove(account);
             }

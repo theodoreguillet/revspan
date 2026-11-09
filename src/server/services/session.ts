@@ -74,7 +74,7 @@ export class BitbucketSession {
         }
         const token = email ? await this.secrets.get(email) : null;
         if (!email || !token) {
-            throw new AppError(409, 'NO_TOKEN', 'Aucun jeton Bitbucket configuré. Ouvre les réglages pour en ajouter un.');
+            throw new AppError(409, 'NO_TOKEN', 'No Bitbucket token is configured. Open the settings to add one.');
         }
         this.connection = {
             email,

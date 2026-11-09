@@ -132,6 +132,25 @@ describe('réglages et sécurité', () => {
         expect(await rawGet('/%2e%2e/package.json', `127.0.0.1:${app.port}`)).not.toBe(200);
     });
 
+    it('error bodies: English message plus the parameters the page translates from', async () => {
+        await setup();
+        const missing = await api<ApiErrorBody>('GET', prPath(9999));
+        expect(missing.status).toBe(404);
+        expect(missing.body.error).toMatchObject({ code: 'BB_NOT_FOUND', message: expect.stringMatching(/^Not found on Bitbucket: /), params: { path: expect.stringContaining('9999') } });
+        const purged = await api<ApiErrorBody>('GET', `${prPath(FAKE_PRS.purged)}/compare?from=1&to=3`);
+        expect(purged.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE', params: { version: 1 } });
+
+        await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/no-such-repo`] });
+        const { body: home } = await api<Home>('GET', '/api/home');
+        expect(home.errors).toEqual([expect.objectContaining({ repo: `${WS}/no-such-repo`, code: 'BB_NOT_FOUND', params: { path: expect.stringContaining('no-such-repo') } })]);
+        expect(home.groups.find((g) => g.key === 'to-review')?.title).toBe('To review');
+
+        const email = await api<ApiErrorBody>('PUT', '/api/settings', { email: 'not-an-email' });
+        expect(email.body.error).toEqual({ code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } });
+        const noEmail = await api<ApiErrorBody>('PUT', '/api/settings', { email: '', token: 'abc' });
+        expect(noEmail.body.error).toMatchObject({ code: 'BAD_REQUEST', params: { reason: 'email-required' } });
+    });
+
     it('erreurs Bitbucket traduites (403 → BB_FORBIDDEN)', async () => {
         const { fake } = await setup();
         await fetch(`http://127.0.0.1:${fake.port}/__fail-next?status=403`);
