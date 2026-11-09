@@ -73,6 +73,11 @@ code, .rv-mono { font-family: var(--rv-mono); }
 .rv-btn-primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-bg); }
 .rv-btn-active { border-color: var(--rv-rebase); color: var(--rv-rebase); background: var(--rv-rebase-bg); }
 .rv-btn-sm { padding: 3px 9px; font-size: 11.5px; }
+/* Action en cours : indicateur rotatif devant le libellé (bouton désactivé jusqu'à la fin de l'écriture). */
+button.busy, button.busy:disabled { cursor: progress; opacity: .85; }
+button.busy::before { content: ''; display: inline-block; width: .85em; height: .85em; margin-right: 6px; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: rv-spin .7s linear infinite; }
+@keyframes rv-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { button.busy::before { animation-duration: 2.5s; } }
 .rv-link { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; }
 .rv-link:hover { text-decoration: underline; }
 

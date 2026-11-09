@@ -84,9 +84,10 @@ onMounted(() => {
             <button v-if="!general" type="button" class="rv-btn rv-btn-sm" @click="page.closeComposer()">Annuler</button>
             <button
                 type="button"
-                class="rv-btn rv-btn-sm rv-btn-primary"
+                :class="['rv-btn rv-btn-sm rv-btn-primary', { busy: sending }]"
                 :data-action="general ? 'send-general' : 'send-comment'"
-                :disabled="!text.trim() || sending"
+                :disabled="!text.trim() || sending || page.acting"
+                :aria-busy="sending"
                 @click="submit"
             >
                 Commenter

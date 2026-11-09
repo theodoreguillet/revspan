@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Comment } from '../../shared/api.ts';
+import { actionKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { displayName, fmtFull, relTime } from '../lib/format.ts';
 import { avatarHue, initials, reactionView, THUMBS } from '../lib/threads.ts';
@@ -30,8 +31,10 @@ const name = computed(() => displayName(props.comment.user));
             <div v-if="!comment.deleted" class="acts">
                 <button
                     type="button"
-                    :class="['react', { liked: reactions.liked }]"
+                    :class="['react', { liked: reactions.liked, busy: page.busy(actionKey.react(comment.id)) }]"
                     data-action="react"
+                    :disabled="page.acting"
+                    :aria-busy="page.busy(actionKey.react(comment.id))"
                     :title="reactions.title"
                     :aria-pressed="reactions.liked"
                     @click="page.react(comment)"
@@ -43,6 +46,9 @@ const name = computed(() => displayName(props.comment.user));
                 <ConfirmButton
                     v-if="comment.mine"
                     data-action="delete"
+                    :class="{ busy: page.busy(actionKey.remove(comment.id)) }"
+                    :disabled="page.acting"
+                    :aria-busy="page.busy(actionKey.remove(comment.id))"
                     label="Supprimer"
                     question="Supprimer ce commentaire sur Bitbucket ?"
                     @confirm="page.deleteComment(comment)"

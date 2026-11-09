@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { bannerModel } from '../lib/banner.ts';
+import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 import SegText from './SegText.vue';
 
 const page = usePrPage();
@@ -21,13 +22,23 @@ const tone = computed(() => ({ 'up-to-date': 'ok', fast: 'fast' } as Record<stri
             <button
                 v-if="model.action === 'reapprove'"
                 type="button"
-                class="rv-btn rv-btn-ok"
+                :class="['rv-btn rv-btn-ok', { busy: page.busy(ACTION_KEYS.approve) }]"
                 data-action="reapprove"
+                :disabled="page.acting"
+                :aria-busy="page.busy(ACTION_KEYS.approve)"
                 @click="page.setApproved(true)"
             >
                 ✓ Réapprouver v{{ model.latest }}
             </button>
-            <button v-else type="button" class="rv-btn" data-action="mark-reviewed" @click="page.markReviewed(model.latest)">
+            <button
+                v-else
+                type="button"
+                :class="['rv-btn', { busy: page.busy(ACTION_KEYS.markReviewed) }]"
+                data-action="mark-reviewed"
+                :disabled="page.acting"
+                :aria-busy="page.busy(ACTION_KEYS.markReviewed)"
+                @click="page.markReviewed(model.latest)"
+            >
                 Marquer v{{ model.latest }} comme relue
             </button>
             <div v-if="model.rule" class="rule">Approuver ou commenter marque la version comme relue automatiquement.</div>

@@ -21,6 +21,7 @@
         "src/shared/**/*.ts",
         "src/web/lib/**/*.ts",
         "src/web/services/**/*.ts",
+        "src/web/composables/**/*.ts",
         "vite.config.ts",
         "vitest.config.ts",
         "src/extension/lib/**/*.ts"

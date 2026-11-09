@@ -46,7 +46,9 @@ onMounted(load);
         <div class="rv-home-top">
             <h1>Mes PR</h1>
             <UrlInput />
-            <button class="rv-btn" type="button" title="Recharger la liste" :disabled="loading" @click="load()">↻ Actualiser</button>
+            <button :class="['rv-btn', { busy: loading }]" type="button" title="Recharger la liste" :disabled="loading" :aria-busy="loading" @click="load()">
+                {{ loading ? 'Actualiser' : '↻ Actualiser' }}
+            </button>
         </div>
 
         <ErrorPanel v-if="error" :error="error" />

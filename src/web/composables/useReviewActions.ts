@@ -6,10 +6,13 @@ import type { DiffOptions } from './useDiffOptions.ts';
 import { showError } from './useErrors.ts';
 import type { PrLoad } from './usePrLoad.ts';
 
+/** Clés des boutons de relecture (indicateur de chargement). */
+export const ACTION_KEYS = { approve: 'approve', requestChanges: 'request-changes', markReviewed: 'mark-reviewed' } as const;
+
 export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOptions, keepFileInView: (path: string) => void) {
-    const setApproved = (approved: boolean): Promise<boolean> => load.act(() => api.approve(prRef, approved));
-    const toggleRequestChanges = (on: boolean): Promise<boolean> => load.act(() => api.requestChanges(prRef, on));
-    const markReviewed = (version: number): Promise<boolean> => load.act(() => api.reviewed(prRef, version));
+    const setApproved = (approved: boolean): Promise<boolean> => load.act(() => api.approve(prRef, approved), { key: ACTION_KEYS.approve });
+    const toggleRequestChanges = (on: boolean): Promise<boolean> => load.act(() => api.requestChanges(prRef, on), { key: ACTION_KEYS.requestChanges });
+    const markReviewed = (version: number): Promise<boolean> => load.act(() => api.reviewed(prRef, version), { key: ACTION_KEYS.markReviewed });
 
     /** Coche « Vu » : mise à jour immédiate (le fichier se replie), annulée si le serveur refuse. */
     async function setViewed(file: FileDiff, viewed: boolean): Promise<void> {

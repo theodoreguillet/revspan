@@ -155,8 +155,8 @@ onMounted(async () => {
                     </div>
                 </div>
                 <div class="rv-form-acts">
-                    <button class="rv-btn rv-btn-primary" type="submit" :disabled="saving">Enregistrer</button>
-                    <button class="rv-btn" type="button" :disabled="testing" @click="test()">Tester la connexion</button>
+                    <button :class="['rv-btn rv-btn-primary', { busy: saving }]" type="submit" :disabled="saving" :aria-busy="saving">Enregistrer</button>
+                    <button :class="['rv-btn', { busy: testing }]" type="button" :disabled="testing" :aria-busy="testing" @click="test()">Tester la connexion</button>
                     <div :class="['rv-status', status.tone]" role="status" aria-live="polite">{{ status.text }}</div>
                 </div>
             </form>

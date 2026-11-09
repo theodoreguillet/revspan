@@ -3,7 +3,7 @@
 // Dans le diff, un fil résolu est replié en une barre cliquable.
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { Thread, ThreadPlacement } from '../../shared/api.ts';
-import { replyDraftKey } from '../composables/useDiscussion.ts';
+import { actionKey, replyDraftKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { plural } from '../lib/format.ts';
 import CommentItem from './CommentItem.vue';
@@ -117,9 +117,26 @@ function autosize(): void {
                 @input="autosize"
                 @keydown="onReplyKeydown"
             />
-            <button type="button" class="rv-btn rv-btn-sm rv-btn-primary" data-action="send-reply" :disabled="!reply.trim() || sending" @click="sendReply">Répondre</button>
-            <button v-if="thread.resolved" type="button" class="rv-btn rv-btn-sm" data-action="reopen" @click="page.resolve(thread, false)">Rouvrir</button>
-            <button v-else type="button" class="rv-btn rv-btn-sm" data-action="resolve" @click="page.resolve(thread, true)">✓ Résoudre</button>
+            <button
+                type="button"
+                :class="['rv-btn rv-btn-sm rv-btn-primary', { busy: sending }]"
+                data-action="send-reply"
+                :disabled="!reply.trim() || sending || page.acting"
+                :aria-busy="sending"
+                @click="sendReply"
+            >
+                Répondre
+            </button>
+            <button
+                type="button"
+                :class="['rv-btn rv-btn-sm', { busy: page.busy(actionKey.resolve(thread.id)) }]"
+                :data-action="thread.resolved ? 'reopen' : 'resolve'"
+                :disabled="page.acting"
+                :aria-busy="page.busy(actionKey.resolve(thread.id))"
+                @click="page.resolve(thread, !thread.resolved)"
+            >
+                {{ thread.resolved ? 'Rouvrir' : '✓ Résoudre' }}
+            </button>
         </div>
     </div>
 </template>

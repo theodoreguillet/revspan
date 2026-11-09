@@ -4,6 +4,7 @@ import type { PrState } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { approvalItems, myActions } from '../lib/approvals.ts';
 import { displayName, openedSince } from '../lib/format.ts';
+import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 
 const STATE_LABELS: Record<PrState, string> = { OPEN: '● Ouverte', MERGED: 'Fusionnée', DECLINED: 'Refusée', SUPERSEDED: 'Remplacée' };
 
@@ -44,9 +45,10 @@ const hasMe = computed(() => !!page.detail.me);
             <template v-else-if="hasMe">
                 <button
                     type="button"
-                    :class="['rv-btn', { 'rv-btn-active': mine.changesActive }]"
+                    :class="['rv-btn', { 'rv-btn-active': mine.changesActive, busy: page.busy(ACTION_KEYS.requestChanges) }]"
                     data-action="request-changes"
-                    :disabled="mine.closed"
+                    :disabled="mine.closed || page.acting"
+                    :aria-busy="page.busy(ACTION_KEYS.requestChanges)"
                     :title="mine.changesActive ? 'Retirer la demande de modifications' : 'Demander des modifications à l\'auteur'"
                     @click="page.toggleRequestChanges(!mine.changesActive)"
                 >
@@ -55,9 +57,10 @@ const hasMe = computed(() => !!page.detail.me);
                 <button
                     v-if="mine.approvedLatest"
                     type="button"
-                    class="rv-btn"
+                    :class="['rv-btn', { busy: page.busy(ACTION_KEYS.approve) }]"
                     data-action="unapprove"
-                    :disabled="mine.closed"
+                    :disabled="mine.closed || page.acting"
+                    :aria-busy="page.busy(ACTION_KEYS.approve)"
                     @click="page.setApproved(false)"
                 >
                     Retirer l'approbation
@@ -65,9 +68,10 @@ const hasMe = computed(() => !!page.detail.me);
                 <button
                     v-else
                     type="button"
-                    class="rv-btn rv-btn-ok"
+                    :class="['rv-btn rv-btn-ok', { busy: page.busy(ACTION_KEYS.approve) }]"
                     data-action="approve"
-                    :disabled="mine.closed"
+                    :disabled="mine.closed || page.acting"
+                    :aria-busy="page.busy(ACTION_KEYS.approve)"
                     :title="`Approuver la version ${n} (marque aussi v${n} comme relue)`"
                     @click="page.setApproved(true)"
                 >

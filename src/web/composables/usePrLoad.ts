@@ -16,6 +16,8 @@ export interface ActOptions {
     onDone?: () => void;
     /** Recharger aussi le diff (nouveau fil en ligne : son placement vient du diff). */
     reloadCompare?: boolean;
+    /** Bouton à l'origine de l'action (indicateur de chargement sur ce bouton). */
+    key?: string;
 }
 
 export function usePrLoad(prRef: PrRef, initial: PrDetail) {
@@ -80,17 +82,28 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
     }
 
-    /** Exécute une écriture puis recharge la PR. Renvoie true si l'écriture a réussi. */
-    async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false }: ActOptions = {}): Promise<boolean> {
+    /** Action d'écriture en cours (clé de son bouton), jusqu'à la fin du rechargement ; une seule à la fois. */
+    const pendingAction = ref<string | null>(null);
+    const acting = computed(() => pendingAction.value !== null);
+    const busy = (key: string): boolean => pendingAction.value === key;
+
+    /** Exécute une écriture puis recharge la PR. Renvoie true si l'écriture a réussi (false si une autre est en cours). */
+    async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false, key = 'action' }: ActOptions = {}): Promise<boolean> {
+        if (pendingAction.value !== null) {
+            return false;
+        }
+        pendingAction.value = key;
         try {
             await write();
+            onDone?.();
+            await reload({ reloadCompare });
+            return true;
         } catch (error) {
             showError(error);
             return false;
+        } finally {
+            pendingAction.value = null;
         }
-        onDone?.();
-        await reload({ reloadCompare });
-        return true;
     }
 
     /** Mise à jour locale (optimiste) de l'état de relecture. */
@@ -98,7 +111,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         detail.value = { ...detail.value, review };
     }
 
-    return { detail, summary, sums, compare, compareLoading, compareError, loadSummary, loadCompare, act, patchReview };
+    return {
+        detail, summary, sums, compare, compareLoading, compareError, pendingAction, acting, busy,
+        loadSummary, loadCompare, act, patchReview,
+    };
 }
 
 export type PrLoad = ReturnType<typeof usePrLoad>;
