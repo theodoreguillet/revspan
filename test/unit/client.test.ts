@@ -39,10 +39,16 @@ describe('BitbucketClient: retries', () => {
     });
 
     it('resends a POST that gets a 429 (request not processed)', async () => {
-        const fetchImpl = mockFetch(new Response('', { status: 429, headers: { 'retry-after': '0' } }), jsonResponse(201, { id: 7 }));
-        const created = await makeClient(fetchImpl).createComment('acme', 'records-api', 1, { raw: 'salut' });
-        expect(created.id).toBe(7);
-        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(new Response('', { status: 429, headers: { 'retry-after': '0' } }), jsonResponse(201, { id: 7 }));
+            const promise = makeClient(fetchImpl).createComment('acme', 'records-api', 1, { raw: 'salut' });
+            await vi.runAllTimersAsync();
+            expect((await promise).id).toBe(7);
+            expect(fetchImpl).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('retries a GET that gets a 503', async () => {
