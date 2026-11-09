@@ -1,64 +1,77 @@
-# Revspan — conception
+# Revspan — design
 
-## Pourquoi
+## Why
 
-Beaucoup d'équipes travaillent en « une PR = un commit » : chaque retour de revue se traite par `git commit --amend`
-(souvent avec un rebase sur master) puis un force-push. Bitbucket n'affiche alors que le diff complet de la PR
-contre master : sur une PR longue, impossible de voir ce que le dernier amend a changé. Les PR peuvent durer
-des jours ou des mois, avec des dizaines de versions et plusieurs rebases.
+Many teams work with "one PR = one commit": every round of review feedback is handled with `git commit --amend`
+(often with a rebase on master) and a force-push. Bitbucket then only shows the full diff of the PR
+against master: on a long PR, there is no way to see what the last amend changed. PRs can last
+days or months, with dozens of versions and several rebases.
 
-Revspan est un petit outil local (serveur Node + page web, en TypeScript) qui reconstitue toutes les versions
-d'une PR Bitbucket et permet de relire version par version, de commenter, répondre, résoudre et approuver.
+Revspan is a small local tool (Node server + web page, in TypeScript) that rebuilds all the versions
+of a Bitbucket PR and lets you review version by version, comment, reply, resolve and approve.
 
-## Objectifs
+## Goals
 
-- Comparer n'importe quelle version à n'importe quelle autre, ou une version complète à sa base master.
-- Ne montrer que ce que l'auteur a changé : le bruit apporté par un rebase (fichiers ou lignes venus de master)
-  est retiré.
-- Reprendre là où on s'est arrêté : dernière relecture, nouvelles versions, nouveaux commentaires, fichiers vus.
-- Agir depuis l'outil : commenter une ligne, répondre, résoudre/rouvrir, approuver, demander des modifs.
-- Accueil « Mes PR » sur une liste de dépôts configurable.
+- Compare any version with any other, or a full version with its master base.
+- Show only what the author changed: the noise brought in by a rebase (files or lines coming from master)
+  is removed.
+- Resume where you stopped: last review, new versions, new comments, seen files.
+- Act from the tool: comment on a line, reply, resolve/reopen, approve, request changes.
+- "My PRs" home page over a configurable list of repositories.
+- French and English interface, chosen automatically.
 
-## Non-objectifs
+## Non-goals
 
-- Pas d'hébergement partagé : chacun lance l'outil sur son poste avec son jeton.
-- Pas de merge, decline, édition de PR, tâches Bitbucket.
-- Pas de coloration syntaxique.
+- No shared hosting: everyone runs the tool on their own machine with their own token.
+- No merge, decline, PR editing, Bitbucket tasks.
+- No syntax highlighting in the page (the VS Code extension offers it through the native diff editor).
 
-## Anti-objectifs
+## Anti-goals
 
-- Écrire sur Bitbucket sans action explicite de l'utilisateur.
-- Exposer le jeton au navigateur ou au réseau (serveur sur 127.0.0.1 uniquement).
-- Exécuter des scripts d'installation de dépendances (`ignore-scripts=true` dans le `.npmrc` du projet).
+- Writing to Bitbucket without an explicit user action.
+- Exposing the token to the browser or the network (server on 127.0.0.1 only).
+- Running dependency install scripts (`ignore-scripts=true` in the project's `.npmrc`).
 
-## Décisions
+## Decisions
 
-| Sujet | Décision |
+| Topic | Decision |
 |---|---|
-| Forme | Application TypeScript : serveur Node 22 (Hono, validation zod) + page Vue 3 (Vite, vue-router), contrat partagé `src/shared/api.ts`. Pas de store global : composables. |
-| Architecture serveur | `core/` règles pures (diff, fusion, comparaison, modèle) · `bitbucket/` client REST · `infra/` config, jeton, cache · `services/` session, réglages, PR, accueil · `http/` routes Hono et schémas zod. |
-| Lancement | `npm ci && npm run build` puis `node bin/revspan.js [URL de PR]` → ouvre le navigateur sur `http://127.0.0.1:7420`. Développement : `npm run dev` (serveur en watch + Vite) ou `npm run dev:fake` (faux Bitbucket). Pas de Makefile : tout passe par les scripts npm. |
-| Dépendances | npm standard, lockfile sur registry.npmjs.org, aucun script d'installation exécuté (`.npmrc`). |
-| Jeton | Jeton API Atlassian (e-mail + jeton, Basic auth). Saisi dans l'écran Réglages. macOS : trousseau (`security`, jeton passé par stdin). Linux : `secret-tool` si présent. Sinon fichier `0600` dans le dossier de config. |
-| Droits du jeton | `read:user:bitbucket`, `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket`. |
-| Config / état | `~/.config/revspan/` (`%APPDATA%\revspan` sous Windows) : `config.json`, `state.json`, `cache/`. |
-| Versions | Entrées `update` de l'activité de la PR (hash source + hash master au moment du push), doublons consécutifs retirés, version courante de la PR ajoutée si absente. Commit introuvable (404 : Bitbucket efface les commits écrasés par un force-push) → version gardée mais `available: false` : ni comparable (410 `VERSION_UNAVAILABLE`) ni borne de sélection ; rebase, message et résumé de la suivante se calculent par rapport à la dernière version lisible (`since`). |
-| Base d'une version | `merge-base(version, master au moment du push)` via l'API (repli : 1er parent). Le hash master de l'activité n'est pas la base : si la branche a été créée avant les derniers commits de master, la base est plus ancienne que le master noté au moment du push. |
-| Rebase | Une version est un rebase si sa base diffère de celle de la version précédente. |
-| Diff entre versions A → B | Fichiers candidats = fichiers différents entre les deux commits ∩ (fichiers de la PR en A ∪ en B). Les autres sont « venus de master » et masqués. Si même base : diff direct. Sinon, A est « rejoué » sur la base de B par fusion 3 voies ligne à ligne (ancêtre = base A, nôtre = base B, leur = A) ; en zone de conflit on garde les lignes de A (fichier marqué). Puis diff (A rejoué → B). Un filtrage par fichier ne suffit pas : `package-lock.json`, `package.json` et `changelog.md` sont souvent touchés par master et par l'auteur. |
-| Résumé par version | Diff (v(n-1) → vn) par la même méthode. Type : `creation`, `code`, `deps` (seulement package.json / lockfiles), `rebase-only`, `message-only`, `none`. Mis en cache sur disque (les commits sont immuables). |
-| Moteur de diff | Myers sur lignes (préfixe/suffixe communs retirés, plafond de distance puis repli bloc), hunks avec contexte, surlignage intra-ligne par préfixe/suffixe commun. Fusion 3 voies maison. |
-| Dernière relecture | max(dernière approbation, dernier commentaire, marque locale « relue »), chacune convertie en version via sa date. Approuver ou commenter la fait avancer automatiquement. |
-| Fichiers vus | Locaux, mémorisés avec l'empreinte du contenu côté B ; la coche saute si le fichier change. |
-| Commentaires | Fils reconstruits (parent). Chaque commentaire est rattaché à la version en cours à sa date. Ancrage `to` relocalisé ligne à ligne vers la version affichée (marqué « ligne modifiée » si la ligne a changé). Ancrage `from` seul : affiché au niveau du fichier. Contenu : HTML rendu par Bitbucket, assaini côté client par liste blanche. |
-| Commentaire en ligne | Possible seulement si B est la dernière version, côté nouveau (lignes ajoutées ou de contexte) : `inline.to`. Sur une ligne supprimée, commentaire général citant fichier, ligne et code. |
-| Approbations | Version d'approbation déduite de l'activité ; « périmée » si une version avec du code (ou des dépendances) est arrivée depuis. Bitbucket ne retire pas forcément l'approbation à chaque push : une approbation encore active sans changement de l'auteur depuis (rebases, message) vaut pour la dernière version — « Retirer l'approbation » au lieu de « Réapprouver », bandeau « Marquer vN comme relue ». |
-| Accueil | PR ouvertes des dépôts configurés, groupées : À relire / Réapprobation rapide (seulement rebases, mon approbation retirée par Bitbucket) / À jour (dont : seulement rebases et mon approbation toujours active) / Mes PR / Autres. |
-| Sécurité locale | Écoute 127.0.0.1 seulement. En-tête `Host` vérifié (anti DNS-rebinding). Toute requête qui modifie exige l'en-tête `X-Revspan: 1` (bloque les formulaires et requêtes d'autres sites). Le jeton ne quitte jamais le serveur. |
-| Extension VS Code | Même page Vue dans un webview et mêmes services. Les appels d'API passent par messages (`src/shared/webview-protocol.ts`) et sont traités par l'application Hono en mémoire (`app.request`, sans port), avec la même validation. Jeton dans le stockage sécurisé de VS Code, dépôts suivis dans le réglage `revspan.repositories` (source de dépôts injectée dans `Store`), autres données dans le stockage global de l'extension (séparées de la version web). Ajouts propres à VS Code : vue « Mes PR » (TreeView), « Ouvrir le fichier » (dépôt de l'espace de travail, worktree de la branche de la PR préféré), « Diff VS Code » (documents virtuels + `vscode.diff`, mêmes côtés que la page). Bundle CommonJS unique (Vite, `vscode` externe). |
-| Dernière relecture (précision) | Les réponses ne comptent pas comme relecture ; seuls les nouveaux commentaires, approbations et demandes de modifs. |
-| Tests | Vitest : unitaires (diff, fusion, relocalisation, versions, fils, état), règles de la page (sélection, repli, bandeau, assainissement), intégration du serveur contre un faux Bitbucket à 6 PR (écritures comprises, chaque test isolé) ; UI Playwright sur le vrai serveur branché au même faux Bitbucket ; test réel en lecture seule sur une PR au choix (`npm run test:live`, invariants et diff complet identique au diffstat de Bitbucket) ; test de fumée de l'extension dans un VS Code isolé (`npm run test:extension`). Aucune écriture sur le vrai Bitbucket pendant les tests. |
+| Shape | TypeScript application: Node 22 server (Hono, zod validation) + Vue 3 page (Vite, vue-router), shared contract `src/shared/api.ts`. No global store: composables. |
+| Server architecture | `core/` pure rules (diff, merge, comparison, model) · `bitbucket/` REST client · `infra/` config, token, cache · `services/` session, settings, PR, home page · `http/` Hono routes and zod schemas. |
+| Launch | `npm ci && npm run build` then `node bin/revspan.js [PR URL]` → opens the browser on `http://127.0.0.1:7420`. Development: `npm run dev` (server in watch mode + Vite) or `npm run dev:fake` (fake Bitbucket). No Makefile: everything goes through npm scripts. |
+| Dependencies | Standard npm, lockfile on registry.npmjs.org, no install script run (`.npmrc`). |
+| Token | Atlassian API token (e-mail + token, Basic auth). Entered in the Settings screen. macOS: keychain (`security`, token passed through stdin). Linux: `secret-tool` if present. Otherwise a `0600` file in the config folder. |
+| Token scopes | `read:user:bitbucket`, `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket`. |
+| Config / state | `~/.config/revspan/` (`%APPDATA%\revspan` on Windows): `config.json`, `state.json`, `cache/`. |
+| Multi-window state | Several windows (browser tabs, VS Code windows) can share one config folder. `config.json` and `state.json` are read through a small `JsonFile` helper that remembers the file's signature (inode, mtime, size) and re-reads the file when it changed; writes are atomic (temporary file + rename, which changes the inode, so every rewrite is detected). A PR state update re-reads the file right before changing only the targeted PR, and saving the settings re-reads before merging, so a mark made in another window is not overwritten. No lock: two strictly simultaneous writes can still lose a mark. |
+| Bitbucket client | A write (POST, PUT, DELETE) is retried only on 429 (request not processed); after a 5xx, a network error or a timeout Bitbucket may have run it, so resending could duplicate it. Reads are retried on 429 and 5xx. Redirects are followed manually (3 hops at most, GET only) and the `Authorization` header is dropped when the target origin differs from the configured API. A file path with an empty, `.` or `..` segment is rejected (400) before any request. A 2xx response that is not JSON becomes a `BB_ERROR` 502 without the token. Pagination never follows a URL outside the configured API. |
+| Cache | Immutable data (contents per commit, merge-base, diffstat, summaries) in a disk cache + LRU in memory. Live data (PR, activity, comments) in a short in-memory cache; concurrent computations of the same key are shared and an error is never cached. The session keeps the token in memory until `reset()` (on macOS each keychain read starts a subprocess). |
+| Versions | `update` entries of the PR activity (source hash + master hash at push time), consecutive duplicates removed, the PR's current version added if missing. Commit not found (404: Bitbucket erases commits overwritten by a force-push) → version kept but `available: false`: neither comparable (410 `VERSION_UNAVAILABLE`) nor a selection bound; the rebase flag, message and summary of the next version are computed against the last readable version (`since`). |
+| Versions purged after caching | A commit can be erased after Revspan cached it, and the cache would keep serving it. The purge is detected where the 404 shows up, while a summary or comparison is computed: a 404 on a diffstat, or a missing content, on the hash of a readable version makes the client ask Bitbucket about the commit itself (`commitExists`, answer kept 15 s). If it is gone, the version's cached commit, merge-base and summaries (its own and the next version's) are forgotten, the PR is reloaded (the version now comes back `available: false`) and the computation restarts. A hash already forgotten during the same call stops the retry (410 `VERSION_UNAVAILABLE`), so a Bitbucket that contradicts itself cannot loop. The page does the same on its side: when the summary says a version is unavailable that the detail still shows as readable, it reloads the detail once and repairs the selected range. |
+| Version base | `merge-base(version, master at push time)` through the API (fallback: first parent). The master hash in the activity is not the base: if the branch was created before master's latest commits, the base is older than the master noted at push time. |
+| Rebase | A version is a rebase if its base differs from the previous version's. |
+| Diff between versions A → B | Candidate files = files that differ between the two commits ∩ (PR files in A ∪ in B). The others "come from master" and are hidden. Same base: direct diff. Otherwise A is "replayed" onto B's base by a line-by-line 3-way merge (ancestor = A's base, ours = B's base, theirs = A); in a conflict area A's lines are kept (file flagged). Then diff (A replayed → B). Filtering by file is not enough: `package-lock.json`, `package.json` and `changelog.md` are often touched by both master and the author. |
+| Binary and oversized files | Such a file is compared by fingerprint (sha1 of the bytes, computed once the content was read), never by content. Two flagged sides are equal only if they have the same flag and the same known fingerprint; without a fingerprint (old cache entries, or a file too large to be downloaded according to `content-length`) they are never equal, which is the safe default. The replay checks ("the author did not change the file in A", "master did not change it") run before this fallback, so a binary or a text file over 60,000 lines changed only by master across a rebase shows no author change. A pure rename keeps the file listed as renamed. |
+| Summary per version | Diff (v(n-1) → vn) by the same method. Type: `creation`, `code`, `deps` (only package.json / lockfiles), `rebase-only`, `message-only`, `none`. Cached on disk (commits are immutable); `SUMMARY_VERSION` is bumped when the computation changes, which invalidates old entries. |
+| Diff engine | Line-based Myers (common prefix/suffix removed, distance cap then block fallback), hunks with context, intra-line highlighting by common prefix/suffix. Home-made 3-way merge. |
+| Last review | max(last approval, last comment, local "reviewed" mark), each converted into a version through its date. Approving or commenting moves it forward automatically. |
+| Seen files | Local, stored with the fingerprint of the content on side B; the tick is dropped if the file changes. |
+| Comments | Threads rebuilt (parent). Each comment is attached to the version in progress at its date. `to` anchor relocated line by line onto the displayed version (marked "line modified" if the line changed). `from` anchor only: shown at file level. Content: HTML rendered by Bitbucket, sanitized on the client with an allowlist. |
+| Inline comment | Possible only if B is the latest version, on the new side (added or context lines): `inline.to`. On a deleted line, a general comment quoting file, line and code. |
+| Approvals | Approval version deduced from the activity; "stale" if a version with code (or dependencies) arrived since. Bitbucket does not necessarily remove the approval on each push: an approval still active with no author change since (rebases, message) holds for the latest version — "Remove approval" instead of "Re-approve", banner "Mark vN as reviewed". |
+| Home page | Open PRs of the configured repositories, grouped by a language-neutral key (`HomeGroupKey`): To review / Quick re-approval (only rebases, my approval removed by Bitbucket) / Up to date (including: only rebases and my approval still active) / My PRs / Other. The server sends the groups in order with their key only; the page and the VS Code tree each translate the key into a title. |
+| Local security | Listens on 127.0.0.1 only. `Host` header checked (anti DNS rebinding). Any request that modifies state requires the `X-Revspan: 1` header (blocks forms and requests from other sites) and a matching origin. The token never leaves the server. |
+| Errors | An error is `{ code, message, params? }` (`ErrorPayload` in `src/shared/api.ts`). `code` is stable and `message` is always English, readable in the terminal and in logs. `params` carries the values a translation needs: `reason` (finer cause such as `invalid-email`, `no-versions`), Bitbucket `path`, HTTP `status`, `detail` (Bitbucket's or the system's own text, shown as is) and `version`. The page and the extension translate from `code` and `params`; a rare error without the parameters its translation needs falls back to the server's English message. Which message to show is decided once in `src/shared/error-text.ts` and rendered by each UI in its own language. Repository errors in the home page use the same shape. |
+| Languages (page) | French and English catalogs in `src/web/i18n/` (`en.ts` is the reference, `fr.ts` is typed against it, so a missing or extra key is a compile error). A small dependency-free translator handles `{name}` placeholders, plurals (`Intl.PluralRules`; French treats 0 and 1 as singular), rich-text slots and `Intl` formatting of lists, dates and numbers. The language is the one imposed by the host (VS Code's `<meta name="revspan-locale">`) if any, otherwise the browser's preferred language (French for `fr*`, English otherwise). Pure rules in `src/web/lib/` receive the translator as an argument. Code, tests, logs and documentation are English; the French catalogs and French UI test expectations are the only French. |
+| VS Code extension | Same Vue page in a webview and same services. API calls go through messages (`src/shared/webview-protocol.ts`) and are handled by the in-memory Hono application (`app.request`, no port), with the same validation. Token in VS Code's secure storage, tracked repositories in the `revspan.repositories` setting (repository source injected into `Store`), other data in the extension's global storage (separate from the web version). VS Code additions: "My PRs" view (TreeView), "Open file" (workspace repository), "VS Code diff" (virtual documents + `vscode.diff`, same sides as the page). Single CommonJS bundle (Vite, `vscode` external). |
+| Extension language | The extension follows VS Code's display language (French for `fr*`, English otherwise). Manifest texts are `%key%` entries in `package.nls.json` (English) and `package.nls.fr.json`; runtime texts go through `vscode.l10n.t` with the English message as the key and French in `l10n/bundle.l10n.fr.json`. Pure code in `lib/` gets the translation function as a parameter. The panel tells the page its language through a `<meta name="revspan-locale">` tag, so the page follows VS Code and not the webview's browser language. |
+| Webview messages | Nothing coming from the page is trusted. Messages are validated by a zod `discriminatedUnion` (`request`, `openFile`, `openDiff`): PR reference through the same schema as the HTTP routes (only the clean `{ workspace, repo, id }` is kept), integers for ids and lines, non-empty paths. A malformed message is ignored, without exception or response. "Open file" refuses an absolute path, a NUL character and any path that does not resolve under the repository folder (`../`). Diff document addresses are decoded strictly (decimal digits only, a missing or invalid number gives no document, never 0). |
+| Panel title and restoration | The panel title follows the screen shown: it is set as soon as a read request arrives (the page reads in navigation order, so a slow PR request cannot put an old title back). The page saves its route in the panel state (`vscode.setState`); after "Reload Window", a webview panel serializer (`onWebviewPanel:revspan`) reopens the panel on that route, with the same construction as a normal opening. One panel only: a duplicate is closed. Panel listeners are released when the panel closes. |
+| Repository detection | The clone of a PR's repository is looked for in the workspace roots and their direct subfolders: recognized by any Bitbucket remote `<workspace>/<repo>` (https, ssh, scp syntax, `.git` optional) which wins over the folder name, otherwise by the folder name. The git worktrees registered for the repository are added wherever they are (`<common git folder>/worktrees/*/gitdir`, common folder from the worktree's `commondir` file), bare repositories included; a folder that only points to a bare repository is never returned itself. A copy checked out on the PR's branch is preferred. |
+| Extension in restricted workspaces | `untrustedWorkspaces` is `limited` and the `revspan.repositories` setting is a restricted configuration (VS Code ignores a workspace value it cannot trust); the extension writes the setting at the level that gives the effective value (workspace if it defines it and is trusted, user otherwise). |
+| Last review (detail) | Replies do not count as a review; only new comments, approvals and change requests. |
+| Tests | Vitest: unit (diff, merge, relocation, versions, threads, state), page rules (selection, folding, banner, sanitizing, keyboard, i18n), server integration against a fake Bitbucket with 6 PRs (writes included, each test isolated); Playwright UI on the real server wired to the same fake Bitbucket (French and English journeys); real read-only test on a PR of your choice (`npm run test:live`, invariants and full diff identical to Bitbucket's diffstat); extension smoke test in an isolated VS Code (`npm run test:extension`). No write to the real Bitbucket during tests. |
 
-## Laissé au constructeur
+## Left to the builder
 
-Mise en page fine, raccourcis clavier exacts, messages d'erreur, stratégie de cache mémoire des données vivantes.
+Fine layout, exact keyboard shortcuts, error wording, in-memory cache strategy for live data.
