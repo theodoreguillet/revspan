@@ -11,7 +11,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selo
 - Extension VS Code : fonctionne en espace de travail non approuvé ; en espace virtuel, tout sauf « Ouvrir le fichier ».
 - Licence MIT, icône, CI GitHub Actions (lint, types, tests, tests UI, `.vsix`) et release GitHub sur tag `v*`.
 - Indicateur de chargement sur les boutons d'action (approuver, demander des modifs, marquer relue, commenter,
-  répondre, 👍, résoudre, supprimer, enregistrer, tester, actualiser) ; une seule écriture à la fois.
+  répondre, résoudre, supprimer, enregistrer, tester, actualiser) ; une seule écriture à la fois.
+- « Mes PR » (page et vue VS Code) : dépôt et numéro de la PR devant son titre.
 
 ### Corrections
 
@@ -28,7 +29,7 @@ Première version publiée sous le nom Strata.
   ou d'une version avec sa base, sans le bruit apporté par les rebases (version rejouée sur la nouvelle base).
 - Résumé de chaque version : code, dépendances seules, rebase seul, message seul.
 - Reprise de la relecture : dernière version relue, nouvelles versions et nouveaux commentaires, fichiers vus.
-- Discussions relocalisées sur la version affichée ; commenter, répondre, 👍, résoudre, approuver, demander des modifs.
+- Discussions relocalisées sur la version affichée ; commenter, répondre, résoudre, approuver, demander des modifs.
 - Accueil « Mes PR » sur les dépôts suivis.
 - Jeton dans le trousseau macOS, `secret-tool` sous Linux, sinon fichier `0600`.
 - Extension VS Code : vue « Mes PR », page de la PR dans un panneau, « Ouvrir le fichier » (worktree git de la branche
