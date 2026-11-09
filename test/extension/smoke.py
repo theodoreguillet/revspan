@@ -1,7 +1,8 @@
 """Test de fumée de l'extension Revspan dans un VS Code isolé (lancé par run-smoke.ts).
 
 Pilote VS Code par son port de débogage (Playwright connect_over_cdp) : vue « Mes PR », panneau de la PR,
-« Diff VS Code » (éditeur de diff natif) et « Ouvrir le fichier » (dépôt local).
+« Diff VS Code » (éditeur de diff natif), « Ouvrir le fichier » (dépôt local), titre de l'onglet pendant la
+navigation et panneau rouvert après « Recharger la fenêtre ».
 """
 import json
 import os
@@ -60,7 +61,10 @@ def app_frame(page: Page) -> Frame | None:
 
 
 def tab_titles(page: Page) -> list[str]:
-    return [t.strip() for t in page.locator('.tabs-container .tab .label-name').all_inner_texts()]
+    try:
+        return [t.strip() for t in page.locator('.tabs-container .tab .label-name').all_inner_texts()]
+    except Exception:  # noqa: BLE001 — fenêtre en cours de rechargement
+        return []
 
 
 def run() -> None:
@@ -130,6 +134,36 @@ def run() -> None:
         if CALLS_URL:
             calls = json.loads(urllib.request.urlopen(CALLS_URL).read())
             check('aucune écriture Bitbucket sans action explicite', calls == [], str(calls)[:200])
+
+        # Retour à l'accueil depuis la page : l'onglet ne garde pas le titre de la PR.
+        page.locator('.tabs-container .tab', has_text='PR #42').first.click()
+        frame = wait_until(lambda: app_frame(page), 30)
+        if not frame:
+            check('panneau : retrouvé avant le retour à l\'accueil', False, str(tab_titles(page)))
+            return
+        frame.locator('a.home').first.click()
+        home_tab = wait_until(lambda: 'Revspan' in tab_titles(page), 30)
+        check('panneau : onglet titré « Revspan » de retour à l\'accueil', bool(home_tab), str(tab_titles(page)))
+        frame.locator('.rv-row[data-pr$="/42"]').first.click()
+        back_on_pr = wait_until(lambda: any('PR #42' in t for t in tab_titles(page)), 30)
+        check('panneau : onglet titré « PR #42 » en rouvrant la PR depuis l\'accueil', bool(back_on_pr), str(tab_titles(page)))
+        frame.wait_for_selector('.rv-v', timeout=60000)
+
+        # « Recharger la fenêtre » : VS Code rouvre le panneau sur la route enregistrée par la page.
+        page.keyboard.press('F1')
+        page.locator('.quick-input-widget input').first.wait_for(timeout=10000)
+        page.keyboard.type('Developer: Reload Window')
+        time.sleep(1)
+        page.keyboard.press('Enter')
+        time.sleep(3)
+        page.wait_for_selector('.monaco-workbench', timeout=60000)
+        restored = wait_until(lambda: any('PR #42' in t for t in tab_titles(page)), 60)
+        check('rechargement : onglet « PR #42 » rouvert', bool(restored), str(tab_titles(page)))
+        frame = wait_until(lambda: app_frame(page), 60)
+        if frame:
+            frame.wait_for_selector('.rv-v', timeout=60000)
+        page.screenshot(path=f'{SHOTS}/06-recharge.png')
+        check('rechargement : page de la PR affichée', bool(frame) and frame.locator('.rv-v').count() == 7)
 
 
 def main() -> int:
