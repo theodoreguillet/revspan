@@ -182,6 +182,10 @@ def current_selection(page):
     return int(params.get('from', -1)), int(params.get('to', -1))
 
 
+def expect_selection(page, frm, to):
+    expect(page).to_have_url(re.compile(f'[?&]from={frm}&to={to}$'))
+
+
 def wait_api(predicate, desc, timeout=8.0):
     deadline = time.time() + timeout
     while not predicate():
@@ -547,7 +551,47 @@ def run_checks(page):
         expect(page.locator('.rv-overlay')).to_be_visible()
         page.keyboard.press('Escape')
         expect(page.locator('.rv-overlay')).to_have_count(0)
+        # AZERTY sous Windows : AltGr (Ctrl + Alt) + 5 donne [
+        _, to = current_selection(page)
+        page.keyboard.press('Control+Alt+[')
+        expect(readout(page)).to_contain_text(readout_bold(to - 2, to - 1))
     keyboard(page)
+
+    @check('liste des fichiers au clavier : Espace et Entrée ouvrent le fichier, même vu')
+    def file_list_keys(page):
+        block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
+        row = page.locator(f'.rv-f[data-path="{code_file["path"]}"]')
+        folded = re.compile(r'\bfolded\b')
+        for key in (' ', 'Enter'):
+            open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
+            page.reload()  # page neuve : fichier vu plus haut, donc replié
+            wait_pr_ready(page)
+            expect(block).to_have_class(folded)
+            row.focus()
+            page.keyboard.press(key)
+            expect(block).not_to_have_class(folded)
+            expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', row.get_attribute('data-idx'))
+    file_list_keys(page)
+
+    @check('aide des raccourcis : focus piégé dans la boîte, rendu au bouton à la fermeture')
+    def shortcuts_focus(page):
+        opener = page.locator('.rv-nav button[aria-label="Raccourcis clavier"]')
+        opener.click()
+        overlay = page.locator('.rv-overlay')
+        expect(overlay).to_be_visible()
+        expect(overlay.locator('button', has_text='Fermer')).to_be_focused()
+        inside = '() => !!document.activeElement && !!document.activeElement.closest(".rv-overlay")'
+        try:
+            for key in ('Tab', 'Tab', 'Shift+Tab'):
+                page.keyboard.press(key)
+                assert page.evaluate(inside), f'focus sorti de la boîte après {key}'
+            page.keyboard.press('Escape')
+            expect(overlay).to_have_count(0)
+            expect(opener).to_be_focused()
+        finally:
+            if overlay.count():
+                overlay.locator('button', has_text='Fermer').click()  # ne pas bloquer les vérifications suivantes
+    shortcuts_focus(page)
 
     @check('collage d\'une URL Bitbucket dans la barre du haut')
     def url_paste(page):
@@ -635,6 +679,24 @@ def run_checks(page):
             expect(page.locator('.rv-v[data-i="2"]')).to_have_attribute('title', re.compile('changements comptés depuis la base'))
         purged(page)
 
+        @check('version effacée, onglet Versions : la ligne v2 montre v2 depuis la base ; Entrée et Espace')
+        def purged_versions_tab(page):
+            open_pr(page, fake_ref('purged'), '?from=0&to=3')
+            page.click('.rv-tab[data-tab="versions"]')
+            v2 = page.locator('.rv-tbl tbody tr[data-v="2"]')
+            v3 = page.locator('.rv-tbl tbody tr[data-v="3"]')
+            v2.click()
+            expect_selection(page, 0, 2)
+            expect(v2).to_have_attribute('role', 'button')
+            expect(page.locator('.rv-tbl tbody tr[data-v="1"]')).to_have_attribute('aria-disabled', 'true')
+            v3.focus()
+            page.keyboard.press(' ')
+            expect_selection(page, 2, 3)
+            v2.focus()
+            page.keyboard.press('Enter')
+            expect_selection(page, 0, 2)
+        purged_versions_tab(page)
+
     @check('réglages : enregistrer et tester la connexion')
     def settings(page):
         page.goto(url('settings'))
@@ -657,9 +719,18 @@ def run_checks(page):
         @check('jeton supprimé : l\'accueil renvoie vers les réglages, puis jeton remis')
         def no_token(page):
             page.goto(url('settings'))
+            expect(page.locator('#set-email')).to_be_visible()
+            saved = api('/settings')
+            draft_repos = '\n'.join(saved['repos'] + ['acme/brouillon-non-enregistre'])
+            page.fill('#set-email', 'brouillon@example.test')
+            page.fill('#set-repos', draft_repos)
             page.click('text=Supprimer le jeton')
             expect(page.locator('.rv-status')).to_have_text('Jeton supprimé.')
             expect(page.locator('#set-token')).to_have_attribute('placeholder', 'Colle ici ton jeton API Atlassian')
+            # saisie en cours non enregistrée : gardée
+            expect(page.locator('#set-email')).to_have_value('brouillon@example.test')
+            expect(page.locator('#set-repos')).to_have_value(draft_repos)
+            assert api('/settings')['email'] == saved['email'], 'l\'e-mail en cours de saisie ne doit pas être enregistré'
             page.goto(url(''))
             expect(page).to_have_url(re.compile('#/settings$'), timeout=10000)
             page.goto(url(f'pr/{MAIN_PR}'))
