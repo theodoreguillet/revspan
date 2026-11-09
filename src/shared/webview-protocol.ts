@@ -21,6 +21,9 @@ export type HostToWebview =
 /** Balise <meta> par laquelle l'extension donne la route initiale à la page. */
 export const INITIAL_ROUTE_META = 'revspan-route';
 
+/** <meta> tag through which the extension imposes the page language (VS Code display language, e.g. « fr », « en-us »). */
+export const INITIAL_LOCALE_META = 'revspan-locale';
+
 /** État du panneau enregistré par la page (vscode.setState), rendu par VS Code quand il rouvre le panneau. */
 export interface PanelState {
     /** Route affichée (ex. « /pr/ws/repo/42?from=2&to=6 »). */

@@ -1,7 +1,7 @@
 // Page hébergée dans un panneau VS Code : échanges avec l'extension (src/shared/webview-protocol.ts).
 // Hors de VS Code, isVsCode est faux et rien ici n'est utilisé.
 import type { PrRef } from '../../shared/api.ts';
-import { INITIAL_ROUTE_META, isPageRoute, type HostToWebview, type PanelState, type WebviewToHost } from '../../shared/webview-protocol.ts';
+import { INITIAL_LOCALE_META, INITIAL_ROUTE_META, isPageRoute, type HostToWebview, type PanelState, type WebviewToHost } from '../../shared/webview-protocol.ts';
 
 interface VsCodeApi {
     postMessage(message: WebviewToHost): void;
@@ -56,7 +56,7 @@ let listening = false;
 /** Appel de l'API locale relayé par l'extension (path complet, ex. « /api/home »). Rejette si l'extension ne répond pas. */
 export function hostRequest(method: string, path: string, body?: unknown): Promise<HostResponse> {
     if (!vscode) {
-        return Promise.reject(new Error('Pas dans VS Code'));
+        return Promise.reject(new Error('Not in VS Code'));
     }
     if (!listening) {
         listening = true;
@@ -71,7 +71,7 @@ export function hostRequest(method: string, path: string, body?: unknown): Promi
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             pending.delete(id);
-            reject(new Error(`Pas de réponse de l'extension pour ${method} ${path}`));
+            reject(new Error(`No response from the extension for ${method} ${path}`));
         }, REQUEST_TIMEOUT_MS);
         pending.set(id, (response) => {
             clearTimeout(timer);
@@ -100,4 +100,9 @@ export function openNativeDiff(ref: PrRef, from: number, to: number, path: strin
 export function readInitialRoute(doc: Document): string | null {
     const content = doc.querySelector(`meta[name="${INITIAL_ROUTE_META}"]`)?.getAttribute('content')?.trim();
     return isPageRoute(content) ? content : null;
+}
+
+/** Language imposed by the host (<meta name="revspan-locale" content="fr">), or null: the browser language applies. */
+export function readInitialLocale(doc: Document): string | null {
+    return doc.querySelector(`meta[name="${INITIAL_LOCALE_META}"]`)?.getAttribute('content')?.trim() || null;
 }

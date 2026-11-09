@@ -155,7 +155,7 @@ describe('hors VS Code', () => {
 
     it('le relais par l\'extension refuse de partir', async () => {
         const { hostRequest } = await import('../../src/web/services/host.ts');
-        await expect(hostRequest('GET', '/api/home')).rejects.toThrow('Pas dans VS Code');
+        await expect(hostRequest('GET', '/api/home')).rejects.toThrow('Not in VS Code');
     });
 });
 
