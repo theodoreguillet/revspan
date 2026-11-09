@@ -8,6 +8,7 @@ import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/ext
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { settingTarget } from '../../src/extension/lib/setting-target.ts';
+import { panelTitle, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
 
 describe('manifeste de l\'extension', () => {
     const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -72,6 +73,26 @@ describe('HTML du panneau', () => {
         expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
         expect(csp).toContain("connect-src 'none'");
         expect(csp).toContain("base-uri 'none'");
+    });
+});
+
+describe('titre du panneau', () => {
+    it('d\'après la route affichée', () => {
+        expect(panelTitle('/pr/acme/records-api/212?from=2&to=6')).toBe('PR #212 · records-api');
+        expect(panelTitle('/')).toBe('Revspan');
+        expect(panelTitle('/settings')).toBe('Revspan · Réglages');
+    });
+
+    it('lecture d\'API de la page : route de l\'écran qui la fait (accueil, réglages, PR), sinon null', () => {
+        expect(routeOfApiRead('GET', '/api/home')).toBe('/');
+        expect(routeOfApiRead('GET', '/api/home?fresh=1')).toBe('/');
+        expect(routeOfApiRead('GET', '/api/settings')).toBe('/settings');
+        expect(routeOfApiRead('GET', '/api/pr/acme/records-api/212')).toBe('/pr/acme/records-api/212');
+        expect(routeOfApiRead('GET', '/api/pr/acme/records-api/212/compare?from=2&to=6&context=3')).toBe('/pr/acme/records-api/212');
+        expect(routeOfApiRead('PUT', '/api/settings')).toBeNull();
+        expect(routeOfApiRead('POST', '/api/pr/acme/records-api/212/approve')).toBeNull();
+        expect(routeOfApiRead('GET', '/api/health')).toBeNull();
+        expect(routeOfApiRead('GET', '/api/homepage')).toBeNull();
     });
 });
 

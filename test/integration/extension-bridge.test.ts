@@ -129,6 +129,19 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         await vi.waitFor(() => expect(recorded.opened).toEqual([path.join(root, REPO, 'README.md')]));
     });
 
+    it('titre de l\'onglet : celui de l\'écran, aussi quand la page revient à l\'accueil ou aux réglages', async () => {
+        const prTitle = `PR #${FAKE_PRS.main} · ${REPO}`;
+        const { panel } = open(`/pr/${WS}/${REPO}/${FAKE_PRS.main}`);
+        expect(panel.title).toBe(prTitle);
+        panel.receive({ type: 'request', id: 1, method: 'GET', path: '/api/settings' });
+        await vi.waitFor(() => expect(panel.title).toBe('Revspan · Réglages'));
+        panel.receive({ type: 'request', id: 2, method: 'GET', path: '/api/home' });
+        await vi.waitFor(() => expect(panel.title).toBe('Revspan'));
+        panel.receive({ type: 'request', id: 3, method: 'GET', path: `/api/pr/${WS}/${REPO}/${FAKE_PRS.main}` });
+        await vi.waitFor(() => expect(panel.title).toBe(prTitle));
+        await vi.waitFor(() => expect(panel.posted).toHaveLength(3), { timeout: 5000 });
+    });
+
     it('écouteurs propres au panneau, libérés à sa fermeture ; un nouveau panneau ensuite', () => {
         const { revspan, panel } = open('/');
         expect(subscriptions).toEqual([]);

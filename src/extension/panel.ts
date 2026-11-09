@@ -5,16 +5,10 @@ import type { HostToWebview, WebviewToHost } from '../shared/webview-protocol.ts
 import type { ExtensionApp } from './app-context.ts';
 import type { DiffDocuments } from './diff-documents.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
+import { panelTitle, routeOfApiRead } from './lib/panel-route.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
 import { parseWebviewMessage } from './lib/webview-messages.ts';
 import { openLocalFile } from './local-files.ts';
-
-const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
-
-function titleFor(route: string): string {
-    const match = PR_ROUTE.exec(route);
-    return match ? `PR #${match[3]} · ${match[2]}` : route.startsWith('/settings') ? 'Revspan · Réglages' : 'Revspan';
-}
 
 export class RevspanPanel {
     private readonly context: vscode.ExtensionContext;
@@ -33,13 +27,13 @@ export class RevspanPanel {
     /** Affiche une route de la page (un seul panneau, réutilisé). */
     show(route: string): void {
         if (this.panel) {
-            this.panel.title = titleFor(route);
+            this.panel.title = panelTitle(route);
             this.panel.reveal();
             void this.post({ type: 'navigate', route });
             return;
         }
         const webDir = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'web');
-        const panel = vscode.window.createWebviewPanel('revspan', titleFor(route), vscode.ViewColumn.Active, {
+        const panel = vscode.window.createWebviewPanel('revspan', panelTitle(route), vscode.ViewColumn.Active, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [webDir],
@@ -76,14 +70,15 @@ export class RevspanPanel {
         try {
             switch (message.type) {
                 case 'request': {
+                    // Titre mis à jour dès la demande : les lectures suivent l'ordre de navigation dans la page.
+                    const route = routeOfApiRead(message.method, message.path);
+                    if (this.panel && route) {
+                        this.panel.title = panelTitle(route);
+                    }
                     const result = await callApi(this.app.http, message);
                     await this.post({ type: 'response', id: message.id, ...result });
                     if (isSuccessfulWrite(message, result)) {
                         this.onWrite();
-                    }
-                    const route = PR_ROUTE.exec(message.path.replace(/^\/api/, ''));
-                    if (this.panel && route && message.method === 'GET') {
-                        this.panel.title = titleFor(route[0]);
                     }
                     return;
                 }
