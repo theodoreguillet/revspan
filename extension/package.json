@@ -27,7 +27,9 @@
     "extensionKind": ["workspace"],
     "capabilities": {
         "untrustedWorkspaces": {
-            "supported": true
+            "supported": "limited",
+            "description": "Dans un espace de travail non approuvé, la liste des dépôts suivis définie par l'espace de travail est ignorée.",
+            "restrictedConfigurations": ["revspan.repositories"]
         },
         "virtualWorkspaces": {
             "supported": "limited",

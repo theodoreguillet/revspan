@@ -11,6 +11,7 @@ import { Cache } from '../server/infra/cache.ts';
 import { Store, type RepoSource } from '../server/infra/config.ts';
 import { createServices, type Services } from '../server/services/index.ts';
 import { IN_MEMORY_HOST } from './lib/bridge.ts';
+import { settingTarget } from './lib/setting-target.ts';
 
 export interface ExtensionApp {
     services: Services;
@@ -30,7 +31,11 @@ function vscodeRepoSource(): RepoSource {
             return Array.isArray(value) ? value.filter((repo): repo is string => typeof repo === 'string') : [];
         },
         async set(repos) {
-            await config().update(REPOS_SETTING.key, repos, vscode.ConfigurationTarget.Global);
+            // Écrit au niveau qui donne la valeur effective (sinon un .vscode/settings.json masquerait l'enregistrement).
+            const target = settingTarget(config().inspect(REPOS_SETTING.key), vscode.workspace.isTrusted) === 'workspace'
+                ? vscode.ConfigurationTarget.Workspace
+                : vscode.ConfigurationTarget.Global;
+            await config().update(REPOS_SETTING.key, repos, target);
         },
     };
 }

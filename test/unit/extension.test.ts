@@ -7,6 +7,7 @@ import { currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/l
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
+import { settingTarget } from '../../src/extension/lib/setting-target.ts';
 
 describe('manifeste de l\'extension', () => {
     const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -21,6 +22,29 @@ describe('manifeste de l\'extension', () => {
         const registered = (pattern: RegExp): string[] => [...source.matchAll(pattern)].map((m) => m[1] ?? '').sort();
         expect(registered(/registerCommand\('([^']+)'/g)).toEqual(manifest.contributes.commands.map((c) => c.command).sort());
         expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
+    });
+
+    it('un espace de travail non approuvé ne peut pas imposer sa liste de dépôts', () => {
+        const manifest = readJson('extension/package.json') as {
+            capabilities: { untrustedWorkspaces: Record<string, unknown> };
+            contributes: { configuration: { properties: Record<string, unknown> } };
+        };
+        // VS Code n'applique restrictedConfigurations qu'avec supported: 'limited'.
+        expect(manifest.capabilities.untrustedWorkspaces).toMatchObject({ supported: 'limited', restrictedConfigurations: ['revspan.repositories'] });
+        expect(manifest.contributes.configuration.properties).toHaveProperty(['revspan.repositories']);
+    });
+});
+
+describe('réglage des dépôts suivis', () => {
+    it('écrit là où la valeur effective est définie : espace de travail s\'il la définit, sinon utilisateur', () => {
+        expect(settingTarget({ workspaceValue: ['acme/records-api'], globalValue: ['acme/records-import'] }, true)).toBe('workspace');
+        expect(settingTarget({ workspaceValue: [] }, true)).toBe('workspace');
+        expect(settingTarget({ globalValue: ['acme/records-import'] }, true)).toBe('global');
+        expect(settingTarget(undefined, true)).toBe('global');
+    });
+
+    it('espace de travail non approuvé : sa valeur est ignorée par VS Code, on écrit au niveau utilisateur', () => {
+        expect(settingTarget({ workspaceValue: ['acme/records-api'] }, false)).toBe('global');
     });
 });
 
