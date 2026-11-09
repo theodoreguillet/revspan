@@ -1,45 +1,45 @@
 # Changelog
 
-Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
-## [Non publié]
+## [Unreleased]
 
-### Ajouts
+### Added
 
-- Extension VS Code : dépôts suivis dans le réglage `revspan.repositories` (Réglages de VS Code, Settings Sync, propre à
-  chaque profil), toujours modifiables depuis ⚙ Réglages du panneau.
-- Extension VS Code : fonctionne en espace de travail non approuvé ; en espace virtuel, tout sauf « Ouvrir le fichier ».
-- Licence MIT, icône, CI GitHub Actions (lint, types, tests, tests UI, `.vsix`) et release GitHub sur tag `v*`.
-- Indicateur de chargement sur les boutons d'action (approuver, demander des modifs, marquer relue, commenter,
-  répondre, résoudre, supprimer, enregistrer, tester, actualiser) ; une seule écriture à la fois.
-- « Mes PR » (page et vue VS Code) : dépôt et numéro de la PR devant son titre.
+- VS Code extension: tracked repositories in the `revspan.repositories` setting (VS Code Settings, Settings Sync, per
+  profile), still editable from the panel's ⚙ Settings.
+- VS Code extension: works in an untrusted workspace; in a virtual workspace, everything except "Open file".
+- MIT license, icon, GitHub Actions CI (lint, types, tests, UI tests, `.vsix`) and GitHub release on a `v*` tag.
+- Loading indicator on action buttons (approve, request changes, mark reviewed, comment,
+  reply, resolve, delete, save, test, refresh); only one write at a time.
+- "My PRs" (page and VS Code view): the PR's repository and number before its title.
 
-### Changements
+### Changed
 
-- Le projet s'appelle désormais Revspan (« Revspan for Bitbucket » dans VS Code), avec un nouveau logo : extension
-  `theodoreguillet.revspan`, réglage `revspan.repositories`, variables `REVSPAN_*`, configuration `~/.config/revspan`,
-  trousseau `revspan-bitbucket`, commande `revspan`. Rien n'est repris automatiquement depuis Strata : dans VS Code,
-  saisir à nouveau le jeton dans ⚙ Réglages.
+- The project is now called Revspan ("Revspan for Bitbucket" in VS Code), with a new logo: extension
+  `theodoreguillet.revspan`, setting `revspan.repositories`, `REVSPAN_*` variables, configuration `~/.config/revspan`,
+  keychain `revspan-bitbucket`, command `revspan`. Nothing is carried over automatically from Strata: in VS Code,
+  enter the token again in ⚙ Settings.
 
-### Corrections
+### Fixed
 
-- Une PR dont une ancienne version a été effacée par Bitbucket (commit écrasé par un force-push) ne s'ouvrait plus
-  (« Introuvable sur Bitbucket : …/commit/… »). Ces versions sont désormais affichées « indisponibles » dans la frise.
-- Une approbation que Bitbucket garde après des rebases seuls n'est plus présentée comme à refaire : « Retirer
-  l'approbation » au lieu de « Réapprouver », bandeau « Marquer vN comme relue », PR « À jour » sur l'accueil.
+- A PR with an old version erased by Bitbucket (commit overwritten by a force-push) no longer opened
+  ("Not found on Bitbucket: …/commit/…"). These versions are now shown as "unavailable" in the timeline.
+- An approval that Bitbucket keeps after rebase-only pushes is no longer presented as needing to be redone: "Remove
+  approval" instead of "Re-approve", banner "Mark vN as reviewed", PR "Up to date" on the home page.
 
 ## [2.0.0] - 2026-11-06
 
-Première version publiée sous le nom Strata.
+First version published under the name Strata.
 
-### Ajouts
+### Added
 
-- Frise des versions d'une PR Bitbucket (un point par push, rebases repérés), comparaison de deux versions quelconques
-  ou d'une version avec sa base, sans le bruit apporté par les rebases (version rejouée sur la nouvelle base).
-- Résumé de chaque version : code, dépendances seules, rebase seul, message seul.
-- Reprise de la relecture : dernière version relue, nouvelles versions et nouveaux commentaires, fichiers vus.
-- Discussions relocalisées sur la version affichée ; commenter, répondre, résoudre, approuver, demander des modifs.
-- Accueil « Mes PR » sur les dépôts suivis.
-- Jeton dans le trousseau macOS, `secret-tool` sous Linux, sinon fichier `0600`.
-- Extension VS Code : vue « Mes PR », page de la PR dans un panneau, « Ouvrir le fichier » (worktree git de la branche
-  de la PR préféré) et « Diff VS Code » natif.
+- Version timeline of a Bitbucket PR (one dot per push, rebases detected), comparison of any two versions
+  or of a version with its base, without the noise brought in by rebases (version replayed onto the new base).
+- Summary of each version: code, dependencies only, rebase only, message only.
+- Review resume: last reviewed version, new versions and new comments, seen files.
+- Discussions relocated onto the displayed version; comment, reply, resolve, approve, request changes.
+- "My PRs" home page over the tracked repositories.
+- Token in the macOS keychain, `secret-tool` on Linux, otherwise a `0600` file.
+- VS Code extension: "My PRs" view, PR page in a panel, "Open file" (git worktree of the PR's branch
+  preferred) and native "VS Code diff".
