@@ -60,7 +60,7 @@ watch(() => page.curFile, async (idx) => {
                 role="button"
                 tabindex="0"
                 @click="page.gotoFile(idx, { expand: true })"
-                @keydown.enter="page.gotoFile(idx, { expand: true })"
+                @keydown.enter.space.prevent="page.gotoFile(idx, { expand: true })"
             >
                 <span :class="['ck', status(file).cls]" :title="status(file).title">{{ status(file).icon }}</span>
                 <span class="nm">
