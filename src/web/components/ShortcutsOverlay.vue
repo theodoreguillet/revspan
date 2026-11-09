@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { closeShortcuts, SHORTCUTS, shortcutsOpen } from '../composables/useShortcuts.ts';
+import { t } from '../i18n/index.ts';
 import { trappedFocus } from '../lib/keyboard.ts';
 
 const dialog = ref<HTMLElement | null>(null);
@@ -48,26 +49,26 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey, true));
         class="rv-overlay"
         role="dialog"
         aria-modal="true"
-        aria-label="Raccourcis clavier"
+        :aria-label="t('nav.shortcuts')"
         tabindex="-1"
         @click.self="closeShortcuts()"
     >
         <div class="box">
-            <h2>Raccourcis clavier</h2>
+            <h2>{{ t('nav.shortcuts') }}</h2>
             <table>
                 <tbody>
-                    <tr v-for="[keys, label] in SHORTCUTS" :key="keys">
+                    <tr v-for="shortcut in SHORTCUTS" :key="shortcut.keys">
                         <td>
-                            <template v-for="(k, i) in keys.split(' / ')" :key="k">
+                            <template v-for="(k, i) in t(shortcut.keys).split(' / ')" :key="k">
                                 <template v-if="i">{{ ' / ' }}</template><kbd>{{ k }}</kbd>
                             </template>
                         </td>
-                        <td>{{ label }}</td>
+                        <td>{{ t(shortcut.label) }}</td>
                     </tr>
                 </tbody>
             </table>
             <div class="foot">
-                <button ref="closeButton" class="rv-btn" type="button" @click="closeShortcuts()">Fermer</button>
+                <button ref="closeButton" class="rv-btn" type="button" @click="closeShortcuts()">{{ t('common.close') }}</button>
             </div>
         </div>
     </div>

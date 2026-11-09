@@ -1,17 +1,15 @@
 // Réglages : emplacements du jeton (la liste des dépôts est lue par src/shared/repos.ts).
 import type { TokenStoreKind } from '../../shared/api.ts';
+import type { MessageKey } from '../i18n/index.ts';
 
-export const TOKEN_STORE_LABELS: Record<TokenStoreKind, string> = {
-    keychain: 'trousseau',
-    'secret-tool': 'secret-tool',
-    file: 'fichier local',
-    vscode: 'stockage sécurisé de VS Code',
-};
+export const TOKEN_STORE_LABELS = {
+    keychain: 'settings.store.keychain',
+    'secret-tool': 'settings.store.secretTool',
+    file: 'settings.store.file',
+    vscode: 'settings.store.vscode',
+} as const satisfies Record<TokenStoreKind, MessageKey>;
 
-/** Où va le jeton, selon qu'il est géré par l'extension VS Code ou par le serveur local. */
-export function tokenStorageHelp(store: TokenStoreKind): string {
-    if (store === 'vscode') {
-        return 'Le jeton reste sur ce poste : il est confié à l\'extension Revspan, jamais à la page, et rangé dans le stockage sécurisé de VS Code.';
-    }
-    return 'Le jeton reste sur ce poste : il est envoyé au serveur local Revspan, jamais au navigateur. Sous macOS, il est rangé dans le trousseau.';
+/** Where the token goes, depending on whether the VS Code extension or the local server manages it. */
+export function tokenStorageHelp(store: TokenStoreKind): 'settings.storageVsCode' | 'settings.storageServer' {
+    return store === 'vscode' ? 'settings.storageVsCode' : 'settings.storageServer';
 }

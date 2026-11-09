@@ -1,11 +1,13 @@
-// Formats de dates, durées et nombres en français.
+// Dates, durations and names, formatted for the page locale (the translator is passed in).
 import type { User } from '../../shared/api.ts';
+import type { Translator } from '../i18n/index.ts';
 
 const DAY_MS = 86400000;
-const DAY_FMT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
-const DAY_YEAR_FMT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-const MONTH_FMT = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
-const FULL_FMT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
+const DAY: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+const DAY_YEAR: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+const MONTH: Intl.DateTimeFormatOptions = { month: 'short' };
+const DATE_TIME: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
+const FULL: Intl.DateTimeFormatOptions = { dateStyle: 'full', timeStyle: 'short' };
 
 export const MINUS = '−';
 
@@ -14,25 +16,24 @@ type DateLike = string | number | Date;
 const toDate = (value: DateLike): Date => (value instanceof Date ? value : new Date(value));
 const pad = (n: number): string => String(n).padStart(2, '0');
 
-/** « 14 oct. » (avec l'année si ce n'est pas l'année en cours). */
-export function fmtDay(value: DateLike): string {
+/** « 14 oct. » / « Oct 14 » (with the year if it is not the current one). */
+export function fmtDay(tr: Translator, value: DateLike): string {
     const d = toDate(value);
-    return d.getFullYear() === new Date(Date.now()).getFullYear() ? DAY_FMT.format(d) : DAY_YEAR_FMT.format(d);
+    return tr.date(d, d.getFullYear() === new Date(Date.now()).getFullYear() ? DAY : DAY_YEAR);
 }
 
-/** « juin », « sept. » */
-export function fmtMonth(value: DateLike): string {
-    return MONTH_FMT.format(toDate(value));
+/** « juin », « sept. » / « Jun », « Sep » */
+export function fmtMonth(tr: Translator, value: DateLike): string {
+    return tr.date(toDate(value), MONTH);
 }
 
-/** « 14/10 11:10 » (heure locale). */
-export function fmtDateTime(value: DateLike): string {
-    const d = toDate(value);
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** « 14/10 11:10 » / « 10/14, 11:10 AM » (local time). */
+export function fmtDateTime(tr: Translator, value: DateLike): string {
+    return tr.date(toDate(value), DATE_TIME);
 }
 
-export function fmtFull(value: DateLike): string {
-    return FULL_FMT.format(toDate(value));
+export function fmtFull(tr: Translator, value: DateLike): string {
+    return tr.date(toDate(value), FULL);
 }
 
 /** Clé de jour local AAAA-MM-JJ. */
@@ -56,71 +57,66 @@ export function isToday(value: DateLike): boolean {
     return dayKey(value) === dayKey(Date.now());
 }
 
-/** Écart entre deux jours de la frise : « 15 j », « 3 sem. », « 2 mois ». */
-export function gapLabel(days: number): string {
+/** Gap between two timeline days: « 15 j », « 3 sem. », « 2 mois » / « 15d », « 3w », « 2mo ». */
+export function gapLabel(tr: Translator, days: number): string {
     if (days < 21) {
-        return `${days} j`;
+        return tr.t('time.gapDays', { count: days });
     }
     if (days < 60) {
-        return `${Math.round(days / 7)} sem.`;
+        return tr.t('time.gapWeeks', { count: Math.round(days / 7) });
     }
-    return `${Math.round(days / 30.4)} mois`;
+    return tr.t('time.gapMonths', { count: Math.round(days / 30.4) });
 }
 
-/** Date relative d'un commentaire : « il y a 2 h », sinon « 3 nov. ». */
-export function relTime(value: DateLike): string {
+/** Relative date of a comment: « il y a 2 h », otherwise « 3 nov. ». */
+export function relTime(tr: Translator, value: DateLike): string {
     const diff = Date.now() - toDate(value).getTime();
     if (diff < 60000) {
-        return 'à l\'instant';
+        return tr.t('time.justNow');
     }
     if (diff < 3600000) {
-        return `il y a ${Math.floor(diff / 60000)} min`;
+        return tr.t('time.minutesAgo', { count: Math.floor(diff / 60000) });
     }
     if (diff < DAY_MS) {
-        return `il y a ${Math.floor(diff / 3600000)} h`;
+        return tr.t('time.hoursAgo', { count: Math.floor(diff / 3600000) });
     }
-    return fmtDay(value);
+    return fmtDay(tr, value);
 }
 
-/** Ancienneté courte : « il y a 2 h », « il y a 3 j », « il y a 2 sem. », « il y a 3 mois ». */
-export function ago(value: DateLike): string {
+/** Short age: « il y a 2 h », « il y a 3 j », « il y a 2 sem. », « il y a 3 mois ». */
+export function ago(tr: Translator, value: DateLike): string {
     const diff = Date.now() - toDate(value).getTime();
     if (diff < 3600000) {
-        return diff < 60000 ? 'à l\'instant' : `il y a ${Math.floor(diff / 60000)} min`;
+        return diff < 60000 ? tr.t('time.justNow') : tr.t('time.minutesAgo', { count: Math.floor(diff / 60000) });
     }
     if (diff < DAY_MS) {
-        return `il y a ${Math.floor(diff / 3600000)} h`;
+        return tr.t('time.hoursAgo', { count: Math.floor(diff / 3600000) });
     }
     const days = Math.floor(diff / DAY_MS);
     if (days < 14) {
-        return `il y a ${days} j`;
+        return tr.t('time.daysAgo', { count: days });
     }
     if (days < 60) {
-        return `il y a ${Math.round(days / 7)} sem.`;
+        return tr.t('time.weeksAgo', { count: Math.round(days / 7) });
     }
-    return `il y a ${Math.round(days / 30.4)} mois`;
+    return tr.t('time.monthsAgo', { count: Math.round(days / 30.4) });
 }
 
-/** « ouverte depuis 22 j » */
-export function openedSince(value: DateLike): string {
+/** « ouverte depuis 22 j » / « open for 22 days » */
+export function openedSince(tr: Translator, value: DateLike): string {
     const days = Math.floor((Date.now() - toDate(value).getTime()) / DAY_MS);
     if (days < 1) {
-        return 'ouverte aujourd\'hui';
+        return tr.t('time.openedToday');
     }
     if (days < 60) {
-        return `ouverte depuis ${days} j`;
+        return tr.t('time.openForDays', { count: days });
     }
-    return `ouverte depuis ${Math.round(days / 30.4)} mois`;
+    return tr.t('time.openForMonths', { count: Math.round(days / 30.4) });
 }
 
-/** plural(3, 'version') → « 3 versions » ; plural(1, 'nouveau fil', 'nouveaux fils') → « 1 nouveau fil ». */
-export function plural(n: number, singular: string, pluralForm?: string): string {
-    return `${n} ${n > 1 ? pluralForm ?? `${singular}s` : singular}`;
-}
-
-/** « 137 fichiers de master masqués » / « 1 fichier de master masqué » */
-export function masterMasked(n: number): string {
-    return `${plural(n, 'fichier')} de master ${n > 1 ? 'masqués' : 'masqué'}`;
+/** « 137 fichiers de master masqués » / « 137 master files hidden » */
+export function masterMasked(tr: Translator, n: number): string {
+    return tr.t('common.masterFilesHidden', { count: n });
 }
 
 /** Nom d'une version : 0 = master. */
@@ -129,14 +125,6 @@ export const vname = (i: number): string => (i === 0 ? 'master' : `v${i}`);
 export const basename = (p: string): string => p.slice(p.lastIndexOf('/') + 1);
 
 export const dirname = (p: string): string => p.slice(0, p.lastIndexOf('/') + 1);
-
-/** Liste française : « a, b et c ». */
-export function frList(items: string[]): string {
-    if (items.length <= 1) {
-        return items.join('');
-    }
-    return `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}`;
-}
 
 export function displayName(user: User | null | undefined): string {
     return user?.displayName ?? '?';

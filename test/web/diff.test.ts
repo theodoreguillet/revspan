@@ -5,6 +5,10 @@ import {
     placeFileThreads, sideBySideRows, splitRows, unifiedRows, viewedStatus,
 } from '../../src/web/lib/diff.ts';
 import { prLong } from './fixtures.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+
+// French, the language these expectations are written in (English is covered by test/web/i18n.test.ts and below).
+const fr = createTranslator('fr');
 
 const line = (t: DiffLine['t'], o: number | null, n: number | null, text = ''): DiffLine => ({ t, o, n, text, hl: [] });
 
@@ -135,12 +139,12 @@ describe('lastTouched', () => {
 
 describe('deletedLineComment', () => {
     it('commentaire général citant la ligne supprimée', () => {
-        expect(deletedLineComment('src/a.ts', 9, 10, '    return x;', 'Pourquoi ?'))
+        expect(deletedLineComment(fr, 'src/a.ts', 9, 10, '    return x;', 'Pourquoi ?'))
             .toBe('`src/a.ts` — ligne supprimée (v9 → v10) :\n```\n    return x;\n```\nPourquoi ?');
-        expect(deletedLineComment('src/a.ts', 0, 10, 'x', 'y')).toContain('(master → v10)');
+        expect(deletedLineComment(fr, 'src/a.ts', 0, 10, 'x', 'y')).toContain('(master → v10)');
     });
 
     it('code contenant ``` : autre clôture', () => {
-        expect(deletedLineComment('README.md', 1, 2, '```js', 'ok')).toBe('`README.md` — ligne supprimée (v1 → v2) :\n~~~\n```js\n~~~\nok');
+        expect(deletedLineComment(fr, 'README.md', 1, 2, '```js', 'ok')).toBe('`README.md` — ligne supprimée (v1 → v2) :\n~~~\n```js\n~~~\nok');
     });
 });

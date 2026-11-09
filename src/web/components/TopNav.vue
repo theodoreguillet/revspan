@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
+import { t } from '../i18n/index.ts';
 import { openShortcuts } from '../composables/useShortcuts.ts';
 import UrlInput from './UrlInput.vue';
 
@@ -20,7 +21,7 @@ withDefaults(defineProps<{ crumbs?: Crumb[] }>(), { crumbs: () => [] });
         </template>
         <span class="sp" />
         <UrlInput />
-        <button class="rv-ic" type="button" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier" @click="openShortcuts()">?</button>
-        <RouterLink class="rv-ic" to="/settings" title="Réglages" aria-label="Réglages">⚙</RouterLink>
+        <button class="rv-ic" type="button" :title="t('nav.shortcutsTitle')" :aria-label="t('nav.shortcuts')" @click="openShortcuts()">?</button>
+        <RouterLink class="rv-ic" to="/settings" :title="t('common.settings')" :aria-label="t('common.settings')">⚙</RouterLink>
     </nav>
 </template>

@@ -144,7 +144,7 @@ export function providePrPage(prRef: PrRef, initial: PrDetail): PrPage {
 export function usePrPage(): PrPage {
     const page = inject(PR_PAGE);
     if (!page) {
-        throw new Error('usePrPage() doit être appelé sous PrLoaded');
+        throw new Error('usePrPage() must be called under PrLoaded');
     }
     return page;
 }

@@ -1,6 +1,7 @@
 // Commentaires : brouillons, composeur de ligne, réponses, suppression, résolution.
 import { reactive, ref } from 'vue';
 import type { Comment, PrRef, Thread } from '../../shared/api.ts';
+import { tr } from '../i18n/index.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
 import { api } from '../services/api.ts';
 import type { PrLoad } from './usePrLoad.ts';
@@ -50,7 +51,7 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         const cmp = load.compare.value;
         const key = actionKey.composer(target.key);
         if (target.kind === 'old' && cmp) {
-            const raw = deletedLineComment(target.path, cmp.from, cmp.to, target.code, text);
+            const raw = deletedLineComment(tr(), target.path, cmp.from, cmp.to, target.code, text);
             return load.act(() => api.comment(prRef, { raw }), { onDone: done, key });
         }
         return load.act(() => api.comment(prRef, { raw: text, inline: { path: target.path, to: target.line } }), { onDone: done, reloadCompare: true, key });

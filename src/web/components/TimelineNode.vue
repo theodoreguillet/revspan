@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { Version } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t, tr } from '../i18n/index.ts';
 import { MINUS } from '../lib/format.ts';
 import { isMuted } from '../lib/kinds.ts';
 import { nodeDelta, nodeTooltip } from '../lib/timeline.ts';
@@ -12,7 +13,7 @@ const page = usePrPage();
 const i = computed(() => props.version.index);
 const lastReviewed = computed(() => page.detail.review.lastReviewed);
 const sum = computed(() => page.sums.get(i.value));
-const delta = computed(() => nodeDelta(sum.value));
+const delta = computed(() => nodeDelta(tr(), sum.value));
 const inRange = computed(() => i.value > page.from && i.value <= page.to);
 const classes = computed(() => ['rv-v', {
     reb: props.version.isRebase,
@@ -23,7 +24,7 @@ const classes = computed(() => ['rv-v', {
     to: i.value === page.to,
     in: i.value > page.from && i.value < page.to,
 }]);
-const title = computed(() => nodeTooltip(props.version, sum.value, { lastReviewed: lastReviewed.value, n: page.n }));
+const title = computed(() => nodeTooltip(tr(), props.version, sum.value, { lastReviewed: lastReviewed.value, n: page.n }));
 </script>
 
 <template>
@@ -32,13 +33,13 @@ const title = computed(() => nodeTooltip(props.version, sum.value, { lastReviewe
         :class="classes"
         :data-i="i"
         :title="title"
-        :aria-label="version.available ? `Version ${i}` : `Version ${i} indisponible`"
+        :aria-label="version.available ? t('timeline.version', { version: i }) : t('timeline.versionUnavailable', { version: i })"
         :aria-pressed="inRange"
         :aria-disabled="!version.available"
         @click="page.clickVersion(i, $event.shiftKey)"
     >
-        <span class="tag de">de</span>
-        <span class="tag a">à</span>
+        <span class="tag de">{{ t('timeline.from') }}</span>
+        <span class="tag a">{{ t('timeline.to') }}</span>
         <span class="rv-dot" />
         <span class="rv-vl">v{{ i }}</span>
         <span v-if="delta.code" class="rv-dl code"><span class="a">+{{ delta.added }}</span> <span class="d">{{ MINUS }}{{ delta.removed }}</span></span>

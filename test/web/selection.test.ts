@@ -4,6 +4,10 @@ import {
     unavailableVersions,
 } from '../../src/web/lib/selection.ts';
 import { makeVersions, prLong } from './fixtures.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+
+// French, the language these expectations are written in (English is covered by test/web/i18n.test.ts and below).
+const fr = createTranslator('fr');
 
 describe('versions indisponibles (commit effacé par Bitbucket)', () => {
     // v2 et v3 effacées sur 6 versions.
@@ -130,32 +134,44 @@ describe('readout', () => {
     const versions = data.versions;
 
     it('plage depuis ma relecture (#212, v7 → v10)', () => {
-        expect(readout({ from: 7, to: 10, versions, sums, stats: null })).toEqual({
+        expect(readout(fr, { from: 7, to: 10, versions, sums, stats: null })).toEqual({
             bold: 'Changements de v8 à v10',
             rest: '· par rapport à v7 · code modifié en v10 · 1 rebase',
         });
     });
 
     it('plage avec plusieurs versions de code et rebases', () => {
-        expect(readout({ from: 3, to: 10, versions, sums, stats: null }).rest).toBe('· par rapport à v3 · code modifié en v4, v10 · 3 rebases');
+        expect(readout(fr, { from: 3, to: 10, versions, sums, stats: null }).rest).toBe('· par rapport à v3 · code modifié en v4, v10 · 3 rebases');
     });
 
     it('une seule version : sans code, ou avec rebase', () => {
-        expect(readout({ from: 3, to: 4, versions, sums, stats: null })).toEqual({ bold: 'Changements de v4', rest: '· par rapport à v3' });
-        expect(readout({ from: 7, to: 8, versions, sums, stats: null }).rest).toBe('· par rapport à v7 · aucun changement de code · 1 rebase');
+        expect(readout(fr, { from: 3, to: 4, versions, sums, stats: null })).toEqual({ bold: 'Changements de v4', rest: '· par rapport à v3' });
+        expect(readout(fr, { from: 7, to: 8, versions, sums, stats: null }).rest).toBe('· par rapport à v7 · aucun changement de code · 1 rebase');
     });
 
     it('plage sans code', () => {
-        expect(readout({ from: 4, to: 9, versions, sums, stats: null }).rest).toBe('· par rapport à v4 · aucun changement de code · 3 rebases');
+        expect(readout(fr, { from: 4, to: 9, versions, sums, stats: null }).rest).toBe('· par rapport à v4 · aucun changement de code · 3 rebases');
     });
 
     it('version complète contre master, avec les stats quand le diff est chargé', () => {
-        expect(readout({ from: 0, to: 10, versions, sums, stats: null })).toEqual({ bold: 'v10 complète', rest: '· par rapport à sa base sur master' });
-        expect(readout({ from: 0, to: 10, versions, sums, stats: { files: 10, added: 580, removed: 17 } }).rest)
+        expect(readout(fr, { from: 0, to: 10, versions, sums, stats: null })).toEqual({ bold: 'v10 complète', rest: '· par rapport à sa base sur master' });
+        expect(readout(fr, { from: 0, to: 10, versions, sums, stats: { files: 10, added: 580, removed: 17 } }).rest)
             .toBe('· par rapport à sa base sur master · 10 fichiers, +580 −17');
     });
 
     it('résumé pas encore chargé : pas d\'affirmation sur le code', () => {
-        expect(readout({ from: 7, to: 10, versions, sums: new Map(), stats: null }).rest).toBe('· par rapport à v7 · 1 rebase');
+        expect(readout(fr, { from: 7, to: 10, versions, sums: new Map(), stats: null }).rest).toBe('· par rapport à v7 · 1 rebase');
+    });
+});
+
+describe('readout in English', () => {
+    const en = createTranslator('en');
+    const { data, sums } = prLong();
+
+    it('range and full version', () => {
+        expect(readout(en, { from: 3, to: 10, versions: data.versions, sums, stats: null }))
+            .toEqual({ bold: 'Changes from v4 to v10', rest: '· against v3 · code changed in v4, v10 · 3 rebases' });
+        expect(readout(en, { from: 0, to: 10, versions: data.versions, sums, stats: { files: 10, added: 580, removed: 17 } }))
+            .toEqual({ bold: 'Full v10', rest: '· against its base on master · 10 files, +580 −17' });
     });
 });

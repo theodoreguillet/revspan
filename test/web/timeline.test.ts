@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inBand, nodeDelta, nodeStates, nodeTooltip, timelineModel, type TimelineItem } from '../../src/web/lib/timeline.ts';
 import { makeSums, makeVersions, prLong, versionAt } from './fixtures.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+
+// French, the language these expectations are written in (English is covered by test/web/i18n.test.ts and below).
+const fr = createTranslator('fr');
 
 type Day = Extract<TimelineItem, { type: 'day' }>;
 
@@ -22,7 +26,7 @@ describe('timelineModel (#212)', () => {
     const base = { versions: data.versions, sums, lastReviewed: 7, from: 7, to: 10, hideNoCode: false, foldDisabled: false };
 
     it('colonnes par jour, écarts ≥ 2 jours, marque « relu » après v7', () => {
-        const items = timelineModel(base);
+        const items = timelineModel(fr, base);
         expect(days(items).map((d) => d.label)).toEqual(['14 oct.', '29 oct.', '2 nov.', '3 nov.', '5 nov. · aujourd\'hui']);
         expect(items.flatMap((it) => (it.type === 'gap' ? [it.label] : []))).toEqual(['15 j', '4 j', '2 j']);
         const seen = items.findIndex((it) => it.type === 'seen');
@@ -32,7 +36,7 @@ describe('timelineModel (#212)', () => {
     });
 
     it('masquer rebases seuls et deps : garde les bornes, la plage et la version relue', () => {
-        const items = timelineModel({ ...base, hideNoCode: true });
+        const items = timelineModel(fr, { ...base, hideNoCode: true });
         // v2, v3 (deps), v5, v6 (rebase seul) masqués ; v7 (relue, borne) et v8-v9 (dans la plage) gardés
         expect(visibleNodes(items)).toEqual([1, 4, 7, 8, 9, 10]);
         const hidden = days(items).flatMap((d) => d.nodes.filter((node) => node.type === 'hidden'));
@@ -40,7 +44,7 @@ describe('timelineModel (#212)', () => {
     });
 
     it('un découpage « relu » au milieu d\'un jour garde le même jour sans répéter son libellé', () => {
-        const items = timelineModel({ ...base, lastReviewed: 2, from: 2 });
+        const items = timelineModel(fr, { ...base, lastReviewed: 2, from: 2 });
         expect(days(items).map((d) => d.label)).toEqual(['14 oct.', '29 oct.', '', '2 nov.', '3 nov.', '5 nov. · aujourd\'hui']);
     });
 
@@ -59,7 +63,7 @@ describe('repli automatique des longues PR', () => {
     const input = { versions, sums, lastReviewed: 30, from: 30, to: 34, hideNoCode: false, foldDisabled: false };
 
     it('au plus 12 versions visibles : les plus anciennes sont repliées en un bloc', () => {
-        const items = timelineModel(input);
+        const items = timelineModel(fr, input);
         expect(items.filter((it) => it.type === 'fold')).toEqual([{ type: 'fold', a: 1, b: 22, months: 'juin → août', codeCount: 22, rebases: 3 }]);
         expect(visibleNodes(items)).toEqual(Array.from({ length: 12 }, (_, k) => 23 + k));
     });
@@ -74,16 +78,16 @@ describe('repli automatique des longues PR', () => {
     });
 
     it('« vN complète » (from = 0) : l\'intérieur de la plage peut être replié', () => {
-        const items = timelineModel({ ...input, from: 0, to: 34, lastReviewed: null });
+        const items = timelineModel(fr, { ...input, from: 0, to: 34, lastReviewed: null });
         expect(items.find((it) => it.type === 'fold')).toMatchObject({ a: 1, b: 22 });
     });
 
     it('résumé absent : nombre de versions de code inconnu', () => {
-        expect(timelineModel({ ...input, sums: new Map() }).find((it) => it.type === 'fold')).toMatchObject({ codeCount: null });
+        expect(timelineModel(fr, { ...input, sums: new Map() }).find((it) => it.type === 'fold')).toMatchObject({ codeCount: null });
     });
 
     it('déplié par l\'utilisateur : plus aucun repli', () => {
-        expect(timelineModel({ ...input, foldDisabled: true }).some((it) => it.type === 'fold')).toBe(false);
+        expect(timelineModel(fr, { ...input, foldDisabled: true }).some((it) => it.type === 'fold')).toBe(false);
     });
 
     it('un repli d\'une seule version est annulé', () => {
@@ -97,31 +101,31 @@ describe('nodeDelta / nodeTooltip', () => {
     const { data, sums } = prLong();
 
     it('code : +a −r ; sinon le type ; « … » en attendant le résumé', () => {
-        expect(nodeDelta(sums.get(4))).toEqual({ code: true, added: 35, removed: 14 });
-        expect(nodeDelta(sums.get(1))).toEqual({ code: false, text: 'création' });
-        expect(nodeDelta(sums.get(5))).toEqual({ code: false, text: 'rebase seul' });
-        expect(nodeDelta(sums.get(9))).toEqual({ code: false, text: 'deps' });
-        expect(nodeDelta(undefined)).toEqual({ code: false, text: '…' });
+        expect(nodeDelta(fr, sums.get(4))).toEqual({ code: true, added: 35, removed: 14 });
+        expect(nodeDelta(fr, sums.get(1))).toEqual({ code: false, text: 'création' });
+        expect(nodeDelta(fr, sums.get(5))).toEqual({ code: false, text: 'rebase seul' });
+        expect(nodeDelta(fr, sums.get(9))).toEqual({ code: false, text: 'deps' });
+        expect(nodeDelta(fr, undefined)).toEqual({ code: false, text: '…' });
     });
 
     it('infobulle : version, date, hash, base ou rebase, type, fichiers', () => {
         const opts = { lastReviewed: 7, n: 10 };
-        expect(nodeTooltip(versionAt(data.versions, 8), sums.get(8), opts))
+        expect(nodeTooltip(fr, versionAt(data.versions, 8), sums.get(8), opts))
             .toMatch(/^v8 · \d\d\/11 \d\d:\d\d · e437672 · rebase sur 070b8d3 \(137 fichiers de master\) · rebase seul$/);
-        expect(nodeTooltip(versionAt(data.versions, 4), sums.get(4), opts))
+        expect(nodeTooltip(fr, versionAt(data.versions, 4), sums.get(4), opts))
             .toContain('code · UpdateRecord.ts, UpdateRecordSpec.ts, coverage.config.json et openapi.yaml · +35 −14');
-        expect(nodeTooltip(versionAt(data.versions, 7), sums.get(7), opts)).toContain('relue par toi');
-        expect(nodeTooltip(versionAt(data.versions, 10), sums.get(10), opts)).toMatch(/dernière version$/);
+        expect(nodeTooltip(fr, versionAt(data.versions, 7), sums.get(7), opts)).toContain('relue par toi');
+        expect(nodeTooltip(fr, versionAt(data.versions, 10), sums.get(10), opts)).toMatch(/dernière version$/);
     });
 
     it('version indisponible : explication à la place de la base et du type ; référence ancienne signalée', () => {
         const versions = makeVersions(3, { unavailable: [1] });
-        const unavailable = nodeTooltip(versionAt(versions, 1), { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
+        const unavailable = nodeTooltip(fr, versionAt(versions, 1), { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
         expect(unavailable).toContain('indisponible : Bitbucket a effacé ce commit');
         expect(unavailable).toContain('relue par toi');
         expect(unavailable).not.toContain('base');
-        expect(nodeDelta({ index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 })).toEqual({ code: false, text: 'indisponible' });
-        const afterGap = nodeTooltip(versionAt(versions, 2), { index: 2, kind: 'code', since: 0, added: 1, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
+        expect(nodeDelta(fr, { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 })).toEqual({ code: false, text: 'indisponible' });
+        const afterGap = nodeTooltip(fr, versionAt(versions, 2), { index: 2, kind: 'code', since: 0, added: 1, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
         expect(afterGap).toContain('changements comptés depuis la base (versions précédentes indisponibles)');
     });
 });

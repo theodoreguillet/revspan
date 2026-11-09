@@ -2,7 +2,8 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { parsePrUrl } from '../../shared/pr-url.ts';
-import { PR_URL_HINT, prRoute } from '../lib/prUrl.ts';
+import { t } from '../i18n/index.ts';
+import { prRoute } from '../lib/prUrl.ts';
 
 const router = useRouter();
 const value = ref('');
@@ -43,9 +44,9 @@ function onPaste(): void {
         type="text"
         spellcheck="false"
         autocomplete="off"
-        placeholder="Coller une URL de PR Bitbucket…"
-        aria-label="URL de PR Bitbucket"
-        :title="bad ? PR_URL_HINT : undefined"
+        :placeholder="t('url.placeholder')"
+        :aria-label="t('url.label')"
+        :title="bad ? t('url.hint') : undefined"
         @keydown.enter.prevent="go()"
         @keydown.esc="reset"
         @input="bad = false"

@@ -1,16 +1,21 @@
 // Approbations : version approuvée, approbations périmées, état de mes boutons.
 import type { Participant, PrDetail } from '../../shared/api.ts';
+import type { Translator } from '../i18n/index.ts';
 import { displayName, vname } from './format.ts';
 import { CODE_KINDS, type SummaryMap } from './kinds.ts';
 
-export interface Staleness {
+/** Versions with code (or dependency) changes after the approved one. */
+export interface StaleVersions {
     code: number[];
     deps: number[];
+}
+
+export interface Staleness extends StaleVersions {
     text: string;
 }
 
 /** Versions avec du code (ou des dépendances) arrivées après la version approuvée ; null si l'approbation est à jour. */
-export function staleness(approvedVersion: number | null, sums: SummaryMap, n: number): Staleness | null {
+export function staleVersions(approvedVersion: number | null, sums: SummaryMap, n: number): StaleVersions | null {
     if (approvedVersion == null || approvedVersion >= n) {
         return null;
     }
@@ -24,11 +29,20 @@ export function staleness(approvedVersion: number | null, sums: SummaryMap, n: n
             deps.push(i);
         }
     }
-    if (!code.length && !deps.length) {
+    return code.length || deps.length ? { code, deps } : null;
+}
+
+/** Same, with its description: « code modifié en v4, v10 » / « code changed in v4, v10 ». */
+export function staleness(tr: Translator, approvedVersion: number | null, sums: SummaryMap, n: number): Staleness | null {
+    const stale = staleVersions(approvedVersion, sums, n);
+    if (!stale) {
         return null;
     }
     const list = (arr: number[]): string => (arr.length > 3 ? `${arr.slice(0, 3).map(vname).join(', ')}…` : arr.map(vname).join(', '));
-    return { code, deps, text: code.length ? `code modifié en ${list(code)}` : `dépendances modifiées en ${list(deps)}` };
+    const text = stale.code.length
+        ? tr.t('approval.codeChanged', { versions: list(stale.code) })
+        : tr.t('approval.depsChanged', { versions: list(stale.deps) });
+    return { ...stale, text };
 }
 
 /**
@@ -49,7 +63,7 @@ export function approvalHolds(part: Participant | null | undefined, sums: Summar
             return false;
         }
     }
-    return staleness(part.approvedVersion, sums, n) === null;
+    return staleVersions(part.approvedVersion, sums, n) === null;
 }
 
 export type ApprovalItem =
@@ -57,20 +71,36 @@ export type ApprovalItem =
     | { kind: 'changes'; name: string; version: number | null; title: string }
     | { kind: 'pending'; name: string; title: string };
 
-function approvedItem(name: string, part: Participant, sums: SummaryMap, n: number, summaryLoaded: boolean): ApprovalItem {
-    const stale = summaryLoaded ? staleness(part.approvedVersion, sums, n) : null;
-    const title = stale
-        ? `${name} a approuvé v${part.approvedVersion} ; ${stale.text} depuis`
-        : `${name} a approuvé${part.approvedVersion ? ` v${part.approvedVersion}` : ''}`;
-    return { kind: 'approved', name, version: part.approvedVersion, stale, title };
+/** Whose item: another reviewer (by name) or me (« toi » / « you », with first-person titles). */
+type Who = { me: false; name: string } | { me: true };
+
+function approvedItem(tr: Translator, who: Who, part: Participant, sums: SummaryMap, n: number, summaryLoaded: boolean): ApprovalItem {
+    const stale = summaryLoaded ? staleness(tr, part.approvedVersion, sums, n) : null;
+    const version = part.approvedVersion;
+    return { kind: 'approved', name: who.me ? tr.t('common.you') : who.name, version, stale, title: approvedTitle(tr, who, version, stale) };
 }
 
-function changesItem(name: string, part: Participant): ApprovalItem {
-    return { kind: 'changes', name, version: part.approvedVersion, title: `${name} a demandé des modifications` };
+function approvedTitle(tr: Translator, who: Who, version: number | null, stale: Staleness | null): string {
+    if (who.me) {
+        if (stale && version != null) {
+            return tr.t('approval.meApprovedStale', { version, stale: stale.text });
+        }
+        return version ? tr.t('approval.meApprovedVersion', { version }) : tr.t('approval.meApproved');
+    }
+    if (stale && version != null) {
+        return tr.t('approval.approvedStale', { name: who.name, version, stale: stale.text });
+    }
+    return version ? tr.t('approval.approvedVersion', { name: who.name, version }) : tr.t('approval.approved', { name: who.name });
+}
+
+function changesItem(tr: Translator, who: Who, part: Participant): ApprovalItem {
+    return who.me
+        ? { kind: 'changes', name: tr.t('common.you'), version: part.approvedVersion, title: tr.t('approval.meChanges') }
+        : { kind: 'changes', name: who.name, version: part.approvedVersion, title: tr.t('approval.changes', { name: who.name }) };
 }
 
 /** Ligne des approbations : chaque relecteur ayant approuvé ou demandé des modifs, puis moi. */
-export function approvalItems(data: PrDetail, sums: SummaryMap, summaryLoaded: boolean): ApprovalItem[] {
+export function approvalItems(tr: Translator, data: PrDetail, sums: SummaryMap, summaryLoaded: boolean): ApprovalItem[] {
     const n = data.versions.length;
     const me = data.me;
     const mine = !!me && data.pr.author?.uuid === me.uuid;
@@ -81,19 +111,20 @@ export function approvalItems(data: PrDetail, sums: SummaryMap, summaryLoaded: b
             myPart = part;
             continue;
         }
+        const who: Who = { me: false, name: displayName(part.user) };
         if (part.state === 'approved' || part.approved) {
-            items.push(approvedItem(displayName(part.user), part, sums, n, summaryLoaded));
+            items.push(approvedItem(tr, who, part, sums, n, summaryLoaded));
         } else if (part.state === 'changes_requested') {
-            items.push(changesItem(displayName(part.user), part));
+            items.push(changesItem(tr, who, part));
         }
     }
     if (me && !mine) {
         if (myPart?.approved || myPart?.state === 'approved') {
-            items.push(approvedItem('toi', myPart, sums, n, summaryLoaded));
+            items.push(approvedItem(tr, { me: true }, myPart, sums, n, summaryLoaded));
         } else if (myPart?.state === 'changes_requested') {
-            items.push(changesItem('toi', myPart));
+            items.push(changesItem(tr, { me: true }, myPart));
         } else {
-            items.push({ kind: 'pending', name: 'toi', title: 'Tu n\'as pas encore approuvé' });
+            items.push({ kind: 'pending', name: tr.t('common.you'), title: tr.t('approval.mePending') });
         }
     }
     return items;

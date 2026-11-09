@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { PrTab } from '../composables/useDiffOptions.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { plural } from '../lib/format.ts';
+import { t } from '../i18n/index.ts';
 import { threadGroups } from '../lib/threads.ts';
 
 const page = usePrPage();
@@ -23,15 +23,15 @@ onBeforeUnmount(() => page.registerTabs(null));
 <template>
     <div ref="root" class="rv-tabs" role="tablist">
         <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'diff' }]" data-tab="diff" :aria-selected="page.tab === 'diff'" @click="pick('diff')">
-            Diff <span class="n">{{ diffCount }}</span>
+            {{ t('tabs.diff') }} <span class="n">{{ diffCount }}</span>
         </button>
         <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'discussions' }]" data-tab="discussions" :aria-selected="page.tab === 'discussions'" @click="pick('discussions')">
-            Discussions
-            <span v-if="freshCount" class="n blue">{{ plural(freshCount, 'nouveau', 'nouveaux') }}</span>
-            <span class="n">{{ plural(openCount, 'ouvert') }}</span>
+            {{ t('tabs.discussions') }}
+            <span v-if="freshCount" class="n blue">{{ t('tabs.new', { count: freshCount }) }}</span>
+            <span class="n">{{ t('tabs.open', { count: openCount }) }}</span>
         </button>
         <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'versions' }]" data-tab="versions" :aria-selected="page.tab === 'versions'" @click="pick('versions')">
-            Versions <span class="n">{{ page.n }}</span>
+            {{ t('tabs.versions') }} <span class="n">{{ page.n }}</span>
         </button>
     </div>
 </template>

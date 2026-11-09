@@ -1,18 +1,20 @@
 // Aide des raccourcis clavier (overlay global).
 import { ref } from 'vue';
+import type { MessageKey } from '../i18n/index.ts';
 
 export const shortcutsOpen = ref(false);
 
-export const SHORTCUTS: [string, string][] = [
-    ['j / k', 'Fichier suivant / précédent'],
-    ['n / p', 'Fil de discussion suivant / précédent'],
-    ['v', 'Marquer le fichier courant comme vu'],
-    ['[ / ]', 'Version précédente / suivante'],
-    ['Maj + clic', 'Étendre la plage dans la frise'],
-    ['⌘/Ctrl + Entrée', 'Envoyer un commentaire'],
-    ['Échap', 'Fermer / annuler'],
-    ['?', 'Afficher cette aide'],
-];
+/** Keys (alternatives separated by « / ») and description of each shortcut. */
+export const SHORTCUTS = [
+    { keys: 'shortcuts.keysFile', label: 'shortcuts.file' },
+    { keys: 'shortcuts.keysThread', label: 'shortcuts.thread' },
+    { keys: 'shortcuts.keysViewed', label: 'shortcuts.viewed' },
+    { keys: 'shortcuts.keysVersion', label: 'shortcuts.version' },
+    { keys: 'shortcuts.keysExtend', label: 'shortcuts.extend' },
+    { keys: 'shortcuts.keysSend', label: 'shortcuts.send' },
+    { keys: 'shortcuts.keysEscape', label: 'shortcuts.escape' },
+    { keys: 'shortcuts.keysHelp', label: 'shortcuts.help' },
+] as const satisfies readonly { keys: MessageKey; label: MessageKey }[];
 
 export function openShortcuts(): void {
     shortcutsOpen.value = true;

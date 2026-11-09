@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
-import { ago, daysBetween, frList, gapLabel, masterMasked, openedSince, plural, relTime } from '../../src/web/lib/format.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
 import { cardBadges, cardSubtitle } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
 import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
 import { prLong } from './fixtures.ts';
+
+// French, the language these expectations are written in; English variants are checked next to them.
+const fr = createTranslator('fr');
+const en = createTranslator('en');
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -24,32 +29,40 @@ describe('prRoute', () => {
 
 describe('format', () => {
     it('pluriels et listes', () => {
-        expect(plural(0, 'version')).toBe('0 version');
-        expect(plural(1, 'version')).toBe('1 version');
-        expect(plural(3, 'nouveau fil', 'nouveaux fils')).toBe('3 nouveaux fils');
-        expect(masterMasked(1)).toBe('1 fichier de master masqué');
-        expect(masterMasked(137)).toBe('137 fichiers de master masqués');
-        expect(frList(['a'])).toBe('a');
-        expect(frList(['a', 'b', 'c'])).toBe('a, b et c');
+        expect(masterMasked(fr, 1)).toBe('1 fichier de master masqué');
+        expect(masterMasked(fr, 137)).toBe('137 fichiers de master masqués');
+        expect(masterMasked(en, 137)).toBe('137 master files hidden');
     });
 
     it('écarts de la frise', () => {
         expect(daysBetween('2026-10-14', '2026-10-29')).toBe(15);
         expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2); // changement d'heure
-        expect(gapLabel(15)).toBe('15 j');
-        expect(gapLabel(21)).toBe('3 sem.');
-        expect(gapLabel(62)).toBe('2 mois');
+        expect(gapLabel(fr, 15)).toBe('15 j');
+        expect(gapLabel(fr, 21)).toBe('3 sem.');
+        expect(gapLabel(fr, 62)).toBe('2 mois');
+        expect([15, 21, 62].map((days) => gapLabel(en, days))).toEqual(['15d', '3w', '2mo']);
     });
 
     it('dates relatives', () => {
-        expect(relTime('2026-11-05T13:59:30Z')).toBe('à l\'instant');
-        expect(relTime('2026-11-05T13:15:00Z')).toBe('il y a 45 min');
-        expect(relTime('2026-11-05T11:02:00Z')).toBe('il y a 2 h');
-        expect(relTime('2026-11-03T10:00:00Z')).toBe('3 nov.');
-        expect(ago('2026-11-01T14:00:00Z')).toBe('il y a 4 j');
-        expect(ago('2026-10-01T14:00:00Z')).toBe('il y a 5 sem.');
-        expect(openedSince('2026-10-14T09:10:00Z')).toBe('ouverte depuis 22 j');
-        expect(openedSince('2026-11-05T09:00:00Z')).toBe('ouverte aujourd\'hui');
+        expect(relTime(fr, '2026-11-05T13:59:30Z')).toBe('à l\'instant');
+        expect(relTime(fr, '2026-11-05T13:15:00Z')).toBe('il y a 45 min');
+        expect(relTime(fr, '2026-11-05T11:02:00Z')).toBe('il y a 2 h');
+        expect(relTime(fr, '2026-11-03T10:00:00Z')).toBe('3 nov.');
+        expect(ago(fr, '2026-11-01T14:00:00Z')).toBe('il y a 4 j');
+        expect(ago(fr, '2026-10-01T14:00:00Z')).toBe('il y a 5 sem.');
+        expect(openedSince(fr, '2026-10-14T09:10:00Z')).toBe('ouverte depuis 22 j');
+        expect(openedSince(fr, '2026-11-05T09:00:00Z')).toBe('ouverte aujourd\'hui');
+    });
+
+    it('relative dates in English', () => {
+        expect(relTime(en, '2026-11-05T13:59:30Z')).toBe('just now');
+        expect(relTime(en, '2026-11-05T13:59:00Z')).toBe('1 minute ago');
+        expect(relTime(en, '2026-11-05T11:02:00Z')).toBe('2 hours ago');
+        expect(relTime(en, '2026-11-03T10:00:00Z')).toBe('Nov 3');
+        expect(ago(en, '2026-11-04T14:00:00Z')).toBe('1 day ago');
+        expect(ago(en, '2026-10-01T14:00:00Z')).toBe('5 weeks ago');
+        expect(openedSince(en, '2026-10-14T09:10:00Z')).toBe('open for 22 days');
+        expect(openedSince(en, '2026-11-05T09:00:00Z')).toBe('opened today');
     });
 });
 
@@ -60,7 +73,7 @@ describe('cartes de l\'accueil', () => {
         createdOn: '2026-10-14T09:10:00Z', updatedOn: '2026-11-05T12:00:00Z', versionsCount: 10, lastPushAt: '2026-11-05T12:00:00Z',
         lastReviewed: 7, newVersions: 3, newCodeVersions: 1, approvals: 2, myApproval: false, newComments: 2, ...over,
     });
-    const badges = (c: PrCard, key: HomeGroupKey = 'to-review'): string[] => cardBadges(c, key, me).map((b) => b.text);
+    const badges = (c: PrCard, key: HomeGroupKey = 'to-review'): string[] => cardBadges(fr, c, key, me).map((b) => b.text);
 
     it('nouvelles versions, code, commentaires, approbation', () => {
         expect(badges(card({}))).toEqual(['+3 versions', 'dont 1 avec du code', '💬 2 nouveaux']);
@@ -74,9 +87,10 @@ describe('cartes de l\'accueil', () => {
     });
 
     it('sous-titre ; ma PR : « toi », pas de badge de versions', () => {
-        expect(cardSubtitle(card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
+        expect(cardSubtitle(fr, card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
+        expect(cardSubtitle(en, card({}), me)).toBe('Auteur · open for 22 days · pushed 2 hours ago · 2 approvals');
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
-        expect(cardSubtitle(mine, me)).toMatch(/^toi · /);
+        expect(cardSubtitle(fr, mine, me)).toMatch(/^toi · /);
         expect(badges(mine, 'mine')).toEqual(['💬 1 nouveau']);
     });
 });

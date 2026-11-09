@@ -1,6 +1,7 @@
 // Plage de versions comparées : règles de clic, plage par défaut, préréglages, texte de lecture.
 import type { Version } from '../../shared/api.ts';
-import { MINUS, plural, vname } from './format.ts';
+import type { MessageKey, Translator } from '../i18n/index.ts';
+import { MINUS, vname } from './format.ts';
 import { CODE_KINDS, type SummaryMap } from './kinds.ts';
 
 /** from = version de référence (0 = base master), to = version affichée ; 0 ≤ from < to ≤ n. */
@@ -86,18 +87,20 @@ export type PresetKey = 'since' | 'last' | 'all';
 
 export interface Preset extends Range {
     key: PresetKey;
-    label: string;
 }
+
+/** Label of each preset button. */
+export const PRESET_LABELS = { since: 'preset.since', last: 'preset.last', all: 'preset.all' } as const satisfies Record<PresetKey, MessageKey>;
 
 export function presets(n: number, lastReviewed: number | null, unavailable: Unavailable = NONE): Preset[] {
     const out: Preset[] = [];
     if (lastReviewed != null && lastReviewed >= 1 && lastReviewed < n) {
-        out.push({ key: 'since', label: 'Depuis ma relecture', from: floorAvailable(lastReviewed, unavailable), to: n });
+        out.push({ key: 'since', from: floorAvailable(lastReviewed, unavailable), to: n });
     }
     if (n > 1) {
-        out.push({ key: 'last', label: 'Dernière version', from: floorAvailable(n - 1, unavailable), to: n });
+        out.push({ key: 'last', from: floorAvailable(n - 1, unavailable), to: n });
     }
-    out.push({ key: 'all', label: 'Tout vs master', from: 0, to: n });
+    out.push({ key: 'all', from: 0, to: n });
     return out;
 }
 
@@ -109,13 +112,13 @@ export interface ReadoutInput extends Range {
 }
 
 /** Texte de lecture de la plage : { bold, rest }. */
-export function readout({ from, to, versions, sums, stats, destBranch = 'master' }: ReadoutInput): { bold: string; rest: string } {
+export function readout(tr: Translator, { from, to, versions, sums, stats, destBranch = 'master' }: ReadoutInput): { bold: string; rest: string } {
     if (from === 0) {
-        let rest = `· par rapport à sa base sur ${destBranch}`;
+        const rest = [tr.t('readout.againstBase', { branch: destBranch })];
         if (stats) {
-            rest += ` · ${plural(stats.files, 'fichier')}, +${stats.added} ${MINUS}${stats.removed}`;
+            rest.push(`${tr.t('common.files', { count: stats.files })}, +${stats.added} ${MINUS}${stats.removed}`);
         }
-        return { bold: `${vname(to)} complète`, rest };
+        return { bold: tr.t('readout.full', { version: vname(to) }), rest: `· ${rest.join(' · ')}` };
     }
     let rebases = 0;
     let known = true;
@@ -132,25 +135,25 @@ export function readout({ from, to, versions, sums, stats, destBranch = 'master'
         }
     }
     const codeList = code.length > 6
-        ? `${code.slice(0, 5).map(vname).join(', ')}… (${code.length} versions)`
+        ? tr.t('readout.manyVersions', { versions: code.slice(0, 5).map(vname).join(', '), count: code.length })
         : code.map(vname).join(', ');
-    let rest = `· par rapport à ${vname(from)}`;
+    const rest = [tr.t('readout.against', { version: vname(from) })];
     let bold: string;
     if (to - from === 1) {
-        bold = `Changements de ${vname(to)}`;
+        bold = tr.t('readout.changesOf', { version: vname(to) });
         if (known && !code.length) {
-            rest += ' · aucun changement de code';
+            rest.push(tr.t('readout.noCodeChanges'));
         }
     } else {
-        bold = `Changements de ${vname(from + 1)} à ${vname(to)}`;
+        bold = tr.t('readout.changesFromTo', { from: vname(from + 1), to: vname(to) });
         if (known) {
-            rest += code.length ? ` · code modifié en ${codeList}` : ' · aucun changement de code';
+            rest.push(code.length ? tr.t('readout.codeChangedIn', { versions: codeList }) : tr.t('readout.noCodeChanges'));
         }
     }
     if (rebases) {
-        rest += ` · ${plural(rebases, 'rebase')}`;
+        rest.push(tr.t('common.rebases', { count: rebases }));
     }
-    return { bold, rest };
+    return { bold, rest: `· ${rest.join(' · ')}` };
 }
 
 /** Lit from/to dans les paramètres de route (chaînes de chiffres seulement). */

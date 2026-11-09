@@ -1,6 +1,7 @@
 // Frise des versions : modèle d'affichage (jours, écarts, repli des longues PR, masquage), deltas et infobulles.
 import type { Version, VersionSummary } from '../../shared/api.ts';
-import { dayKey, daysBetween, fmtDateTime, fmtDay, fmtMonth, gapLabel, isToday, MINUS, plural } from './format.ts';
+import type { Translator } from '../i18n/index.ts';
+import { dayKey, daysBetween, fmtDateTime, fmtDay, fmtMonth, gapLabel, isToday, MINUS } from './format.ts';
 import { CODE_KINDS, isMuted, KIND_LABELS, type SummaryMap } from './kinds.ts';
 import { filesText } from './describe.ts';
 
@@ -80,7 +81,7 @@ export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode,
 }
 
 /** Suite d'éléments à rendre de gauche à droite. */
-export function timelineModel(input: TimelineInput): TimelineItem[] {
+export function timelineModel(tr: Translator, input: TimelineInput): TimelineItem[] {
     const { sums, lastReviewed } = input;
     const items: TimelineItem[] = [{ type: 'base' }];
     let prevDay: string | null = null;
@@ -91,7 +92,7 @@ export function timelineModel(input: TimelineInput): TimelineItem[] {
 
     const separate = (nextDay: string): void => {
         const days = prevDay ? daysBetween(prevDay, nextDay) : 0;
-        items.push(days >= 2 ? { type: 'gap', label: gapLabel(days), after: lastIdx, days } : { type: 'sp', after: lastIdx });
+        items.push(days >= 2 ? { type: 'gap', label: gapLabel(tr, days), after: lastIdx, days } : { type: 'sp', after: lastIdx });
     };
     const flushFold = (): void => {
         const first = foldRun[0];
@@ -102,8 +103,8 @@ export function timelineModel(input: TimelineInput): TimelineItem[] {
         separate(dayKey(first.pushedAt));
         const folded = foldRun.map((v) => sums.get(v.index));
         const codeCount = folded.every(Boolean) ? folded.filter((s) => s && CODE_KINDS.has(s.kind)).length : null;
-        const m1 = fmtMonth(first.pushedAt);
-        const m2 = fmtMonth(last.pushedAt);
+        const m1 = fmtMonth(tr, first.pushedAt);
+        const m2 = fmtMonth(tr, last.pushedAt);
         const rebases = foldRun.filter((v) => v.isRebase).length;
         items.push({ type: 'fold', a: first.index, b: last.index, months: m1 === m2 ? m1 : `${m1} → ${m2}`, codeCount, rebases });
         prevDay = dayKey(last.pushedAt);
@@ -122,7 +123,7 @@ export function timelineModel(input: TimelineInput): TimelineItem[] {
         const dk = dayKey(version.pushedAt);
         if (!column || column.key !== dk) {
             separate(dk);
-            const label: string = afterSeen && prevDay === dk ? '' : `${fmtDay(version.pushedAt)}${isToday(version.pushedAt) ? ' · aujourd\'hui' : ''}`;
+            const label: string = afterSeen && prevDay === dk ? '' : `${fmtDay(tr, version.pushedAt)}${isToday(version.pushedAt) ? ` · ${tr.t('timeline.today')}` : ''}`;
             afterSeen = false;
             column = { type: 'day', key: dk, label, nodes: [] };
             items.push(column);
@@ -151,54 +152,52 @@ export const inBand = (after: number, from: number, to: number): boolean => afte
 export type NodeDelta = { code: true; added: number; removed: number } | { code: false; text: string };
 
 /** Delta affiché sous un nœud : « +35 −14 » pour du code, sinon le type (« deps », « rebase seul »…). */
-export function nodeDelta(sum: VersionSummary | undefined): NodeDelta {
+export function nodeDelta(tr: Translator, sum: VersionSummary | undefined): NodeDelta {
     if (!sum) {
         return { code: false, text: '…' };
     }
     if (sum.kind === 'code') {
         return { code: true, added: sum.added, removed: sum.removed };
     }
-    return { code: false, text: KIND_LABELS[sum.kind] };
+    return { code: false, text: tr.t(KIND_LABELS[sum.kind]) };
 }
 
 /** Infobulle d'un nœud : version, date, hash, base, type, fichiers. */
-export function nodeTooltip(v: Version, sum: VersionSummary | undefined, opts: { lastReviewed: number | null; n: number }): string {
-    const parts = [`v${v.index}`, fmtDateTime(v.pushedAt), v.shortHash];
+export function nodeTooltip(tr: Translator, v: Version, sum: VersionSummary | undefined, opts: { lastReviewed: number | null; n: number }): string {
+    const parts = [`v${v.index}`, fmtDateTime(tr, v.pushedAt), v.shortHash];
     if (!v.available) {
-        parts.push('indisponible : Bitbucket a effacé ce commit (version écrasée par un force-push), elle ne peut pas être comparée');
+        parts.push(tr.t('timeline.unavailable'));
         if (v.index === opts.lastReviewed) {
-            parts.push('relue par toi');
+            parts.push(tr.t('timeline.reviewedByYou'));
         }
         return parts.join(' · ');
     }
     parts.push(v.isRebase
-        ? `rebase sur ${v.baseShort}${sum?.masterFiles ? ` (${plural(sum.masterFiles, 'fichier')} de master)` : ''}`
-        : `base ${v.baseShort}`);
+        ? `${tr.t('timeline.rebasedOnto', { base: v.baseShort })}${sum?.masterFiles ? ` (${tr.t('timeline.masterFiles', { count: sum.masterFiles })})` : ''}`
+        : tr.t('timeline.onBase', { base: v.baseShort }));
     if (sum?.since !== undefined) {
-        parts.push(sum.since === 0
-            ? 'changements comptés depuis la base (versions précédentes indisponibles)'
-            : `changements comptés depuis v${sum.since} (versions intermédiaires indisponibles)`);
+        parts.push(sum.since === 0 ? tr.t('timeline.countedFromBase') : tr.t('timeline.countedFrom', { version: sum.since }));
     }
     if (sum) {
-        parts.push(KIND_LABELS[sum.kind]);
+        parts.push(tr.t(KIND_LABELS[sum.kind]));
         if (sum.files.length) {
-            parts.push(filesText(sum.files, 6));
+            parts.push(filesText(tr, sum.files, 6));
         }
         if (CODE_KINDS.has(sum.kind) || sum.kind === 'deps') {
             parts.push(`+${sum.added} ${MINUS}${sum.removed}`);
         }
         if (sum.conflicts) {
-            parts.push(`${plural(sum.conflicts, 'fichier')} touché(s) par master et l'auteur`);
+            parts.push(tr.t('timeline.conflicts', { count: sum.conflicts }));
         }
     }
     if (v.messageChanged) {
-        parts.push('message du commit modifié');
+        parts.push(tr.t('common.commitMessageChanged'));
     }
     if (v.index === opts.lastReviewed) {
-        parts.push('relue par toi');
+        parts.push(tr.t('timeline.reviewedByYou'));
     }
     if (v.index === opts.n) {
-        parts.push('dernière version');
+        parts.push(tr.t('timeline.latest'));
     }
     return parts.join(' · ');
 }

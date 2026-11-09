@@ -3,7 +3,6 @@
 import {
     MUTATION_HEADER,
     type ApiErrorBody,
-    type ErrorCode,
     type Comment,
     type Comparison,
     type ConnectionTest,
@@ -17,20 +16,24 @@ import {
     type Summary,
     type ViewedRequest,
 } from '../../shared/api.ts';
+import { tr } from '../i18n/index.ts';
+import { errorText, type ApiErrorCode, type PageErrorParams } from '../lib/errors.ts';
 import { hostRequest, isVsCode, type HostResponse } from './host.ts';
 
-/** Codes du contrat, plus les erreurs vues seulement par la page (serveur injoignable, réponse sans corps d'erreur). */
-export type ApiErrorCode = ErrorCode | 'NETWORK' | `HTTP_${number}`;
+export type { ApiErrorCode } from '../lib/errors.ts';
 
+/** Error of the local API: `message` is the server's (English) message, translated for display by errorInfo(). */
 export class ApiError extends Error {
     readonly status: number;
     readonly code: ApiErrorCode;
+    readonly params: PageErrorParams;
 
-    constructor(status: number, code: ApiErrorCode, message: string) {
+    constructor(status: number, code: ApiErrorCode, message: string, params: PageErrorParams = {}) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.code = code;
+        this.params = params;
     }
 }
 
@@ -71,13 +74,13 @@ async function request<T>(method: Method, path: string, payload?: unknown): Prom
     try {
         response = await (isVsCode ? vsCodeTransport : httpTransport)(method, `/api${path}`, body);
     } catch {
-        throw new ApiError(0, 'NETWORK', isVsCode
-            ? 'L\'extension Revspan ne répond pas. Rouvrir le panneau peut aider.'
-            : 'Serveur Revspan injoignable. Est-il toujours lancé ?');
+        throw isVsCode
+            ? new ApiError(0, 'NETWORK', 'The Revspan extension is not responding.', { via: 'extension' })
+            : new ApiError(0, 'NETWORK', 'The Revspan server cannot be reached.');
     }
     if (response.status < 200 || response.status >= 300) {
         const err = (response.body as Partial<ApiErrorBody> | null)?.error;
-        throw new ApiError(response.status, err?.code ?? `HTTP_${response.status}`, err?.message ?? `Erreur ${response.status}`);
+        throw new ApiError(response.status, err?.code ?? `HTTP_${response.status}`, err?.message ?? `Error ${response.status}`, err?.params);
     }
     return response.body as T;
 }
@@ -108,9 +111,10 @@ export const api = {
 /** Erreurs de jeton : on propose d'ouvrir les réglages. */
 export const AUTH_CODES: ReadonlySet<ApiErrorCode> = new Set<ApiErrorCode>(['NO_TOKEN', 'BB_UNAUTHORIZED']);
 
+/** Message to show (translated in the current locale) and error code. */
 export function errorInfo(error: unknown): { message: string; code: ApiErrorCode | null } {
     if (error instanceof ApiError) {
-        return { message: error.message, code: error.code };
+        return { message: errorText(tr(), error), code: error.code };
     }
     return { message: error instanceof Error ? error.message : String(error), code: null };
 }

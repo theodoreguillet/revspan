@@ -2,30 +2,34 @@ import { describe, expect, it } from 'vitest';
 import type { Participant } from '../../src/shared/api.ts';
 import { approvalHolds, approvalItems, myActions, staleness } from '../../src/web/lib/approvals.ts';
 import { makeSums, makeVersions, prLong } from './fixtures.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+
+// French, the language these expectations are written in (English is covered by test/web/i18n.test.ts and below).
+const fr = createTranslator('fr');
 
 describe('staleness', () => {
     const { sums } = prLong();
 
     it('approbation à jour ou sans version : null', () => {
-        expect(staleness(10, sums, 10)).toBeNull();
-        expect(staleness(null, sums, 10)).toBeNull();
+        expect(staleness(fr, 10, sums, 10)).toBeNull();
+        expect(staleness(fr, null, sums, 10)).toBeNull();
     });
 
     it('du code depuis l\'approbation : périmée, versions de code citées', () => {
-        expect(staleness(7, sums, 10)).toEqual({ code: [10], deps: [9], text: 'code modifié en v10' });
-        expect(staleness(3, sums, 10)?.text).toBe('code modifié en v4, v10');
+        expect(staleness(fr, 7, sums, 10)).toEqual({ code: [10], deps: [9], text: 'code modifié en v10' });
+        expect(staleness(fr, 3, sums, 10)?.text).toBe('code modifié en v4, v10');
     });
 
     it('seulement des dépendances : périmée « dépendances modifiées »', () => {
-        expect(staleness(1, makeSums(['creation', 'rebase-only', 'deps']), 3)?.text).toBe('dépendances modifiées en v3');
+        expect(staleness(fr, 1, makeSums(['creation', 'rebase-only', 'deps']), 3)?.text).toBe('dépendances modifiées en v3');
     });
 
     it('seulement des rebases : pas périmée', () => {
-        expect(staleness(1, makeSums(['creation', 'rebase-only', 'none']), 3)).toBeNull();
+        expect(staleness(fr, 1, makeSums(['creation', 'rebase-only', 'none']), 3)).toBeNull();
     });
 
     it('plus de 3 versions : liste abrégée', () => {
-        expect(staleness(1, makeSums(['creation', 'code', 'code', 'code', 'code']), 5)?.text).toBe('code modifié en v2, v3, v4…');
+        expect(staleness(fr, 1, makeSums(['creation', 'code', 'code', 'code', 'code']), 5)?.text).toBe('code modifié en v2, v3, v4…');
     });
 });
 
@@ -61,7 +65,7 @@ describe('approvalItems / myActions', () => {
     const { data, sums } = prLong();
 
     it('#212 : Yann à jour, William périmé, moi en attente', () => {
-        const items = approvalItems(data, sums, true);
+        const items = approvalItems(fr, data, sums, true);
         expect(items).toEqual([
             { kind: 'approved', name: 'Yann Bernard', version: 10, stale: null, title: 'Yann Bernard a approuvé v10' },
             {
@@ -74,7 +78,7 @@ describe('approvalItems / myActions', () => {
     });
 
     it('résumé pas encore chargé : aucune approbation marquée périmée', () => {
-        expect(approvalItems(data, sums, false).filter((i) => i.kind === 'approved' && i.stale)).toEqual([]);
+        expect(approvalItems(fr, data, sums, false).filter((i) => i.kind === 'approved' && i.stale)).toEqual([]);
     });
 
     it('demande de modifs et mes actions', () => {
@@ -83,7 +87,7 @@ describe('approvalItems / myActions', () => {
             ...data,
             participants: data.participants.map((p) => (p.user?.uuid === meUuid ? { ...p, state: 'changes_requested' as const, approvedVersion: 10 } : p)),
         };
-        expect(approvalItems(changed, sums, true).at(-1)).toMatchObject({ kind: 'changes', name: 'toi', version: 10 });
+        expect(approvalItems(fr, changed, sums, true).at(-1)).toMatchObject({ kind: 'changes', name: 'toi', version: 10 });
         expect(myActions(changed, sums, true)).toEqual({ mine: false, closed: false, changesActive: true, approvalHolds: false, reapprove: false });
         const approved = {
             ...data,
@@ -107,7 +111,18 @@ describe('approvalItems / myActions', () => {
 
     it('ma PR : pas d\'entrée « toi » ni de bouton', () => {
         const mine = { ...data, pr: { ...data.pr, author: data.me } };
-        expect(approvalItems(mine, sums, true).some((i) => i.name === 'toi')).toBe(false);
+        expect(approvalItems(fr, mine, sums, true).some((i) => i.name === 'toi')).toBe(false);
         expect(myActions(mine, sums, true).mine).toBe(true);
+    });
+});
+
+describe('approvals in English', () => {
+    it('reviewers by name, me in the first person', () => {
+        const { data, sums } = prLong();
+        expect(approvalItems(createTranslator('en'), data, sums, true).map((item) => [item.name, item.title])).toEqual([
+            ['Yann Bernard', 'Yann Bernard approved v10'],
+            ['William Etienne', 'William Etienne approved v7; code changed in v10 since'],
+            ['you', 'You haven’t approved yet'],
+        ]);
     });
 });

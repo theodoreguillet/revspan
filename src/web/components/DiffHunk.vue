@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import type { Hunk } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t } from '../i18n/index.ts';
 import { hunkRange, lineSign, sideBySideRows, unifiedRows, type ComposerTarget, type PlacedThread } from '../lib/diff.ts';
 import { isVsCode, openLocalFile } from '../services/host.ts';
 import Composer from './Composer.vue';
@@ -18,8 +19,8 @@ const splitRows = computed(() => (page.view === 'split' ? sideBySideRows(input.v
 
 const lineClass = (t: string): string => (t === '+' ? 'rv-l a' : t === '-' ? 'rv-l r' : 'rv-l');
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
-    ? 'Commenter cette ligne supprimée (commentaire général avec citation)'
-    : `Commenter la ligne ${target.line}`);
+    ? t('diff.commentDeletedLineTitle')
+    : t('diff.commentLineTitle', { line: target.line }));
 </script>
 
 <template>
@@ -36,10 +37,10 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                 class="rv-open-line"
                 tabindex="-1"
                 data-action="open-line"
-                :title="`Ouvrir le fichier à la ligne ${row.line.n}`"
+                :title="t('diff.openAtLineTitle', { line: row.line.n })"
                 @click="openLocalFile(page.ref, path, row.line.n)"
             >
-                Ouvrir à cette ligne
+                {{ t('diff.openAtLine') }}
             </button>
             <button
                 v-if="row.target"
@@ -53,7 +54,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                 +
             </button>
         </div>
-        <ThreadCard v-for="t in row.threads" :key="t.thread.id" :thread="t.thread" :placement="t.placement" />
+        <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
         <Composer v-if="row.composer" :target="row.composer" />
     </template>
     <template v-for="(row, k) in splitRows" :key="k">
@@ -75,10 +76,10 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                         class="rv-open-line"
                         tabindex="-1"
                         data-action="open-line"
-                        :title="`Ouvrir le fichier à la ligne ${cell.line.n}`"
+                        :title="t('diff.openAtLineTitle', { line: cell.line.n })"
                         @click="openLocalFile(page.ref, path, cell.line.n)"
                     >
-                        Ouvrir à cette ligne
+                        {{ t('diff.openAtLine') }}
                     </button>
                     <button
                         v-if="cell.target"
@@ -96,7 +97,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
         </div>
         <div v-if="row.leftComposer" class="rv-split-left"><Composer :target="row.leftComposer" /></div>
         <div v-if="row.threads.length" class="rv-split-right">
-            <ThreadCard v-for="t in row.threads" :key="t.thread.id" :thread="t.thread" :placement="t.placement" />
+            <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
         </div>
         <div v-if="row.rightComposer" class="rv-split-right"><Composer :target="row.rightComposer" /></div>
     </template>

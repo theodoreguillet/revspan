@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue';
+import { computed, onMounted, ref, shallowRef, watchEffect } from 'vue';
 import type { Settings } from '../../shared/api.ts';
-import { api } from '../services/api.ts';
+import { t, tr } from '../i18n/index.ts';
+import { errorText } from '../lib/errors.ts';
+import { api, errorInfo } from '../services/api.ts';
 import { isVsCode } from '../services/host.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
 import TopNav from '../components/TopNav.vue';
@@ -9,6 +11,7 @@ import { showError } from '../composables/useErrors.ts';
 import { parseRepoList } from '../../shared/repos.ts';
 import { TOKEN_STORE_LABELS, tokenStorageHelp } from '../lib/settings.ts';
 import ConfirmButton from '../components/ConfirmButton.vue';
+import I18nText from '../components/I18nText.vue';
 
 const SCOPES = ['read:user:bitbucket', 'read:repository:bitbucket', 'read:pullrequest:bitbucket', 'write:pullrequest:bitbucket'];
 
@@ -21,11 +24,13 @@ const status = ref<{ text: string; tone: '' | 'ok' | 'err' }>({ text: '', tone: 
 const saving = ref(false);
 const testing = ref(false);
 
-document.title = 'Réglages · Revspan';
+watchEffect(() => {
+    document.title = t('settings.docTitle');
+});
 
 const tokenPlaceholder = computed(() => (loaded.value?.hasToken
-    ? `Jeton enregistré (${TOKEN_STORE_LABELS[loaded.value.tokenStore]})`
-    : 'Colle ici ton jeton API Atlassian'));
+    ? t('settings.tokenSaved', { store: t(TOKEN_STORE_LABELS[loaded.value.tokenStore]) })
+    : t('settings.tokenPlaceholder')));
 
 function fill(settings: Settings): void {
     loaded.value = settings;
@@ -49,7 +54,7 @@ function isDirty(): boolean {
 async function save(): Promise<boolean> {
     const parsed = parseRepoList(repos.value.split('\n'));
     if (parsed.bad.length) {
-        setStatus(`Dépôt(s) invalide(s) : ${parsed.bad.join(', ')} — format attendu « workspace/dépôt ».`, 'err');
+        setStatus(t('settings.invalidRepos', { count: parsed.bad.length, repos: parsed.bad.join(', ') }), 'err');
         return false;
     }
     const body: { email: string; repos: string[]; token?: string } = { email: email.value.trim(), repos: parsed.repos };
@@ -57,13 +62,13 @@ async function save(): Promise<boolean> {
         body.token = token.value.trim();
     }
     saving.value = true;
-    setStatus('Enregistrement…');
+    setStatus(t('settings.saving'));
     try {
         fill(await api.saveSettings(body));
-        setStatus('Réglages enregistrés.', 'ok');
+        setStatus(t('settings.saved'), 'ok');
         return true;
     } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error), 'err');
+        setStatus(errorInfo(error).message, 'err');
         return false;
     } finally {
         saving.value = false;
@@ -75,7 +80,7 @@ async function deleteToken(): Promise<void> {
     try {
         loaded.value = await api.saveSettings({ token: '' });
         token.value = '';
-        setStatus('Jeton supprimé.', 'ok');
+        setStatus(t('settings.tokenDeleted'), 'ok');
     } catch (error) {
         showError(error);
     }
@@ -88,15 +93,16 @@ async function test(): Promise<void> {
         if (isDirty() && !(await save())) {
             return;
         }
-        setStatus('Test de la connexion…');
+        setStatus(t('settings.testing'));
         const result = await api.testConnection();
         if (result.ok) {
-            setStatus(`Connecté en tant que ${result.me.displayName}${result.me.nickname ? ` (${result.me.nickname})` : ''}.`, 'ok');
+            const name = `${result.me.displayName}${result.me.nickname ? ` (${result.me.nickname})` : ''}`;
+            setStatus(t('settings.connectedAs', { name }), 'ok');
         } else {
-            setStatus(`Échec : ${result.error.message}`, 'err');
+            setStatus(t('settings.failed', { message: errorText(tr(), result.error) }), 'err');
         }
     } catch (error) {
-        setStatus(`Échec : ${error instanceof Error ? error.message : String(error)}`, 'err');
+        setStatus(t('settings.failed', { message: errorInfo(error).message }), 'err');
     } finally {
         testing.value = false;
     }
@@ -112,52 +118,58 @@ onMounted(async () => {
 </script>
 
 <template>
-    <TopNav :crumbs="[{ text: 'Réglages', cur: true }]" />
+    <TopNav :crumbs="[{ text: t('common.settings'), cur: true }]" />
     <main class="rv-settings">
         <ErrorPanel v-if="loadError" :error="loadError" />
-        <div v-else-if="!loaded" class="rv-loading">Chargement des réglages…</div>
+        <div v-else-if="!loaded" class="rv-loading">{{ t('settings.loading') }}</div>
         <template v-else>
-            <h1>Réglages</h1>
+            <h1>{{ t('common.settings') }}</h1>
             <form @submit.prevent="save()">
                 <div class="rv-helpbox">
-                    Crée un jeton API Atlassian sur
-                    <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer">id.atlassian.com/manage-profile/security/api-tokens</a>
-                    (« Créer un jeton API avec des portées », application Bitbucket) avec les portées
-                    <template v-for="(scope, i) in SCOPES" :key="scope"><code>{{ scope }}</code><template v-if="i < SCOPES.length - 1">, </template></template>.
-                    {{ tokenStorageHelp(loaded.tokenStore) }}
+                    <I18nText k="settings.help">
+                        <template #link>
+                            <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer">id.atlassian.com/manage-profile/security/api-tokens</a>
+                        </template>
+                        <template #scopes>
+                            <template v-for="(scope, i) in SCOPES" :key="scope"><code>{{ scope }}</code><template v-if="i < SCOPES.length - 1">, </template></template>
+                        </template>
+                    </I18nText>
+                    {{ t(tokenStorageHelp(loaded.tokenStore)) }}
                 </div>
                 <div class="rv-field">
-                    <label for="set-email">E-mail Atlassian</label>
-                    <input id="set-email" v-model="email" type="email" autocomplete="username" spellcheck="false" placeholder="prenom.nom@exemple.com">
-                    <div class="help">L'e-mail de ton compte Atlassian, utilisé avec le jeton (authentification Basic).</div>
+                    <label for="set-email">{{ t('settings.email') }}</label>
+                    <input id="set-email" v-model="email" type="email" autocomplete="username" spellcheck="false" :placeholder="t('settings.emailPlaceholder')">
+                    <div class="help">{{ t('settings.emailHelp') }}</div>
                 </div>
                 <div class="rv-field">
-                    <label for="set-token">Jeton API</label>
+                    <label for="set-token">{{ t('settings.token') }}</label>
                     <div class="inline">
                         <input id="set-token" v-model="token" type="password" autocomplete="new-password" spellcheck="false" :placeholder="tokenPlaceholder">
                         <ConfirmButton
                             v-if="loaded.hasToken"
                             class="rv-btn"
-                            label="Supprimer le jeton"
-                            question="Supprimer le jeton enregistré ? Revspan ne pourra plus lire Bitbucket."
+                            :label="t('settings.deleteToken')"
+                            :question="t('settings.deleteTokenQuestion')"
                             @confirm="deleteToken()"
                         />
                     </div>
                     <div class="help">
-                        {{ loaded.hasToken ? 'Laisser vide pour garder le jeton enregistré.' : 'Aucun jeton enregistré : Revspan ne peut pas lire Bitbucket.' }}
+                        {{ loaded.hasToken ? t('settings.tokenKeep') : t('settings.tokenNone') }}
                     </div>
                 </div>
                 <div class="rv-field">
-                    <label for="set-repos">Dépôts suivis</label>
-                    <textarea id="set-repos" v-model="repos" spellcheck="false" placeholder="mon-workspace/mon-depot&#10;mon-workspace/autre-depot" />
+                    <label for="set-repos">{{ t('settings.repos') }}</label>
+                    <textarea id="set-repos" v-model="repos" spellcheck="false" :placeholder="t('settings.reposPlaceholder')" />
                     <div class="help">
-                        Un « workspace/dépôt » par ligne, ou l'adresse Bitbucket du dépôt. Leurs PR ouvertes apparaissent sur l'accueil.
-                        <template v-if="isVsCode">Enregistrés dans le réglage VS Code <code>revspan.repositories</code>.</template>
+                        {{ t('settings.reposHelp') }}
+                        <I18nText v-if="isVsCode" k="settings.reposVsCode">
+                            <template #setting><code>revspan.repositories</code></template>
+                        </I18nText>
                     </div>
                 </div>
                 <div class="rv-form-acts">
-                    <button :class="['rv-btn rv-btn-primary', { busy: saving }]" type="submit" :disabled="saving" :aria-busy="saving">Enregistrer</button>
-                    <button :class="['rv-btn', { busy: testing }]" type="button" :disabled="testing" :aria-busy="testing" @click="test()">Tester la connexion</button>
+                    <button :class="['rv-btn rv-btn-primary', { busy: saving }]" type="submit" :disabled="saving" :aria-busy="saving">{{ t('settings.save') }}</button>
+                    <button :class="['rv-btn', { busy: testing }]" type="button" :disabled="testing" :aria-busy="testing" @click="test()">{{ t('settings.test') }}</button>
                     <div :class="['rv-status', status.tone]" role="status" aria-live="polite">{{ status.text }}</div>
                 </div>
             </form>

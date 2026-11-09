@@ -1,6 +1,7 @@
 // Accueil : badges et sous-titre d'une carte de PR.
 import type { HomeGroupKey, PrCard, User } from '../../shared/api.ts';
-import { ago, displayName, openedSince, plural } from './format.ts';
+import type { MessageKey, Translator } from '../i18n/index.ts';
+import { ago, displayName, openedSince } from './format.ts';
 
 export type BadgeTone = '' | 'grey' | 'green' | 'orange';
 
@@ -9,38 +10,50 @@ export interface Badge {
     tone: BadgeTone;
 }
 
-export function cardBadges(card: PrCard, groupKey: HomeGroupKey, me: User | null): Badge[] {
+/** Title of each home group (the server's own titles are not shown: they are not translated). */
+export const GROUP_TITLES = {
+    'to-review': 'home.group.toReview',
+    'rebase-only': 'home.group.rebaseOnly',
+    'up-to-date': 'home.group.upToDate',
+    mine: 'home.group.mine',
+    others: 'home.group.others',
+} as const satisfies Record<HomeGroupKey, MessageKey>;
+
+export function cardBadges(tr: Translator, card: PrCard, groupKey: HomeGroupKey, me: User | null): Badge[] {
     const mine = !!me && card.author?.uuid === me.uuid;
     const badges: Badge[] = [];
     if (card.lastReviewed == null && !mine) {
         // versionsCount null : PR qui ne me concerne pas, historique non chargé
-        badges.push({ text: card.versionsCount == null ? 'pas encore relue' : `pas encore relue · ${plural(card.versionsCount, 'version')}`, tone: 'grey' });
+        const text = card.versionsCount == null
+            ? tr.t('home.badge.notReviewed')
+            : `${tr.t('home.badge.notReviewed')} · ${tr.t('common.versions', { count: card.versionsCount })}`;
+        badges.push({ text, tone: 'grey' });
     } else if (card.newVersions > 0 && !mine) {
-        badges.push({ text: `+${plural(card.newVersions, 'version')}`, tone: '' });
+        badges.push({ text: tr.t('home.badge.newVersions', { count: card.newVersions }), tone: '' });
         if (card.newCodeVersions != null && card.newCodeVersions > 0) {
-            badges.push({ text: `dont ${card.newCodeVersions} avec du code`, tone: '' });
+            badges.push({ text: tr.t('home.badge.withCode', { count: card.newCodeVersions }), tone: '' });
         } else if (card.newCodeVersions === 0 || groupKey === 'rebase-only') {
-            badges.push({ text: 'rebase seul', tone: 'orange' });
+            badges.push({ text: tr.t('kind.rebaseOnly'), tone: 'orange' });
         }
     }
     if (card.newComments > 0) {
-        badges.push({ text: `💬 ${plural(card.newComments, 'nouveau', 'nouveaux')}`, tone: '' });
+        badges.push({ text: tr.t('home.badge.newComments', { count: card.newComments }), tone: '' });
     }
     if (card.myApproval) {
-        badges.push({ text: '✓ approuvée', tone: 'green' });
+        badges.push({ text: tr.t('home.badge.approved'), tone: 'green' });
     }
     return badges;
 }
 
-export function cardSubtitle(card: PrCard, me: User | null): string {
+export function cardSubtitle(tr: Translator, card: PrCard, me: User | null): string {
     const mine = !!me && card.author?.uuid === me.uuid;
     const parts = [
-        mine ? 'toi' : displayName(card.author),
-        openedSince(card.createdOn),
-        `push ${ago(card.lastPushAt)}`,
+        mine ? tr.t('common.you') : displayName(card.author),
+        openedSince(tr, card.createdOn),
+        tr.t('home.pushed', { ago: ago(tr, card.lastPushAt) }),
     ];
     if (card.approvals > 0) {
-        parts.push(plural(card.approvals, 'approbation'));
+        parts.push(tr.t('common.approvals', { count: card.approvals }));
     }
     return parts.join(' · ');
 }

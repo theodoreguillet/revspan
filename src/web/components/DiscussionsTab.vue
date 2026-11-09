@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { plural } from '../lib/format.ts';
+import { t } from '../i18n/index.ts';
 import { threadGroups } from '../lib/threads.ts';
 import Composer from './Composer.vue';
 import DiscussionItem from './DiscussionItem.vue';
@@ -15,19 +15,19 @@ const total = computed(() => page.detail.threads.length);
     <div class="rv-disc">
         <Composer />
         <template v-if="groups.fresh.length">
-            <div class="rv-dgrp" data-group="new">Nouveaux · {{ groups.fresh.length }}</div>
-            <DiscussionItem v-for="t in groups.fresh" :key="t.id" :thread="t" />
+            <div class="rv-dgrp" data-group="new">{{ t('disc.new', { count: groups.fresh.length }) }}</div>
+            <DiscussionItem v-for="thread in groups.fresh" :key="thread.id" :thread="thread" />
         </template>
         <template v-if="groups.open.length">
-            <div class="rv-dgrp" data-group="open">Ouverts · {{ groups.open.length }}</div>
-            <DiscussionItem v-for="t in groups.open" :key="t.id" :thread="t" />
+            <div class="rv-dgrp" data-group="open">{{ t('disc.open', { count: groups.open.length }) }}</div>
+            <DiscussionItem v-for="thread in groups.open" :key="thread.id" :thread="thread" />
         </template>
         <details v-if="groups.resolved.length" data-group="resolved">
-            <summary class="rv-dgrp">Résolus · {{ groups.resolved.length }}</summary>
-            <DiscussionItem v-for="t in groups.resolved" :key="t.id" :thread="t" />
+            <summary class="rv-dgrp">{{ t('disc.resolved', { count: groups.resolved.length }) }}</summary>
+            <DiscussionItem v-for="thread in groups.resolved" :key="thread.id" :thread="thread" />
         </details>
-        <div v-if="!total" class="rv-empty">Aucune discussion sur cette PR.</div>
-        <p class="note">{{ plural(total, 'fil') }} au total.</p>
+        <div v-if="!total" class="rv-empty">{{ t('disc.empty') }}</div>
+        <p class="note">{{ t('disc.total', { count: total }) }}</p>
     </div>
 </template>
 

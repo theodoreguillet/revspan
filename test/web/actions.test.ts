@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Comparison, FileDiff, PrDetail, Summary, Version } from '../../src/shared/api.ts';
 import { useDiffOptions } from '../../src/web/composables/useDiffOptions.ts';
 import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { useReviewActions } from '../../src/web/composables/useReviewActions.ts';
+import { setLocale } from '../../src/web/i18n/index.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
@@ -87,10 +88,13 @@ describe('autre action en cours (⌘/Ctrl+Entrée pendant une écriture)', () =>
     let detail: PrDetail;
 
     beforeEach(() => {
+        setLocale('fr');
         vi.clearAllMocks();
         detail = prLong().data;
         api.pr.mockResolvedValue(detail);
     });
+
+    afterEach(() => setLocale('en'));
 
     it('message visible, rien n\'est envoyé, brouillon conservé', async () => {
         const load = usePrLoad(ref, detail);

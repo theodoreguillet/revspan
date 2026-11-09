@@ -1,5 +1,6 @@
 // Règles du diff : fichiers vus, paires côte à côte, placement des fils, commentaires sur ligne supprimée.
 import type { DiffLine, FileDiff, Hunk, Thread, ThreadPlacement } from '../../shared/api.ts';
+import type { MessageKey, Translator } from '../i18n/index.ts';
 import { MINUS, vname } from './format.ts';
 import type { SummaryMap } from './kinds.ts';
 
@@ -236,9 +237,10 @@ export function composerKey(kind: ComposerKind, line: number, path: string): str
 }
 
 /** Commentaire général citant une ligne supprimée (Bitbucket ne permet pas d'ancrer côté ancien). */
-export function deletedLineComment(path: string, from: number, to: number, code: string, text: string): string {
+export function deletedLineComment(tr: Translator, path: string, from: number, to: number, code: string, text: string): string {
     const fence = code.includes('```') ? '~~~' : '```';
-    return `\`${path}\` — ligne supprimée (${vname(from)} → v${to}) :\n${fence}\n${code}\n${fence}\n${text}`;
+    const quote = tr.t('diff.deletedLineQuote', { path: `\`${path}\``, from: vname(from), to: vname(to) });
+    return `${quote}\n${fence}\n${code}\n${fence}\n${text}`;
 }
 
 /** Première ligne ajoutée (côté nouveau) du fichier, pour l'ouvrir au bon endroit ; null s'il n'y en a pas. */
@@ -252,4 +254,8 @@ export function firstChangedLine(file: Pick<FileDiff, 'hunks'>): number | null {
     return null;
 }
 
-export const FILE_STATUS_TAGS: Partial<Record<FileDiff['status'], string>> = { added: 'nouveau', removed: 'supprimé', renamed: 'renommé' };
+export const FILE_STATUS_TAGS: Partial<Record<FileDiff['status'], 'file.status.added' | 'file.status.removed' | 'file.status.renamed'>> = {
+    added: 'file.status.added',
+    removed: 'file.status.removed',
+    renamed: 'file.status.renamed',
+} satisfies Partial<Record<FileDiff['status'], MessageKey>>;

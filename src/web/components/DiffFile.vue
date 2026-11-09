@@ -3,7 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { FILE_STATUS_TAGS, fileThreadCount, firstChangedLine, lastTouched, placeFileThreads, viewedStatus } from '../lib/diff.ts';
-import { MINUS, plural } from '../lib/format.ts';
+import { t } from '../i18n/index.ts';
+import { MINUS } from '../lib/format.ts';
 import { isVsCode, openLocalFile, openNativeDiff } from '../services/host.ts';
 import DiffHunk from './DiffHunk.vue';
 import ThreadCard from './ThreadCard.vue';
@@ -53,14 +54,14 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
         :data-idx="idx"
     >
         <div class="rv-fh">
-            <button type="button" class="tog" :aria-expanded="!collapsed" :title="collapsed ? 'Déplier' : 'Replier'" @click="toggle">{{ collapsed ? '▸' : '▾' }}</button>
+            <button type="button" class="tog" :aria-expanded="!collapsed" :title="collapsed ? t('file.expand') : t('file.collapse')" @click="toggle">{{ collapsed ? '▸' : '▾' }}</button>
             <span class="path" :title="file.path" @click="toggle">{{ title }}</span>
-            <span v-if="statusTag" class="tag">{{ statusTag }}</span>
-            <span v-if="touched" class="tag" :title="`Dernière modification de l'auteur dans la plage : v${touched}`">v{{ touched }}</span>
-            <span v-if="file.conflict" class="rv-conf" title="Pendant un rebase, master et l'auteur ont modifié la même zone : vérifier la résolution.">⚠ zone touchée par master et l'auteur</span>
-            <span v-if="vstat === 'changed'" class="rv-conf" title="Tu avais marqué ce fichier comme vu, mais son contenu a changé depuis.">modifié depuis vu</span>
+            <span v-if="statusTag" class="tag">{{ t(statusTag) }}</span>
+            <span v-if="touched" class="tag" :title="t('file.touchedTitle', { version: touched })">v{{ touched }}</span>
+            <span v-if="file.conflict" class="rv-conf" :title="t('file.conflictTitle')">{{ t('file.conflict') }}</span>
+            <span v-if="vstat === 'changed'" class="rv-conf" :title="t('file.changedSinceViewedTitle')">{{ t('file.changedSinceViewed') }}</span>
             <span class="sp" />
-            <span v-if="openThreads" class="tag" :title="plural(openThreads, 'fil ouvert', 'fils ouverts')">💬 {{ openThreads }}</span>
+            <span v-if="openThreads" class="tag" :title="t('file.openThreads', { count: openThreads })">💬 {{ openThreads }}</span>
             <span class="ad">+{{ file.added }}</span>
             <span class="dl">{{ MINUS }}{{ file.removed }}</span>
             <template v-if="isVsCode">
@@ -69,25 +70,25 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                     type="button"
                     class="act"
                     data-action="open-file"
-                    title="Ouvrir le fichier dans l'éditeur (dépôt cloné localement)"
+                    :title="t('file.openFileTitle')"
                     @click="openFile"
                 >
-                    Ouvrir le fichier
+                    {{ t('file.openFile') }}
                 </button>
-                <button type="button" class="act" data-action="open-diff" title="Comparer ces versions dans l'éditeur de diff de VS Code" @click="openDiff">Diff VS Code</button>
+                <button type="button" class="act" data-action="open-diff" :title="t('file.openDiffTitle')" @click="openDiff">{{ t('file.openDiff') }}</button>
             </template>
-            <label title="Marquer comme vu (v)">
-                <input type="checkbox" :checked="vstat === 'seen'" data-action="viewed" @change="onViewed"> Vu
+            <label :title="t('file.viewedTitle')">
+                <input type="checkbox" :checked="vstat === 'seen'" data-action="viewed" @change="onViewed"> {{ t('file.viewed') }}
             </label>
         </div>
         <template v-if="!collapsed">
             <div v-if="placed.fileLevel.length" class="rv-flevel">
-                <ThreadCard v-for="t in placed.fileLevel" :key="t.thread.id" :thread="t.thread" :placement="t.placement" file-level />
+                <ThreadCard v-for="item in placed.fileLevel" :key="item.thread.id" :thread="item.thread" :placement="item.placement" file-level />
             </div>
-            <div v-if="file.binary" class="rv-fnote">Fichier binaire : contenu non affiché.</div>
-            <div v-else-if="file.tooLarge" class="rv-fnote">Diff trop volumineux pour être affiché.</div>
+            <div v-if="file.binary" class="rv-fnote">{{ t('file.binary') }}</div>
+            <div v-else-if="file.tooLarge" class="rv-fnote">{{ t('file.tooLarge') }}</div>
             <div v-else-if="!file.hunks.length" class="rv-fnote">
-                {{ file.status === 'renamed' ? 'Fichier renommé sans changement de contenu.' : 'Aucune ligne modifiée à afficher.' }}
+                {{ file.status === 'renamed' ? t('file.renamedOnly') : t('file.noLines') }}
             </div>
             <template v-else>
                 <DiffHunk v-for="(hunk, k) in file.hunks" :key="k" :path="file.path" :hunk="hunk" :by-line="placed.byLine" />

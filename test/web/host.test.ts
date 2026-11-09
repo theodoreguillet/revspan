@@ -145,7 +145,7 @@ describe('hors VS Code', () => {
             throw new TypeError('Failed to fetch');
         }));
         const { api } = await import('../../src/web/services/api.ts');
-        await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Serveur Revspan') });
+        await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Revspan server') });
     });
 
     it('état du panneau : rien à enregistrer', async () => {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { plural } from '../lib/format.ts';
-import { presets, readout } from '../lib/selection.ts';
+import { t, tr } from '../i18n/index.ts';
+import { PRESET_LABELS, presets, readout } from '../lib/selection.ts';
 import { inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
 import TimelineNode from './TimelineNode.vue';
 
@@ -13,7 +13,7 @@ const track = ref<HTMLElement | null>(null);
 const versions = computed(() => page.detail.versions);
 const lastReviewed = computed(() => page.detail.review.lastReviewed);
 const dest = computed(() => page.detail.pr.destBranch);
-const items = computed(() => timelineModel({
+const items = computed(() => timelineModel(tr(), {
     versions: versions.value,
     sums: page.sums,
     lastReviewed: lastReviewed.value,
@@ -25,7 +25,7 @@ const items = computed(() => timelineModel({
 const text = computed(() => {
     const cmp = page.compare;
     const stats = cmp && cmp.from === page.from && cmp.to === page.to ? cmp.stats : null;
-    return readout({ from: page.from, to: page.to, versions: versions.value, sums: page.sums, stats, destBranch: dest.value });
+    return readout(tr(), { from: page.from, to: page.to, versions: versions.value, sums: page.sums, stats, destBranch: dest.value });
 });
 const presetList = computed(() => presets(page.n, lastReviewed.value, page.unavailable));
 
@@ -34,10 +34,14 @@ const band = (after: number): boolean => inBand(after, page.from, page.to);
 function foldDetail(item: Extract<TimelineItem, { type: 'fold' }>): string {
     const parts: string[] = [];
     if (item.codeCount != null) {
-        parts.push(`${item.codeCount} avec du code`);
+        parts.push(t('timeline.withCode', { count: item.codeCount }));
     }
-    parts.push(plural(item.rebases, 'rebase'));
+    parts.push(t('common.rebases', { count: item.rebases }));
     return parts.join(' · ');
+}
+
+function hiddenTitle(list: number[]): string {
+    return t('timeline.hiddenTitle', { count: list.length, versions: list.map((i) => `v${i}`).join(', ') });
 }
 
 // la hauteur de la frise (collante) décale les éléments collants en dessous : en-têtes de fichiers, liste des fichiers
@@ -63,21 +67,21 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="root" class="rv-tl" role="region" aria-label="Frise des versions">
+    <div ref="root" class="rv-tl" role="region" :aria-label="t('timeline.label')">
         <div ref="track" class="rv-track">
             <template v-for="(item, k) in items" :key="k">
                 <div v-if="item.type === 'base'" class="rv-day">
-                    <div class="rv-dlabel">base</div>
+                    <div class="rv-dlabel">{{ t('timeline.base') }}</div>
                     <div class="rv-nodes">
                         <button
                             type="button"
                             :class="['rv-v', 'base', { from: page.from === 0 }]"
                             data-i="0"
-                            :title="`${dest} · cible de la PR — clic : comparer la version « à » à sa base sur ${dest}`"
-                            :aria-label="`Base ${dest}`"
+                            :title="t('timeline.baseTitle', { branch: dest })"
+                            :aria-label="t('timeline.baseLabel', { branch: dest })"
                             @click="page.clickVersion(0, false)"
                         >
-                            <span class="tag de">de</span>
+                            <span class="tag de">{{ t('timeline.from') }}</span>
                             <span class="rv-dot" />
                             <span class="rv-vl">{{ dest }}</span>
                             <span class="rv-dl muted">&nbsp;</span>
@@ -85,15 +89,15 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
                 <div v-else-if="item.type === 'sp'" :class="['rv-sp', { in: band(item.after) }]" />
-                <div v-else-if="item.type === 'gap'" :class="['rv-gap', { in: band(item.after) }]" :title="`${item.days} jours sans push`">
+                <div v-else-if="item.type === 'gap'" :class="['rv-gap', { in: band(item.after) }]" :title="t('timeline.gapTitle', { count: item.days })">
                     <span>{{ item.label }}</span>
                 </div>
-                <div v-else-if="item.type === 'seen'" :class="['rv-seen', { in: band(item.after) }]" :title="`Ta dernière relecture : v${item.after}`">
-                    <span class="lbl">✓ relu</span>
+                <div v-else-if="item.type === 'seen'" :class="['rv-seen', { in: band(item.after) }]" :title="t('timeline.lastReviewTitle', { version: item.after })">
+                    <span class="lbl">{{ t('common.reviewedMark') }}</span>
                     <span class="bar" />
                 </div>
                 <div v-else-if="item.type === 'fold'" :class="['rv-fold', { in: item.a > page.from && item.b <= page.to }]">
-                    <button type="button" title="Déplier ces versions" @click="page.foldDisabled = true">
+                    <button type="button" :title="t('timeline.expandTitle')" @click="page.foldDisabled = true">
                         ⋯ v{{ item.a }} → v{{ item.b }} · {{ item.months }}<br>{{ foldDetail(item) }}
                     </button>
                 </div>
@@ -106,7 +110,7 @@ onBeforeUnmount(() => {
                                 v-else
                                 type="button"
                                 class="rv-tick"
-                                :title="`${plural(node.list.length, 'version')} sans code masquée(s) : ${node.list.map((i) => `v${i}`).join(', ')} — clic pour tout afficher`"
+                                :title="hiddenTitle(node.list)"
                                 @click="page.hideNoCode = false"
                             >
                                 ⋯{{ node.list.length }}
@@ -126,11 +130,11 @@ onBeforeUnmount(() => {
                 :data-preset="p.key"
                 @click="page.select(p.from, p.to)"
             >
-                {{ p.label }}
+                {{ t(PRESET_LABELS[p.key]) }}
             </button>
             <span class="rv-hint">
-                <label><input id="hide-no-code" v-model="page.hideNoCode" type="checkbox"> Masquer rebases seuls et deps</label>
-                <span class="rv-legend"><span class="reb">◆</span> rebase · <span class="new">●</span> nouveau pour toi</span>
+                <label><input id="hide-no-code" v-model="page.hideNoCode" type="checkbox"> {{ t('timeline.hideNoCode') }}</label>
+                <span class="rv-legend"><span class="reb">◆</span> {{ t('timeline.legendRebase') }} · <span class="new">●</span> {{ t('timeline.legendNew') }}</span>
             </span>
         </div>
     </div>

@@ -1,5 +1,6 @@
 // Types de versions (résumé), table d'accès par index et cohérence entre le résumé et le détail de la PR.
 import type { Summary, Version, VersionKind, VersionSummary } from '../../shared/api.ts';
+import type { MessageKey } from '../i18n/index.ts';
 
 export type SummaryMap = Map<number, VersionSummary>;
 
@@ -8,15 +9,16 @@ export const CODE_KINDS: ReadonlySet<VersionKind> = new Set(['code', 'creation']
 /** Versions sans aucun changement de l'auteur (réapprobation rapide possible). */
 export const TRIVIAL_KINDS: ReadonlySet<VersionKind> = new Set(['rebase-only', 'none', 'message-only']);
 
-export const KIND_LABELS: Record<VersionKind, string> = {
-    creation: 'création',
-    code: 'code',
-    deps: 'deps',
-    'rebase-only': 'rebase seul',
-    'message-only': 'message',
-    none: 'rien',
-    unavailable: 'indisponible',
-};
+/** Short label of each kind (timeline nodes and tooltips). */
+export const KIND_LABELS = {
+    creation: 'kind.creation',
+    code: 'kind.code',
+    deps: 'kind.deps',
+    'rebase-only': 'kind.rebaseOnly',
+    'message-only': 'kind.messageOnly',
+    none: 'kind.none',
+    unavailable: 'kind.unavailable',
+} as const satisfies Record<VersionKind, MessageKey>;
 
 export function summaryMap(summary: Summary | null | undefined): SummaryMap {
     const map: SummaryMap = new Map();

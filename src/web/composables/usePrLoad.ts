@@ -4,6 +4,7 @@ import { computed, ref, shallowRef } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import type { Range } from '../lib/selection.ts';
+import { t } from '../i18n/index.ts';
 import { api } from '../services/api.ts';
 import { showError } from './useErrors.ts';
 
@@ -19,9 +20,6 @@ export interface ActOptions {
     /** Bouton à l'origine de l'action (indicateur de chargement sur ce bouton). */
     key?: string;
 }
-
-/** Retour d'une écriture lancée (⌘/Ctrl+Entrée…) pendant qu'une autre se termine. */
-export const BUSY_MESSAGE = 'Une autre action est en cours, réessaie dans un instant.';
 
 export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const detail = shallowRef<PrDetail>(initial);
@@ -132,7 +130,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
      */
     async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false, key = 'action' }: ActOptions = {}): Promise<boolean> {
         if (pendingAction.value !== null) {
-            showError(new Error(BUSY_MESSAGE));
+            // a write launched (⌘/Ctrl+Enter…) while another one is finishing
+            showError(new Error(t('error.busy')));
             return false;
         }
         pendingAction.value = key;

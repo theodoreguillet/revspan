@@ -2,7 +2,8 @@
 import { computed } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { changedSegs, versionTypeBadge } from '../lib/describe.ts';
-import { fmtDateTime, plural } from '../lib/format.ts';
+import { t, tr } from '../i18n/index.ts';
+import { fmtDateTime } from '../lib/format.ts';
 import { isCode, isMuted } from '../lib/kinds.ts';
 import SegText from './SegText.vue';
 
@@ -12,7 +13,11 @@ const lastReviewed = computed(() => page.detail.review.lastReviewed);
 const summaryNote = computed(() => {
     const code = versions.value.filter((v) => isCode(page.sums.get(v.index))).length;
     const rebases = versions.value.filter((v) => v.isRebase).length;
-    return `${plural(versions.value.length, 'version')}, dont ${code} avec du code et ${plural(rebases, 'rebase')}. Clic sur une ligne : ce que cette version a changé.`;
+    return t('versions.summary', {
+        versions: t('common.versions', { count: versions.value.length }),
+        code,
+        rebases: t('common.rebases', { count: rebases }),
+    });
 });
 </script>
 
@@ -20,7 +25,10 @@ const summaryNote = computed(() => {
     <div class="rv-vers">
         <table class="rv-tbl">
             <thead>
-                <tr><th>Version</th><th>Date</th><th>Type</th><th>Commit · base</th><th>Changé par l'auteur</th></tr>
+                <tr>
+                    <th>{{ t('versions.colVersion') }}</th><th>{{ t('versions.colDate') }}</th><th>{{ t('versions.colType') }}</th>
+                    <th>{{ t('versions.colCommit') }}</th><th>{{ t('versions.colChanged') }}</th>
+                </tr>
             </thead>
             <tbody>
                 <tr
@@ -31,15 +39,15 @@ const summaryNote = computed(() => {
                     role="button"
                     tabindex="0"
                     :aria-disabled="!v.available"
-                    :title="`Voir ce que v${v.index} a changé`"
+                    :title="t('versions.rowTitle', { version: v.index })"
                     @click="page.selectVersion(v.index)"
                     @keydown.enter.space.prevent="page.selectVersion(v.index)"
                 >
-                    <td><b>v{{ v.index }}</b><span v-if="v.index === lastReviewed" class="relu">✓ relu</span></td>
-                    <td>{{ fmtDateTime(v.pushedAt) }}</td>
-                    <td><span :class="versionTypeBadge(v).cls">{{ versionTypeBadge(v).label }}</span></td>
+                    <td><b>v{{ v.index }}</b><span v-if="v.index === lastReviewed" class="relu">{{ t('common.reviewedMark') }}</span></td>
+                    <td>{{ fmtDateTime(tr(), v.pushedAt) }}</td>
+                    <td><span :class="versionTypeBadge(tr(), v).cls">{{ versionTypeBadge(tr(), v).label }}</span></td>
                     <td class="mono" :title="`${v.hash}\nbase ${v.base}`">{{ v.shortHash }} · {{ v.baseShort }}</td>
-                    <td><SegText :segs="changedSegs(v, page.sums.get(v.index))" /></td>
+                    <td><SegText :segs="changedSegs(tr(), v, page.sums.get(v.index))" /></td>
                 </tr>
             </tbody>
         </table>

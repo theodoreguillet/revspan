@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { Comment } from '../../shared/api.ts';
 import { actionKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t, tr } from '../i18n/index.ts';
 import { displayName, fmtFull, relTime } from '../lib/format.ts';
 import { avatarHue, initials } from '../lib/threads.ts';
 import ConfirmButton from './ConfirmButton.vue';
@@ -21,22 +22,22 @@ const name = computed(() => displayName(props.comment.user));
         <div class="body">
             <div>
                 <span class="who">{{ name }}</span>
-                <span class="when" :title="fmtFull(comment.createdOn)">{{ relTime(comment.createdOn) }}</span>
-                <span v-if="comment.version != null" class="vtag" :title="`Version en cours lors du commentaire : v${comment.version}`">v{{ comment.version }}</span>
-                <span v-if="comment.isNew" class="newtag">nouveau</span>
+                <span class="when" :title="fmtFull(tr(), comment.createdOn)">{{ relTime(tr(), comment.createdOn) }}</span>
+                <span v-if="comment.version != null" class="vtag" :title="t('comment.versionTitle', { version: comment.version })">v{{ comment.version }}</span>
+                <span v-if="comment.isNew" class="newtag">{{ t('comment.new') }}</span>
             </div>
-            <div v-if="comment.deleted" class="deleted">Commentaire supprimé</div>
+            <div v-if="comment.deleted" class="deleted">{{ t('comment.deleted') }}</div>
             <SafeHtml v-else :html="comment.html" />
             <div v-if="!comment.deleted" class="acts">
-                <button type="button" data-action="reply" @click="emit('reply')">Répondre</button>
+                <button type="button" data-action="reply" @click="emit('reply')">{{ t('common.reply') }}</button>
                 <ConfirmButton
                     v-if="comment.mine"
                     data-action="delete"
                     :class="{ busy: page.busy(actionKey.remove(comment.id)) }"
                     :disabled="page.acting"
                     :aria-busy="page.busy(actionKey.remove(comment.id))"
-                    label="Supprimer"
-                    question="Supprimer ce commentaire sur Bitbucket ?"
+                    :label="t('common.delete')"
+                    :question="t('comment.deleteQuestion')"
                     @confirm="page.deleteComment(comment)"
                 />
             </div>

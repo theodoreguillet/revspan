@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bannerModel } from '../../src/web/lib/banner.ts';
 import { segText } from '../../src/web/lib/segments.ts';
 import { loadPr, makeSums, makeVersions, prLong } from './fixtures.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+
+// French, the language these expectations are written in (English is covered by test/web/i18n.test.ts and below).
+const fr = createTranslator('fr');
 
 const lines = (model: ReturnType<typeof bannerModel>): string[] => model.lines.map(segText);
 
@@ -14,10 +18,33 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+describe('bannerModel in English', () => {
+    const en = createTranslator('en');
+
+    it('since my review: English word order and punctuation, bold and monospace parts kept', () => {
+        const { data, sums } = prLong();
+        const model = bannerModel(en, data, sums, true);
+        expect(model.head).toBe('Since your review of v7 (Nov 3): 3 versions, 1 of which touches code');
+        expect(lines(model)).toEqual([
+            'v10: CreateRecord.ts and coverage.config.json, +2 −2',
+            'v9: package-lock.json only · v8: rebased onto master, nothing from the author (137 master files hidden)',
+            '+ 1 new thread and 1 new reply (Yann and Camille)',
+        ]);
+        expect(model.lines[0]?.slice(0, 4)).toEqual([{ text: 'v10', kind: 'b' }, ': ', { text: 'CreateRecord.ts', kind: 'mono' }, ' and ']);
+    });
+
+    it('only rebases since my approval', () => {
+        const { data, sums } = loadPr('rebase');
+        const model = bannerModel(en, data, sums, true);
+        expect(model.head).toBe('Since your review of v9: only rebases, no changes from the author');
+        expect(lines(model)).toEqual(['Nothing to review · 41 master files hidden · no new comments', 'Your approval of v9 still stands on Bitbucket']);
+    });
+});
+
 describe('bannerModel', () => {
     it('depuis ma relecture (#212, v7) : versions, code, rebase, nouveaux commentaires', () => {
         const { data, sums } = prLong();
-        const model = bannerModel(data, sums, true);
+        const model = bannerModel(fr, data, sums, true);
         expect(model.variant).toBe('since');
         expect(model.head).toBe('Depuis ta relecture de v7 (3 nov.) : 3 versions, dont 1 touche du code');
         expect(lines(model)).toEqual([
@@ -30,7 +57,7 @@ describe('bannerModel', () => {
 
     it('résumé en cours de chargement', () => {
         const { data } = prLong();
-        const model = bannerModel(data, new Map(), false);
+        const model = bannerModel(fr, data, new Map(), false);
         expect(model.variant).toBe('loading');
         expect(model.head).toBe('Depuis ta relecture de v7 (3 nov.) : 3 versions');
         expect(lines(model)[0]).toBe('Analyse des versions…');
@@ -38,13 +65,13 @@ describe('bannerModel', () => {
 
     it('à jour : pas de bouton', () => {
         const { data, sums } = prLong();
-        const model = bannerModel({ ...data, review: { ...data.review, lastReviewed: 10 } }, sums, true);
+        const model = bannerModel(fr, { ...data, review: { ...data.review, lastReviewed: 10 } }, sums, true);
         expect(model).toMatchObject({ variant: 'up-to-date', head: 'Tu es à jour : v10 relue (3 nov.)', action: 'none' });
     });
 
     it('première relecture', () => {
         const { data, sums } = prLong();
-        const model = bannerModel({ ...data, review: { ...data.review, lastReviewed: null, lastReviewedAt: null } }, sums, true);
+        const model = bannerModel(fr, { ...data, review: { ...data.review, lastReviewed: null, lastReviewedAt: null } }, sums, true);
         expect(model.variant).toBe('first');
         expect(model.head).toBe('Première relecture : 10 versions depuis le 14 oct.');
         expect(lines(model)[0]).toBe('3 versions avec du code, 4 rebases · « Tout vs master » montre la PR complète');
@@ -53,7 +80,7 @@ describe('bannerModel', () => {
 
     it('seulement des rebases depuis mon approbation, toujours active sur Bitbucket : rien à réapprouver', () => {
         const { data, sums } = loadPr('rebase');
-        const model = bannerModel(data, sums, true);
+        const model = bannerModel(fr, data, sums, true);
         expect(model).toMatchObject({ variant: 'fast', action: 'mark', rule: false });
         expect(model.head).toBe('Depuis ta relecture de v9 : seulement des rebases, aucun changement de l\'auteur');
         expect(lines(model)).toEqual(['Rien à relire · 41 fichiers de master masqués · aucun nouveau commentaire', 'Ton approbation de v9 reste valable sur Bitbucket']);
@@ -65,17 +92,17 @@ describe('bannerModel', () => {
             ...data,
             participants: data.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approved: false, state: null } : p)),
         };
-        const model = bannerModel(reset, sums, true);
+        const model = bannerModel(fr, reset, sums, true);
         expect(model.action).toBe('reapprove');
         expect(lines(model)).toEqual(['Rien à relire · 41 fichiers de master masqués · aucun nouveau commentaire']);
-        expect(bannerModel({ ...reset, pr: { ...reset.pr, author: reset.me } }, sums, true).action).toBe('mark');
+        expect(bannerModel(fr, { ...reset, pr: { ...reset.pr, author: reset.me } }, sums, true).action).toBe('mark');
     });
 
     it('beaucoup de versions sans code : une ligne de synthèse', () => {
         const { data } = prLong();
         const versions = makeVersions(9, { rebases: [3, 5, 7] });
         const sums = makeSums(['creation', 'rebase-only', 'rebase-only', 'deps', 'rebase-only', 'none', 'deps', 'code', 'rebase-only']);
-        const model = bannerModel({ ...data, versions, threads: [], review: { ...data.review, lastReviewed: 1, lastReviewedAt: null } }, sums, true);
+        const model = bannerModel(fr, { ...data, versions, threads: [], review: { ...data.review, lastReviewed: 1, lastReviewedAt: null } }, sums, true);
         expect(model.head).toBe('Depuis ta relecture de v1 : 8 versions, dont 1 touche du code');
         expect(lines(model)).toEqual([
             'v8 : F8.ts, +10 −2',
@@ -87,7 +114,7 @@ describe('bannerModel', () => {
         const { data } = prLong();
         const versions = makeVersions(3, { messageChanged: [3] });
         const sums = makeSums(['creation', 'code', 'deps']);
-        const model = bannerModel({ ...data, versions, threads: [], review: { ...data.review, lastReviewed: 2, lastReviewedAt: null } }, sums, true);
+        const model = bannerModel(fr, { ...data, versions, threads: [], review: { ...data.review, lastReviewed: 2, lastReviewedAt: null } }, sums, true);
         expect(model.head).toBe('Depuis ta relecture de v2 : 1 version, sans code');
         expect(lines(model)).toEqual(['v3 : package-lock.json seulement', 'message du commit modifié']);
     });
@@ -98,14 +125,14 @@ describe('bannerModel', () => {
 
         it('avec d\'autres versions : ligne « … », le compte de code ne dit que ce qu\'on sait', () => {
             const versions = makeVersions(4, { rebases: [4] });
-            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(1) }, makeSums(['creation', 'code', 'deps']), true);
+            const model = bannerModel(fr, { ...data, versions, threads: [], review: reviewedAt(1) }, makeSums(['creation', 'code', 'deps']), true);
             expect(model).toMatchObject({ variant: 'since', head: 'Depuis ta relecture de v1 : 3 versions, dont 1 touche du code', action: 'mark' });
             expect(lines(model)).toEqual(['v4 : … · rebase sur master', 'v2 : F2.ts, +10 −2', 'v3 : package-lock.json seulement']);
         });
 
         it('seule : ni « sans code » ni « rien à relire »', () => {
             const versions = makeVersions(3);
-            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(2) }, makeSums(['creation', 'rebase-only']), true);
+            const model = bannerModel(fr, { ...data, versions, threads: [], review: reviewedAt(2) }, makeSums(['creation', 'rebase-only']), true);
             expect(model).toMatchObject({ variant: 'since', head: 'Depuis ta relecture de v2 : 1 version' });
             expect(lines(model)).toEqual(['v3 : …']);
         });
@@ -113,7 +140,7 @@ describe('bannerModel', () => {
         it('après beaucoup de versions sans code : pas comptée « sans changement de l\'auteur »', () => {
             const versions = makeVersions(8);
             const sums = makeSums(['creation', 'rebase-only', 'rebase-only', 'deps', 'rebase-only', 'none', 'deps']);
-            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(1) }, sums, true);
+            const model = bannerModel(fr, { ...data, versions, threads: [], review: reviewedAt(1) }, sums, true);
             expect(model.head).toBe('Depuis ta relecture de v1 : 7 versions');
             expect(lines(model)).toEqual([
                 'v8 : …',

@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { PrState } from '../../shared/api.ts';
+import type { MessageKey } from '../i18n/index.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t, tr } from '../i18n/index.ts';
 import { approvalItems, myActions } from '../lib/approvals.ts';
 import { displayName, openedSince } from '../lib/format.ts';
 import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 
-const STATE_LABELS: Record<PrState, string> = { OPEN: '● Ouverte', MERGED: 'Fusionnée', DECLINED: 'Refusée', SUPERSEDED: 'Remplacée' };
+const STATE_LABELS = {
+    OPEN: 'pr.state.open',
+    MERGED: 'pr.state.merged',
+    DECLINED: 'pr.state.declined',
+    SUPERSEDED: 'pr.state.superseded',
+} as const satisfies Record<PrState, MessageKey>;
 
 const page = usePrPage();
 const pr = computed(() => page.detail.pr);
 const n = computed(() => page.n);
-const approvals = computed(() => approvalItems(page.detail, page.sums, !!page.summary));
+const approvals = computed(() => approvalItems(tr(), page.detail, page.sums, !!page.summary));
 const mine = computed(() => myActions(page.detail, page.sums, !!page.summary));
 const hasMe = computed(() => !!page.detail.me);
 </script>
@@ -21,27 +28,27 @@ const hasMe = computed(() => !!page.detail.me);
         <div class="main">
             <div class="rv-title">{{ pr.title }} <span>#{{ pr.id }}</span></div>
             <div class="rv-meta">
-                <span :class="['rv-pill', pr.state]">{{ STATE_LABELS[pr.state] }}</span>
+                <span :class="['rv-pill', pr.state]">{{ t(STATE_LABELS[pr.state]) }}</span>
                 <span>{{ displayName(pr.author) }}</span> ·
                 <span class="rv-mono">{{ pr.sourceBranch }}</span> → <span class="rv-mono">{{ pr.destBranch }}</span> ·
-                <span>{{ openedSince(pr.createdOn) }}</span> ·
-                <a :href="pr.url" target="_blank" rel="noopener noreferrer">Bitbucket ↗</a>
+                <span>{{ openedSince(tr(), pr.createdOn) }}</span> ·
+                <a :href="pr.url" target="_blank" rel="noopener noreferrer">{{ t('pr.onBitbucket') }}</a>
             </div>
             <div v-if="approvals.length" class="rv-appr">
                 <template v-for="item in approvals" :key="item.name">
                     <span v-if="item.kind === 'approved'" :class="{ stale: item.stale }" :title="item.title">
-                        <b>✓</b> {{ item.name }}<template v-if="item.version != null"> · sur v{{ item.version }}</template>
-                        <template v-if="item.stale"> · <i>périmée ({{ item.stale.text }})</i></template>
+                        <b>✓</b> {{ item.name }}<template v-if="item.version != null"> · {{ t('pr.onVersion', { version: item.version }) }}</template>
+                        <template v-if="item.stale"> · <i>{{ t('pr.stale', { reason: item.stale.text }) }}</i></template>
                     </span>
                     <span v-else-if="item.kind === 'changes'" class="chg" :title="item.title">
-                        <b>✕</b> {{ item.name }} · modifs demandées<template v-if="item.version != null"> sur v{{ item.version }}</template>
+                        <b>✕</b> {{ item.name }} · {{ item.version != null ? t('pr.changesRequestedOn', { version: item.version }) : t('pr.changesRequested') }}
                     </span>
                     <span v-else :title="item.title">○ {{ item.name }}</span>
                 </template>
             </div>
         </div>
         <div class="acts">
-            <span v-if="mine.mine" class="own">Ta PR</span>
+            <span v-if="mine.mine" class="own">{{ t('pr.yourPr') }}</span>
             <template v-else-if="hasMe">
                 <button
                     type="button"
@@ -49,10 +56,10 @@ const hasMe = computed(() => !!page.detail.me);
                     data-action="request-changes"
                     :disabled="mine.closed || page.acting"
                     :aria-busy="page.busy(ACTION_KEYS.requestChanges)"
-                    :title="mine.changesActive ? 'Retirer la demande de modifications' : 'Demander des modifications à l\'auteur'"
+                    :title="mine.changesActive ? t('pr.withdrawChangesTitle') : t('pr.requestChangesTitle')"
                     @click="page.toggleRequestChanges(!mine.changesActive)"
                 >
-                    {{ mine.changesActive ? 'Modifs demandées ✕' : 'Demander des modifs' }}
+                    {{ mine.changesActive ? t('pr.changesRequestedButton') : t('pr.requestChanges') }}
                 </button>
                 <button
                     v-if="mine.approvalHolds"
@@ -63,7 +70,7 @@ const hasMe = computed(() => !!page.detail.me);
                     :aria-busy="page.busy(ACTION_KEYS.approve)"
                     @click="page.setApproved(false)"
                 >
-                    Retirer l'approbation
+                    {{ t('pr.unapprove') }}
                 </button>
                 <button
                     v-else
@@ -72,10 +79,10 @@ const hasMe = computed(() => !!page.detail.me);
                     data-action="approve"
                     :disabled="mine.closed || page.acting"
                     :aria-busy="page.busy(ACTION_KEYS.approve)"
-                    :title="`Approuver la version ${n} (marque aussi v${n} comme relue)`"
+                    :title="t('pr.approveTitle', { version: n })"
                     @click="page.setApproved(true)"
                 >
-                    {{ mine.reapprove ? `✓ Réapprouver v${n}` : `✓ Approuver v${n}` }}
+                    {{ mine.reapprove ? t('pr.reapprove', { version: n }) : t('pr.approve', { version: n }) }}
                 </button>
             </template>
         </div>

@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t } from '../i18n/index.ts';
 
 const page = usePrPage();
 
-const VIEWS = [['unified', 'Unifié'], ['split', 'Côte à côte']] as const;
+const VIEWS = [['unified', 'diff.unified'], ['split', 'diff.split']] as const;
 </script>
 
 <template>
     <div class="rv-dtb">
-        <span class="rv-seg" role="group" aria-label="Vue du diff">
+        <span class="rv-seg" role="group" :aria-label="t('diff.views')">
             <button
                 v-for="[key, label] in VIEWS"
                 :key="key"
@@ -18,17 +19,17 @@ const VIEWS = [['unified', 'Unifié'], ['split', 'Côte à côte']] as const;
                 :data-seg="key"
                 @click="page.view = key"
             >
-                {{ label }}
+                {{ t(label) }}
             </button>
         </span>
-        <span>Contexte :</span>
-        <span class="rv-seg" role="group" aria-label="Lignes de contexte">
-            <button type="button" :class="{ on: !page.fullContext }" :aria-pressed="!page.fullContext" data-seg="3" @click="page.fullContext = false">3 lignes</button>
-            <button type="button" :class="{ on: page.fullContext }" :aria-pressed="page.fullContext" data-seg="full" @click="page.fullContext = true">fichier entier</button>
+        <span>{{ t('diff.context') }}</span>
+        <span class="rv-seg" role="group" :aria-label="t('diff.contextLabel')">
+            <button type="button" :class="{ on: !page.fullContext }" :aria-pressed="!page.fullContext" data-seg="3" @click="page.fullContext = false">{{ t('diff.contextLines') }}</button>
+            <button type="button" :class="{ on: page.fullContext }" :aria-pressed="page.fullContext" data-seg="full" @click="page.fullContext = true">{{ t('diff.wholeFile') }}</button>
         </span>
-        <label><input id="show-resolved" v-model="page.showResolved" type="checkbox"> Afficher les fils résolus</label>
+        <label><input id="show-resolved" v-model="page.showResolved" type="checkbox"> {{ t('diff.showResolved') }}</label>
         <span v-if="!page.canInlineComment" class="note">
-            {{ page.detail.pr.state === 'OPEN' ? 'Commentaires en ligne : seulement sur la dernière version' : 'PR fermée : commentaires en ligne désactivés' }}
+            {{ page.detail.pr.state === 'OPEN' ? t('diff.inlineLatestOnly') : t('diff.inlineClosed') }}
         </span>
     </div>
 </template>

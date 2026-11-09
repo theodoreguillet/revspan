@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t, tr } from '../i18n/index.ts';
 import { bannerModel } from '../lib/banner.ts';
 import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 import SegText from './SegText.vue';
 
 const page = usePrPage();
-const model = computed(() => bannerModel(page.detail, page.sums, !!page.summary));
+const model = computed(() => bannerModel(tr(), page.detail, page.sums, !!page.summary));
 const tone = computed(() => ({ 'up-to-date': 'ok', fast: 'fast' } as Record<string, string>)[model.value.variant] ?? '');
 </script>
 
@@ -28,7 +29,7 @@ const tone = computed(() => ({ 'up-to-date': 'ok', fast: 'fast' } as Record<stri
                 :aria-busy="page.busy(ACTION_KEYS.approve)"
                 @click="page.setApproved(true)"
             >
-                ✓ Réapprouver v{{ model.latest }}
+                {{ t('pr.reapprove', { version: model.latest }) }}
             </button>
             <button
                 v-else
@@ -39,9 +40,9 @@ const tone = computed(() => ({ 'up-to-date': 'ok', fast: 'fast' } as Record<stri
                 :aria-busy="page.busy(ACTION_KEYS.markReviewed)"
                 @click="page.markReviewed(model.latest)"
             >
-                Marquer v{{ model.latest }} comme relue
+                {{ t('banner.markReviewed', { version: model.latest }) }}
             </button>
-            <div v-if="model.rule" class="rule">Approuver ou commenter marque la version comme relue automatiquement.</div>
+            <div v-if="model.rule" class="rule">{{ t('banner.rule') }}</div>
         </div>
     </section>
 </template>

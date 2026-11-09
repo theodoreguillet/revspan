@@ -2,6 +2,7 @@
 // Bouton d'action destructive. Sur le web : confirm() du navigateur. Dans un panneau VS Code, les boîtes de dialogue
 // sont bloquées : un premier clic arme le bouton (« Confirmer ? »), un second clic dans les 4 s exécute l'action.
 import { onBeforeUnmount, ref } from 'vue';
+import { t } from '../i18n/index.ts';
 import { isVsCode } from '../services/host.ts';
 
 const props = defineProps<{ label: string; question: string }>();
@@ -36,5 +37,5 @@ onBeforeUnmount(disarm);
 </script>
 
 <template>
-    <button type="button" :class="{ armed }" :title="question" @click="onClick">{{ armed ? 'Confirmer ?' : label }}</button>
+    <button type="button" :class="{ armed }" :title="question" @click="onClick">{{ armed ? t('common.confirm') : label }}</button>
 </template>

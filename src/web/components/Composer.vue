@@ -3,6 +3,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { GENERAL_DRAFT } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t } from '../i18n/index.ts';
 import type { ComposerTarget } from '../lib/diff.ts';
 import { vname } from '../lib/format.ts';
 
@@ -18,20 +19,20 @@ const text = computed({
     set: (value: string) => page.setDraft(key.value, value),
 });
 const label = computed(() => {
-    const t = props.target;
+    const target = props.target;
     const cmp = page.compare;
-    if (!t || !cmp) {
-        return 'Nouveau commentaire général';
+    if (!target || !cmp) {
+        return t('composer.general');
     }
-    return t.kind === 'old'
-        ? `Ligne ${t.line} supprimée (${vname(cmp.from)} → v${cmp.to}) : publié comme commentaire général qui cite la ligne.`
-        : `Ligne ${t.line} de v${cmp.to}`;
+    return target.kind === 'old'
+        ? t('composer.deletedLine', { line: target.line, from: vname(cmp.from), to: vname(cmp.to) })
+        : t('composer.line', { line: target.line, version: vname(cmp.to) });
 });
 const placeholder = computed(() => {
     if (general.value) {
-        return 'Nouveau commentaire général…';
+        return t('composer.generalPlaceholder');
     }
-    return props.target?.kind === 'old' ? 'Ton commentaire sur la ligne supprimée…' : 'Commenter cette ligne…';
+    return props.target?.kind === 'old' ? t('composer.deletedLinePlaceholder') : t('composer.linePlaceholder');
 });
 
 async function submit(): Promise<void> {
@@ -75,13 +76,13 @@ onMounted(() => {
             ref="textarea"
             v-model="text"
             :placeholder="placeholder"
-            :aria-label="general ? 'Nouveau commentaire général' : 'Nouveau commentaire'"
+            :aria-label="general ? t('composer.general') : t('composer.label')"
             :disabled="sending"
             @keydown="onKeydown"
         />
         <div class="row">
-            <span class="k">{{ general ? '⌘/Ctrl + Entrée pour envoyer' : '⌘/Ctrl + Entrée pour envoyer · Échap pour annuler' }}</span>
-            <button v-if="!general" type="button" class="rv-btn rv-btn-sm" @click="page.closeComposer()">Annuler</button>
+            <span class="k">{{ general ? t('composer.hintSend') : t('composer.hintSendCancel') }}</span>
+            <button v-if="!general" type="button" class="rv-btn rv-btn-sm" @click="page.closeComposer()">{{ t('common.cancel') }}</button>
             <button
                 type="button"
                 :class="['rv-btn rv-btn-sm rv-btn-primary', { busy: sending }]"
@@ -90,7 +91,7 @@ onMounted(() => {
                 :aria-busy="sending"
                 @click="submit"
             >
-                Commenter
+                {{ t('composer.submit') }}
             </button>
         </div>
     </div>

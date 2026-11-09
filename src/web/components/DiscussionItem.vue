@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { Thread } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { t, tr } from '../i18n/index.ts';
 import { relTime } from '../lib/format.ts';
 import { lastActivity } from '../lib/threads.ts';
 import ThreadCard from './ThreadCard.vue';
@@ -21,10 +22,10 @@ const location = computed(() => {
     <div class="rv-ditem" :data-thread="thread.id">
         <div class="loc">
             <span v-if="thread.path" class="p">{{ location }}</span>
-            <b v-else>Commentaire général</b>
-            <span>· sur v{{ thread.version }}</span>
-            <span v-if="last">· dernière activité {{ relTime(last) }}</span>
-            <button v-if="placement" type="button" class="rv-link" data-action="show-in-diff" @click="page.showInDiff(thread.id)">Voir dans le diff</button>
+            <b v-else>{{ t('disc.general') }}</b>
+            <span>{{ t('disc.onVersion', { version: thread.version }) }}</span>
+            <span v-if="last">{{ t('disc.lastActivity', { when: relTime(tr(), last) }) }}</span>
+            <button v-if="placement" type="button" class="rv-link" data-action="show-in-diff" @click="page.showInDiff(thread.id)">{{ t('disc.showInDiff') }}</button>
         </div>
         <ThreadCard :thread="thread" :placement="placement" context="disc" />
     </div>
