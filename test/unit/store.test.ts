@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Store, type RepoSource } from '../../src/server/infra/config.ts';
 
 const dirs: string[] = [];
@@ -26,6 +26,7 @@ function memorySource(initial: string[]): RepoSource & { value: string[] } {
 }
 
 afterEach(() => {
+    vi.restoreAllMocks();
     dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }));
 });
 
@@ -52,6 +53,27 @@ describe('local settings (Store)', () => {
 
         source.value = ['ws/d'];
         expect(store.config.repos).toEqual(['ws/d']);
+    });
+});
+
+describe('PR state write that fails', () => {
+    it('leaves no phantom mark in memory: the state read next is the one on disk', () => {
+        const dir = tempDir();
+        const store = new Store(dir);
+        const key = 'acme/records-api#1';
+        store.updatePrState(key, (s) => {
+            s.viewed['src/a.ts'] = 'h1';
+            s.kinds['0123456789ab'] = 'code';
+        });
+        vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+            throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+        });
+        expect(() => store.updatePrState(key, (s) => {
+            s.viewed['src/b.ts'] = 'h2';
+            s.kinds['ba9876543210'] = 'rebase-only';
+        })).toThrow(/ENOSPC/);
+        expect(store.prState(key).viewed).toEqual({ 'src/a.ts': 'h1' });
+        expect(store.prState(key).kinds).toEqual({ '0123456789ab': 'code' });
     });
 });
 

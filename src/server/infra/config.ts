@@ -92,7 +92,8 @@ class JsonFile<T> {
     }
 }
 
-const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: state.viewed ?? {}, kinds: state.kinds ?? {} });
+/** Copy of a PR state, nested records included: a mutation does not reach the cached file until it is written. */
+const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: { ...state.viewed }, kinds: { ...state.kinds } });
 
 /** Repository list kept somewhere other than config.json (VS Code extension: revspan.repositories setting). */
 export interface RepoSource {
