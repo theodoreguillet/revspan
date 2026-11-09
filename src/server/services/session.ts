@@ -8,8 +8,7 @@ import type { Store } from '../infra/config.ts';
 import type { SecretStore } from '../infra/secrets.ts';
 
 interface Connection {
-    /** Identifie l'e-mail et le jeton sans les garder en clair (longueur + fin du jeton). */
-    key: string;
+    email: string;
     client: BitbucketClient;
     profile?: User | null;
 }
@@ -67,19 +66,20 @@ export class BitbucketSession {
         this.cache.invalidateLive('live:');
     }
 
+    /** Le jeton est lu une fois (sur macOS, un sous-processus `security` par lecture) puis gardé jusqu'à reset(). */
     private async connect(): Promise<Connection> {
         const { email } = this.store.config;
+        if (this.connection && this.connection.email === email) {
+            return this.connection;
+        }
         const token = email ? await this.secrets.get(email) : null;
         if (!email || !token) {
             throw new AppError(409, 'NO_TOKEN', 'Aucun jeton Bitbucket configuré. Ouvre les réglages pour en ajouter un.');
         }
-        const key = `${email}:${token.length}:${token.slice(-6)}`;
-        if (this.connection?.key !== key) {
-            this.connection = {
-                key,
-                client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl }),
-            };
-        }
+        this.connection = {
+            email,
+            client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl }),
+        };
         return this.connection;
     }
 }

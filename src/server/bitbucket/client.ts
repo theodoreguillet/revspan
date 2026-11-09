@@ -1,7 +1,7 @@
 // Client REST Bitbucket Cloud (API 2.0) : authentification Basic e-mail + jeton API Atlassian, pagination,
-// limite de concurrence, reprises sur 429/5xx, cache disque des données immuables.
+// limite de concurrence, reprises (429/5xx pour les lectures, 429 seul pour les écritures), cache disque des données immuables.
 import type { NewComment, User } from '../../shared/api.ts';
-import { AppError } from '../errors.ts';
+import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
 import type { CompareSource, DiffstatEntry, FileContent } from '../core/compare.ts';
 import { userOf } from '../core/model.ts';
@@ -14,6 +14,7 @@ export const DEFAULT_BASE_URL = 'https://api.bitbucket.org/2.0';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const LIVE_TTL_MS = 15000;
 const REQUEST_TIMEOUT_MS = 30000;
+const MAX_REDIRECTS = 3;
 
 export interface BitbucketAuth {
     email: string;
@@ -73,7 +74,15 @@ class Semaphore {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-const encodePath = (filePath: string): string => filePath.split('/').map(encodeURIComponent).join('/');
+
+/** Encode un chemin de fichier ; refuse les segments vides, `.` et `..` (new URL() les normaliserait hors du dépôt). */
+function encodePath(filePath: string): string {
+    const segments = filePath.split('/');
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+        throw badRequest(`Chemin de fichier invalide : ${filePath}`);
+    }
+    return segments.map(encodeURIComponent).join('/');
+}
 
 export class BitbucketClient {
     private readonly baseUrl: string;
@@ -116,25 +125,30 @@ export class BitbucketClient {
         if (body !== undefined) {
             headers['Content-Type'] = 'application/json';
         }
+        // Une écriture n'est reprise que sur 429 (requête non traitée) : après un 5xx, une erreur réseau ou un délai
+        // dépassé, Bitbucket a pu l'exécuter, la renvoyer créerait un doublon.
+        const idempotent = method === 'GET';
         return this.limiter.run(async () => {
             for (let attempt = 0; ; attempt++) {
                 let response: Response;
                 try {
-                    response = await this.fetchImpl(url, {
+                    response = await this.fetchFollowingRedirects(url, {
                         method,
                         headers,
                         body: body === undefined ? undefined : JSON.stringify(body),
-                        redirect: 'follow',
-                        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                     });
                 } catch (error) {
-                    if (attempt < 2) {
+                    if (error instanceof AppError) {
+                        throw error;
+                    }
+                    if (idempotent && attempt < 2) {
                         await sleep(500 * (attempt + 1));
                         continue;
                     }
                     throw new AppError(502, 'BB_UNREACHABLE', `Bitbucket injoignable (${(error as Error).message})`);
                 }
-                if ((response.status === 429 || response.status >= 500) && attempt < 3) {
+                const retryable = response.status === 429 || (idempotent && response.status >= 500);
+                if (retryable && attempt < 3) {
                     const retryAfter = Number(response.headers.get('retry-after'));
                     await sleep(retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : 1000 * 2 ** attempt);
                     continue;
@@ -152,13 +166,49 @@ export class BitbucketClient {
         });
     }
 
+    /**
+     * Suit au plus MAX_REDIRECTS redirections (GET seulement). L'en-tête Authorization n'est envoyé qu'à l'origine
+     * de l'API configurée, jamais à un autre domaine (stockage de fichiers, CDN).
+     */
+    private async fetchFollowingRedirects(url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<Response> {
+        const apiOrigin = new URL(this.baseUrl).origin;
+        let current = url;
+        for (let hops = 0; ; hops++) {
+            const headers = { ...init.headers };
+            if (new URL(current).origin !== apiOrigin) {
+                delete headers.Authorization;
+            }
+            const response = await this.fetchImpl(current, {
+                ...init,
+                headers,
+                redirect: 'manual',
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            const location = response.headers.get('location');
+            if (response.status < 300 || response.status >= 400 || !location) {
+                return response;
+            }
+            if (init.method !== 'GET' || hops >= MAX_REDIRECTS) {
+                throw new AppError(502, 'BB_ERROR', `Redirection Bitbucket refusée sur ${new URL(url).pathname}`);
+            }
+            current = new URL(location, current).toString();
+        }
+    }
+
     private async json<T>(method: string, path: string, options: RequestOptions = {}): Promise<T | null> {
         const response = await this.send(method, path, options, 'application/json');
         if (!response || response.status === 204) {
             return null;
         }
         const text = await response.text();
-        return text ? JSON.parse(text) as T : null;
+        if (!text) {
+            return null;
+        }
+        try {
+            return JSON.parse(text) as T;
+        } catch {
+            throw errorFor(502, path.replace(/\?.*$/, ''), 'réponse non JSON');
+        }
     }
 
     private async getJson<T>(path: string, query?: Query): Promise<T> {
@@ -265,7 +315,12 @@ export class BitbucketClient {
 
     /** Contenu d'un fichier à un commit (un 404 n'est pas mis en cache : il peut être transitoire). */
     fileContent(ws: string, repo: string, hash: string, filePath: string): Promise<FileContent> {
-        const srcPath = `${this.repoPath(ws, repo)}/src/${hash}/${encodePath(filePath)}`;
+        let srcPath: string;
+        try {
+            srcPath = `${this.repoPath(ws, repo)}/src/${hash}/${encodePath(filePath)}`;
+        } catch (error) {
+            return Promise.reject(error);
+        }
         return this.cache.getOrCompute<FileContent>(`src2:${ws}/${repo}:${hash}:${filePath}`, async () => {
             const response = await this.send('GET', srcPath, { allow404: true }, '*/*');
             if (!response) {

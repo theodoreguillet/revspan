@@ -11,6 +11,7 @@ export class Cache {
     private readonly memory = new Map<string, unknown>();
     private readonly live = new Map<string, { at: number; value: unknown }>();
     private readonly pending = new Map<string, Promise<unknown>>();
+    private readonly livePending = new Map<string, Promise<unknown>>();
 
     constructor(dir: string | null) {
         this.dir = dir;
@@ -102,9 +103,22 @@ export class Cache {
         if (hit && Date.now() - hit.at < ttlMs) {
             return hit.value as T;
         }
-        const value = await compute();
-        this.live.set(key, { at: Date.now(), value });
-        return value;
+        // Calculs concurrents de même clé partagés ; une erreur n'est jamais mise en cache.
+        const pending = this.livePending.get(key);
+        if (pending) {
+            return pending as Promise<T>;
+        }
+        const promise = (async () => {
+            try {
+                const value = await compute();
+                this.live.set(key, { at: Date.now(), value });
+                return value;
+            } finally {
+                this.livePending.delete(key);
+            }
+        })();
+        this.livePending.set(key, promise);
+        return promise;
     }
 
     invalidateLive(prefix: string): void {
