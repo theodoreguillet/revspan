@@ -10,14 +10,8 @@ import type { BitbucketSession } from './session.ts';
 
 const HOME_TTL_MS = 60000;
 
-// Titles shown by the VS Code tree; the page translates the group key itself.
-const GROUP_TITLES: Record<HomeGroupKey, string> = {
-    'to-review': 'À relire',
-    'rebase-only': 'Réapprobation rapide · seulement des rebases',
-    'up-to-date': 'À jour',
-    'mine': 'Mes PR',
-    'others': 'Autres PR ouvertes',
-};
+/** Group order of the home page and the VS Code tree (each translates the key into its title). */
+const GROUP_ORDER: readonly HomeGroupKey[] = ['to-review', 'rebase-only', 'up-to-date', 'mine', 'others'];
 
 interface Card {
     group: HomeGroupKey;
@@ -59,9 +53,8 @@ export class HomeService {
             }
         }));
 
-        const groups: HomeGroup[] = (Object.keys(GROUP_TITLES) as HomeGroupKey[]).map((key) => ({
+        const groups: HomeGroup[] = GROUP_ORDER.map((key) => ({
             key,
-            title: GROUP_TITLES[key],
             prs: cards.filter((c) => c.group === key).map((c) => c.data).sort((a, b) => b.lastPushAt.localeCompare(a.lastPushAt)),
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));

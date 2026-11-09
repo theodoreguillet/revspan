@@ -10,7 +10,7 @@ export interface Badge {
     tone: BadgeTone;
 }
 
-/** Title of each home group (the server's own titles are not shown: they are not translated). */
+/** Title of each home group, translated from its key (the server sends no title). */
 export const GROUP_TITLES = {
     'to-review': 'home.group.toReview',
     'rebase-only': 'home.group.rebaseOnly',

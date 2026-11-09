@@ -99,10 +99,9 @@ export interface PrCard extends PrRef {
     newComments: number;
 }
 
+/** A home group: the page and the VS Code tree each show their own translation of the key. */
 export interface HomeGroup {
     key: HomeGroupKey;
-    /** Title shown by the VS Code tree; the page shows its own translation of the key. */
-    title: string;
     prs: PrCard[];
 }
 

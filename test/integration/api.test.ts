@@ -143,6 +143,9 @@ describe('réglages et sécurité', () => {
         await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/no-such-repo`] });
         const { body: home } = await api<Home>('GET', '/api/home');
         expect(home.errors).toEqual([expect.objectContaining({ repo: `${WS}/no-such-repo`, code: 'BB_NOT_FOUND', params: { path: expect.stringContaining('no-such-repo') } })]);
+        // Language-neutral groups: the page and the VS Code tree translate the key.
+        expect(home.groups.map((g) => Object.keys(g).sort())).toEqual(Array(5).fill(['key', 'prs']));
+        expect(home.groups.map((g) => g.key)).toEqual(['to-review', 'rebase-only', 'up-to-date', 'mine', 'others']);
 
         const email = await api<ApiErrorBody>('PUT', '/api/settings', { email: 'not-an-email' });
         expect(email.body.error).toEqual({ code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } });

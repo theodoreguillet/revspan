@@ -377,9 +377,9 @@ describe('arbre « Mes PR »', () => {
         repos: ['acme/records-api'],
         errors: [],
         groups: [
-            { key: 'to-review', title: 'À relire', prs: [card(1)] },
-            { key: 'up-to-date', title: 'À jour', prs: [] },
-            { key: 'others', title: 'Autres PR ouvertes', prs: [card(2, { lastReviewed: null, versionsCount: null })] },
+            { key: 'to-review', prs: [card(1)] },
+            { key: 'up-to-date', prs: [] },
+            { key: 'others', prs: [card(2, { lastReviewed: null, versionsCount: null })] },
         ],
     };
 
@@ -397,17 +397,17 @@ describe('arbre « Mes PR »', () => {
         expect(tree[0]?.prs[0]).toMatchObject({ description: '+2 versions · 1 with code · 💬 2' });
         expect(tree[0]?.prs[0]?.tooltip).toBe('PR 1\nacme/records-api #1 · Camille\n3 versions\n1 approval\n+2 versions\n1 with code\n💬 2');
         expect(tree[1]?.prs[0]).toMatchObject({ description: 'not reviewed yet · 💬 2' });
-        const approved = buildHomeTree({ ...home, groups: [{ key: 'mine', title: 'Mes PR', prs: [card(3, { myApproval: true, approvals: 2, newVersions: 1 })] }] }, en);
+        const approved = buildHomeTree({ ...home, groups: [{ key: 'mine', prs: [card(3, { myApproval: true, approvals: 2, newVersions: 1 })] }] }, en);
         expect(approved.map((g) => g.label)).toEqual(['My PRs (1)']);
         expect(approved[0]?.prs[0]?.description).toBe('💬 2 · ✓ approved');
         expect(approved[0]?.prs[0]?.tooltip).toContain('2 approvals');
     });
 
     it('plurals follow the display language: 0 and 1 are singular in French, only 1 in English', () => {
-        const zero = { ...home, groups: [{ key: 'others' as const, title: '', prs: [card(4, { versionsCount: 0, approvals: 0 })] }] };
+        const zero = { ...home, groups: [{ key: 'others' as const, prs: [card(4, { versionsCount: 0, approvals: 0 })] }] };
         expect(buildHomeTree(zero, fr)[0]?.prs[0]?.tooltip).toContain('\n0 version\n');
         expect(buildHomeTree(zero, en)[0]?.prs[0]?.tooltip).toContain('\n0 versions\n');
-        const one = { ...home, groups: [{ key: 'to-review' as const, title: '', prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
+        const one = { ...home, groups: [{ key: 'to-review' as const, prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
         expect(buildHomeTree(one, en)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
         expect(buildHomeTree(one, fr)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
     });
