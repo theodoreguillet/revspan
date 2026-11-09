@@ -2,7 +2,7 @@
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
-import { computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
+import { approvalHoldsSince, buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
 import type { BitbucketSession } from './session.ts';
@@ -105,6 +105,10 @@ export class HomeService {
         const newKinds = versions.slice(lastReviewed ?? 0).map((v) => local.kinds[v.hash.slice(0, 12)]);
         const allKnown = newKinds.every(Boolean);
         const newCodeVersions = allKnown ? newKinds.filter((k) => k === 'code' || k === 'deps').length : null;
+        const myApprovedVersion = base.myApproval
+            ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
+            : null;
+        const approvalHolds = approvalHoldsSince(myApprovedVersion, versions.map((v) => local.kinds[v.hash.slice(0, 12)]));
         const since = review.lastReviewedAt;
         const newComments = since
             ? activity.filter((e) => e.comment && e.comment.user?.uuid !== meUuid && !e.comment.deleted
@@ -117,7 +121,8 @@ export class HomeService {
         } else if (lastReviewed !== null && newVersions === 0) {
             group = 'up-to-date';
         } else if (lastReviewed !== null && newCodeVersions === 0) {
-            group = 'rebase-only';
+            // Seulement des rebases depuis ma relecture : rien à faire si mon approbation tient encore sur Bitbucket.
+            group = approvalHolds ? 'up-to-date' : 'rebase-only';
         } else {
             group = 'to-review';
         }

@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../../src/server/bitbucket/types.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, previousAvailable, versionAt,
+    approvalHoldsSince, buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, previousAvailable, versionAt,
 } from '../../src/server/core/model.ts';
+
+describe('approvalHoldsSince', () => {
+    it('vaut pour la dernière version si tout ce qui suit la version approuvée est connu et neutre', () => {
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'rebase-only'])).toBe(true);
+        expect(approvalHoldsSince(5, ['creation', 'code', 'code', 'code', 'code'])).toBe(true);
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'code'])).toBe(false);
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', undefined])).toBe(false);
+        expect(approvalHoldsSince(null, ['creation'])).toBe(false);
+    });
+});
 
 const ME = '{me}';
 const CAM = '{cam}';

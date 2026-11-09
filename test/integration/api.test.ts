@@ -307,4 +307,16 @@ describe('accueil', () => {
         const { body } = await api<Home>('GET', '/api/home');
         expect(body.groups.find((g) => g.key === 'up-to-date')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.main]);
     });
+
+    it('seulement des rebases depuis mon approbation, que Bitbucket a gardée : « à jour », pas de réapprobation', async () => {
+        const { fake } = await setup();
+        const me = fake.data.prs.get(FAKE_PRS.rebaseOnly)?.pr.participants.find((p) => p.user?.uuid === '{me}');
+        expect(me).toBeTruthy();
+        Object.assign(me!, { approved: true, state: 'approved' });
+        await api('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
+        const { body } = await api<Home>('GET', '/api/home');
+        const groupOf = (id: number): string | undefined => body.groups.find((g) => g.prs.some((p) => p.id === id))?.key;
+        expect(groupOf(FAKE_PRS.rebaseOnly)).toBe('up-to-date');
+        expect(body.groups.flatMap((g) => g.prs).find((p) => p.id === FAKE_PRS.rebaseOnly)).toMatchObject({ myApproval: true, newVersions: 1, newCodeVersions: 0 });
+    });
 });

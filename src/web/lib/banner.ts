@@ -1,5 +1,6 @@
 // Bandeau de reprise : ce qui a changé depuis ma dernière relecture.
 import type { PrDetail, Version, VersionSummary } from '../../shared/api.ts';
+import { approvalHolds } from './approvals.ts';
 import { fmtDay, frList, masterMasked, MINUS, plural } from './format.ts';
 import { CODE_KINDS, type SummaryMap, TRIVIAL_KINDS } from './kinds.ts';
 import { filesSegs } from './describe.ts';
@@ -99,15 +100,18 @@ export function bannerModel(data: PrDetail, sums: SummaryMap, summaryLoaded: boo
         const masterFiles = after.reduce((s, v) => s + (sumOf(v)?.masterFiles ?? 0), 0);
         const me = data.me ? data.participants.find((p) => p.user?.uuid === data.me?.uuid) : undefined;
         const mine = !!data.me && data.pr.author?.uuid === data.me.uuid;
-        const approvedLatest = !!me?.approved && me.approvedVersion != null && me.approvedVersion >= n;
+        const holds = approvalHolds(me, sums, n, true);
         const lines: Seg[][] = [[`Rien à relire${masterFiles ? ` · ${masterMasked(masterFiles)}` : ''}${comments ? '' : ' · aucun nouveau commentaire'}`]];
+        if (holds && !mine) {
+            lines.push([`Ton approbation${me?.approvedVersion ? ` de v${me.approvedVersion}` : ''} reste valable sur Bitbucket`]);
+        }
         if (comments) {
             lines.push(comments);
         }
         if (msgChanged) {
             lines.push(['message du commit modifié']);
         }
-        const canReapprove = !mine && !approvedLatest && data.pr.state === 'OPEN';
+        const canReapprove = !mine && !holds && data.pr.state === 'OPEN';
         return {
             ...base,
             variant: 'fast',

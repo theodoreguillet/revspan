@@ -12,7 +12,7 @@ const page = usePrPage();
 const pr = computed(() => page.detail.pr);
 const n = computed(() => page.n);
 const approvals = computed(() => approvalItems(page.detail, page.sums, !!page.summary));
-const mine = computed(() => myActions(page.detail));
+const mine = computed(() => myActions(page.detail, page.sums, !!page.summary));
 const hasMe = computed(() => !!page.detail.me);
 </script>
 
@@ -55,7 +55,7 @@ const hasMe = computed(() => !!page.detail.me);
                     {{ mine.changesActive ? 'Modifs demandées ✕' : 'Demander des modifs' }}
                 </button>
                 <button
-                    v-if="mine.approvedLatest"
+                    v-if="mine.approvalHolds"
                     type="button"
                     :class="['rv-btn', { busy: page.busy(ACTION_KEYS.approve) }]"
                     data-action="unapprove"

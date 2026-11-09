@@ -31,6 +31,21 @@ export function staleness(approvedVersion: number | null, sums: SummaryMap, n: n
     return { code, deps, text: code.length ? `code modifié en ${list(code)}` : `dépendances modifiées en ${list(deps)}` };
 }
 
+/**
+ * Mon approbation vaut pour la dernière version : toujours active sur Bitbucket (qui ne la retire pas forcément à chaque
+ * push) et rien de l'auteur depuis (seulement des rebases ou le message). Tant que le résumé n'est pas chargé,
+ * l'état de Bitbucket fait foi.
+ */
+export function approvalHolds(part: Participant | null | undefined, sums: SummaryMap, n: number, summaryLoaded: boolean): boolean {
+    if (!part?.approved) {
+        return false;
+    }
+    if (part.approvedVersion == null || part.approvedVersion >= n || !summaryLoaded) {
+        return true;
+    }
+    return staleness(part.approvedVersion, sums, n) === null;
+}
+
 export type ApprovalItem =
     | { kind: 'approved'; name: string; version: number | null; stale: Staleness | null; title: string }
     | { kind: 'changes'; name: string; version: number | null; title: string }
@@ -84,21 +99,22 @@ export interface MyActions {
     /** PR fermée : boutons désactivés. */
     closed: boolean;
     changesActive: boolean;
-    /** J'ai approuvé la dernière version : bouton « Retirer l'approbation ». */
-    approvedLatest: boolean;
-    /** J'ai approuvé une version plus ancienne : « Réapprouver ». */
+    /** Mon approbation vaut pour la dernière version (voir approvalHolds) : bouton « Retirer l'approbation ». */
+    approvalHolds: boolean;
+    /** J'ai approuvé, mais l'auteur a changé du code ou des dépendances depuis : « Réapprouver ». */
     reapprove: boolean;
 }
 
-export function myActions(data: PrDetail): MyActions {
+export function myActions(data: PrDetail, sums: SummaryMap, summaryLoaded: boolean): MyActions {
     const n = data.versions.length;
     const me = data.me;
     const part = me ? data.participants.find((p) => p.user?.uuid === me.uuid) ?? null : null;
+    const holds = approvalHolds(part, sums, n, summaryLoaded);
     return {
         mine: !!me && data.pr.author?.uuid === me.uuid,
         closed: data.pr.state !== 'OPEN',
         changesActive: part?.state === 'changes_requested',
-        approvedLatest: !!part?.approved && (part.approvedVersion == null || part.approvedVersion >= n),
-        reapprove: !!part?.approved,
+        approvalHolds: holds,
+        reapprove: !!part?.approved && !holds,
     };
 }

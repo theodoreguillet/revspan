@@ -18,7 +18,7 @@ export const FAKE_PRS = {
     main: 42,
     /** 34 versions de juin à octobre, 5 rebases, chacune modifie src/Long.ts ; j'ai approuvé v30. */
     long: 43,
-    /** v1 avec du code, mon approbation, puis v2 = rebase pur. */
+    /** v1 avec du code, mon approbation (retirée par Bitbucket au push suivant), puis v2 = rebase pur. */
     rebaseOnly: 44,
     /** Ma PR (2 versions), approuvée par Yann. */
     mine: 45,
@@ -229,8 +229,9 @@ function rebaseOnlyPr(b: FakeBuilder): void {
     b.pr(FAKE_PRS.rebaseOnly, {
         title: 'DEMO-44 - fix(r): rebase only since review',
         author: CAM,
+        // Mon approbation de v1 a été retirée par Bitbucket au push de v2 (réglage du dépôt) : réapprobation rapide.
         participants: [
-            { user: ME, role: 'REVIEWER', approved: true, state: 'approved' },
+            { user: ME, role: 'REVIEWER', approved: false, state: null },
             { user: CAM, role: 'PARTICIPANT', approved: false, state: null },
         ],
         plan: [

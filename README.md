@@ -66,6 +66,7 @@ Sans `read:user:bitbucket`, l'outil marche mais ne reconnaît pas tes PR ni tes 
 - **Discussions** : fils relocalisés sur la version affichée (« ligne modifiée depuis »), réponses, résolution ;
   commentaire sur une ligne de la dernière version.
 - **Approuver / demander des modifs**, avec la version approuvée par chacun (« périmée » si du code a changé depuis).
+  Une approbation que Bitbucket garde après des rebases seuls reste valable : rien à réapprouver.
 
 Raccourcis : `j`/`k` fichier, `n`/`p` fil, `v` vu, `[`/`]` version, `?` aide.
 

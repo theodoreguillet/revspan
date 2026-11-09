@@ -51,23 +51,24 @@ describe('bannerModel', () => {
         expect(model.action).toBe('mark');
     });
 
-    it('seulement des rebases depuis ma relecture : réapprobation rapide', () => {
+    it('seulement des rebases depuis mon approbation, toujours active sur Bitbucket : rien à réapprouver', () => {
         const { data, sums } = loadPr('rebase');
         const model = bannerModel(data, sums, true);
-        expect(model).toMatchObject({ variant: 'fast', action: 'reapprove', rule: false });
+        expect(model).toMatchObject({ variant: 'fast', action: 'mark', rule: false });
         expect(model.head).toBe('Depuis ta relecture de v9 : seulement des rebases, aucun changement de l\'auteur');
-        expect(lines(model)).toEqual(['Rien à relire · 41 fichiers de master masqués · aucun nouveau commentaire']);
+        expect(lines(model)).toEqual(['Rien à relire · 41 fichiers de master masqués · aucun nouveau commentaire', 'Ton approbation de v9 reste valable sur Bitbucket']);
     });
 
-    it('réapprobation rapide impossible sur ma PR ou si la dernière version est déjà approuvée', () => {
+    it('approbation retirée par Bitbucket au push : réapprobation rapide (sauf sur ma PR)', () => {
         const { data, sums } = loadPr('rebase');
-        const mine = bannerModel({ ...data, pr: { ...data.pr, author: data.me } }, sums, true);
-        expect(mine.action).toBe('mark');
-        const approved = bannerModel({
+        const reset = {
             ...data,
-            participants: data.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approvedVersion: 10 } : p)),
-        }, sums, true);
-        expect(approved.action).toBe('mark');
+            participants: data.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approved: false, state: null } : p)),
+        };
+        const model = bannerModel(reset, sums, true);
+        expect(model.action).toBe('reapprove');
+        expect(lines(model)).toEqual(['Rien à relire · 41 fichiers de master masqués · aucun nouveau commentaire']);
+        expect(bannerModel({ ...reset, pr: { ...reset.pr, author: reset.me } }, sums, true).action).toBe('mark');
     });
 
     it('beaucoup de versions sans code : une ligne de synthèse', () => {

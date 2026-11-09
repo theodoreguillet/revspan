@@ -18,6 +18,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selo
 
 - Une PR dont une ancienne version a été effacée par Bitbucket (commit écrasé par un force-push) ne s'ouvrait plus
   (« Introuvable sur Bitbucket : …/commit/… »). Ces versions sont désormais affichées « indisponibles » dans la frise.
+- Une approbation que Bitbucket garde après des rebases seuls n'est plus présentée comme à refaire : « Retirer
+  l'approbation » au lieu de « Réapprouver », bandeau « Marquer vN comme relue », PR « À jour » sur l'accueil.
 
 ## [2.0.0] - 2026-11-06
 
