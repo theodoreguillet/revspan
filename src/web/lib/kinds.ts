@@ -3,7 +3,7 @@ import type { Summary, VersionKind, VersionSummary } from '../../shared/api.ts';
 
 export type SummaryMap = Map<number, VersionSummary>;
 
-export const MUTED_KINDS: ReadonlySet<VersionKind> = new Set(['deps', 'rebase-only', 'message-only', 'none']);
+export const MUTED_KINDS: ReadonlySet<VersionKind> = new Set(['deps', 'rebase-only', 'message-only', 'none', 'unavailable']);
 export const CODE_KINDS: ReadonlySet<VersionKind> = new Set(['code', 'creation']);
 /** Versions sans aucun changement de l'auteur (réapprobation rapide possible). */
 export const TRIVIAL_KINDS: ReadonlySet<VersionKind> = new Set(['rebase-only', 'none', 'message-only']);
@@ -15,6 +15,7 @@ export const KIND_LABELS: Record<VersionKind, string> = {
     'rebase-only': 'rebase seul',
     'message-only': 'message',
     none: 'rien',
+    unavailable: 'indisponible',
 };
 
 export function summaryMap(summary: Summary | null | undefined): SummaryMap {

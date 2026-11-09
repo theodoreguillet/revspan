@@ -9,43 +9,65 @@ export interface Range {
     to: number;
 }
 
-/** Nouvelle plage après un clic (Maj = étendre) sur la version i (0 = master). */
-export function clickSelection({ from, to }: Range, i: number, shift: boolean): Range {
+/** Versions indisponibles (commit effacé par Bitbucket) : ni sélectionnables ni comparables. */
+export type Unavailable = ReadonlySet<number>;
+const NONE: Unavailable = new Set();
+
+export function unavailableVersions(versions: readonly Pick<Version, 'index' | 'available'>[]): Set<number> {
+    return new Set(versions.filter((v) => !v.available).map((v) => v.index));
+}
+
+/** Borne « de » ramenée sur la dernière version lisible ≤ k (0 = base master). */
+export function floorAvailable(k: number, unavailable: Unavailable = NONE): number {
+    let index = k;
+    while (index > 0 && unavailable.has(index)) {
+        index--;
+    }
+    return index;
+}
+
+/** Nouvelle plage après un clic (Maj = étendre) sur la version i (0 = master) ; une version indisponible ne fait rien. */
+export function clickSelection({ from, to }: Range, i: number, shift: boolean, unavailable: Unavailable = NONE): Range {
     if (i === 0) {
         return { from: 0, to };
     }
+    if (unavailable.has(i)) {
+        return { from, to };
+    }
+    const before = floorAvailable(i - 1, unavailable);
     if (!shift) {
-        return { from: i - 1, to: i };
+        return { from: before, to: i };
     }
     if (i > to) {
         return { from, to: i };
     }
     if (i <= from) {
-        return { from: i - 1, to };
+        return { from: before, to };
     }
     // dans la plage : on déplace la borne la plus proche
-    return i - from <= to - i ? { from: i - 1, to } : { from, to: i };
+    return i - from <= to - i ? { from: before, to } : { from, to: i };
 }
 
 /** Plage par défaut à l'ouverture d'une PR. */
-export function defaultSelection(n: number, lastReviewed: number | null): Range {
+export function defaultSelection(n: number, lastReviewed: number | null, unavailable: Unavailable = NONE): Range {
     if (lastReviewed != null && lastReviewed >= 1 && lastReviewed < n) {
-        return { from: lastReviewed, to: n };
+        return { from: floorAvailable(lastReviewed, unavailable), to: n };
     }
     if (lastReviewed != null && lastReviewed >= n && n > 1) {
-        return { from: n - 1, to: n };
+        return { from: floorAvailable(n - 1, unavailable), to: n };
     }
     return { from: 0, to: n };
 }
 
-export function isValidSelection(n: number, from: number | null, to: number | null): boolean {
-    return from != null && to != null && Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to <= n && from < to;
+export function isValidSelection(n: number, from: number | null, to: number | null, unavailable: Unavailable = NONE): boolean {
+    return from != null && to != null && Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to <= n && from < to
+        && !unavailable.has(from) && !unavailable.has(to);
 }
 
-/** Sélection d'une seule version i : (i-1 → i), bornée à 1..n. */
-export function singleVersion(n: number, i: number): Range {
+/** Sélection d'une seule version i : (dernière lisible avant i → i), bornée à 1..n. */
+export function singleVersion(n: number, i: number, unavailable: Unavailable = NONE): Range {
     const v = Math.min(Math.max(i, 1), n);
-    return { from: v - 1, to: v };
+    return { from: floorAvailable(v - 1, unavailable), to: v };
 }
 
 export type PresetKey = 'since' | 'last' | 'all';
@@ -55,13 +77,13 @@ export interface Preset extends Range {
     label: string;
 }
 
-export function presets(n: number, lastReviewed: number | null): Preset[] {
+export function presets(n: number, lastReviewed: number | null, unavailable: Unavailable = NONE): Preset[] {
     const out: Preset[] = [];
     if (lastReviewed != null && lastReviewed >= 1 && lastReviewed < n) {
-        out.push({ key: 'since', label: 'Depuis ma relecture', from: lastReviewed, to: n });
+        out.push({ key: 'since', label: 'Depuis ma relecture', from: floorAvailable(lastReviewed, unavailable), to: n });
     }
     if (n > 1) {
-        out.push({ key: 'last', label: 'Dernière version', from: n - 1, to: n });
+        out.push({ key: 'last', label: 'Dernière version', from: floorAvailable(n - 1, unavailable), to: n });
     }
     out.push({ key: 'all', label: 'Tout vs master', from: 0, to: n });
     return out;

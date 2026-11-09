@@ -11,6 +11,7 @@ export type ErrorCode =
     | 'BB_UNREACHABLE'
     | 'BB_ERROR'
     | 'BAD_REQUEST'
+    | 'VERSION_UNAVAILABLE'
     | 'FORBIDDEN'
     | 'NOT_FOUND'
     | 'INTERNAL';
@@ -114,12 +115,17 @@ export interface Version {
     pushedBy: User | null;
     /** master au moment du push. */
     destHash: string;
-    /** merge-base réelle. */
+    /** merge-base réelle (vide si la version est indisponible). */
     base: string;
     baseShort: string;
     isRebase: boolean;
     message: string;
     messageChanged: boolean;
+    /**
+     * false : Bitbucket a effacé le commit (ancienne version écrasée par un force-push) ; contenu illisible,
+     * la version reste dans la frise mais ne peut pas être comparée.
+     */
+    available: boolean;
 }
 
 export type ReviewState = 'approved' | 'changes_requested';
@@ -187,12 +193,14 @@ export interface PrDetail {
     threads: Thread[];
 }
 
-export type VersionKind = 'creation' | 'code' | 'deps' | 'rebase-only' | 'message-only' | 'none';
+export type VersionKind = 'creation' | 'code' | 'deps' | 'rebase-only' | 'message-only' | 'none' | 'unavailable';
 export type FileCategory = 'code' | 'deps';
 
 export interface VersionSummary {
     index: number;
     kind: VersionKind;
+    /** Version de référence quand ce n'est pas la précédente (versions intermédiaires indisponibles) ; 0 = base. */
+    since?: number;
     /** Lignes de l'auteur, après retrait du bruit master. */
     added: number;
     removed: number;

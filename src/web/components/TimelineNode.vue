@@ -17,6 +17,7 @@ const inRange = computed(() => i.value > page.from && i.value <= page.to);
 const classes = computed(() => ['rv-v', {
     reb: props.version.isRebase,
     nocode: isMuted(sum.value),
+    gone: !props.version.available,
     new: lastReviewed.value == null || i.value > lastReviewed.value,
     from: i.value === page.from,
     to: i.value === page.to,
@@ -31,8 +32,9 @@ const title = computed(() => nodeTooltip(props.version, sum.value, { lastReviewe
         :class="classes"
         :data-i="i"
         :title="title"
-        :aria-label="`Version ${i}`"
+        :aria-label="version.available ? `Version ${i}` : `Version ${i} indisponible`"
         :aria-pressed="inRange"
+        :aria-disabled="!version.available"
         @click="page.clickVersion(i, $event.shiftKey)"
     >
         <span class="tag de">de</span>

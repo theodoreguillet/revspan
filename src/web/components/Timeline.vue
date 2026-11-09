@@ -27,7 +27,7 @@ const text = computed(() => {
     const stats = cmp && cmp.from === page.from && cmp.to === page.to ? cmp.stats : null;
     return readout({ from: page.from, to: page.to, versions: versions.value, sums: page.sums, stats, destBranch: dest.value });
 });
-const presetList = computed(() => presets(page.n, lastReviewed.value));
+const presetList = computed(() => presets(page.n, lastReviewed.value, page.unavailable));
 
 const band = (after: number): boolean => inBand(after, page.from, page.to);
 

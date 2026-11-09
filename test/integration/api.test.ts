@@ -179,6 +179,28 @@ describe('lecture d\'une PR', () => {
         const { body } = await api<Summary>('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
         expect(body.versions.map((v) => v.kind)).toEqual(['creation', 'rebase-only']);
     });
+
+    it('version effacée par Bitbucket : page chargée, v1 indisponible, résumés et comparaisons sans elle', async () => {
+        await setup();
+        const pr = await detail(FAKE_PRS.purged);
+        expect(pr.versions.map((v) => [v.index, v.available, v.isRebase])).toEqual([[1, false, false], [2, true, false], [3, true, false]]);
+        expect(pr.versions[0]).toMatchObject({ base: '', message: '' });
+        expect(pr.review.lastReviewed).toBe(1);
+
+        const { body: summary } = await api<Summary>('GET', `${prPath(FAKE_PRS.purged)}/summary`);
+        expect(summary.versions.map((s) => [s.kind, s.since ?? null, s.added])).toEqual([['unavailable', null, 0], ['code', 0, 1], ['code', null, 1]]);
+
+        const refused = await api<ApiErrorBody>('GET', `${prPath(FAKE_PRS.purged)}/compare?from=1&to=3`);
+        expect(refused.status).toBe(410);
+        expect(refused.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE' });
+        expect(refused.body.error.message).toContain('v1');
+
+        // Le fil posé sur v1 reste visible, au niveau du fichier (sa position d'origine est illisible).
+        const { body: full } = await api<Comparison>('GET', `${prPath(FAKE_PRS.purged)}/compare?from=0&to=3`);
+        expect(full.stats).toEqual({ files: 1, added: 2, removed: 0 });
+        const thread = pr.threads.find((t) => t.path === 'src/Purged.ts');
+        expect(full.files[0]?.threads.find((p) => p.threadId === thread?.id)).toMatchObject({ line: null, moved: false });
+    });
 });
 
 describe('actions', () => {
@@ -272,6 +294,7 @@ describe('accueil', () => {
             [FAKE_PRS.mine]: 'mine',
             [FAKE_PRS.neverReviewed]: 'to-review',
             [FAKE_PRS.others]: 'others',
+            [FAKE_PRS.purged]: 'to-review',
         });
         const card = (id: number): PrCard | undefined => body.groups.flatMap((g) => g.prs).find((p) => p.id === id);
         expect(card(FAKE_PRS.main)).toMatchObject({ versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, newComments: 2 });

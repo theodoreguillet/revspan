@@ -6,7 +6,7 @@ import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbActivity, BbPullRequest } from '../bitbucket/types.ts';
 import { compareVersions, fileSides, placeThreads, summarizeVersion } from '../core/compare.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, prInfo, userOf,
+    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf,
 } from '../core/model.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -14,7 +14,7 @@ import { prKeyOf, type Store } from '../infra/config.ts';
 import type { BitbucketSession } from './session.ts';
 
 /** À incrémenter si le calcul des résumés change (invalide le cache disque). */
-const SUMMARY_VERSION = 2;
+const SUMMARY_VERSION = 3;
 
 interface LoadedPr {
     client: BitbucketClient;
@@ -42,10 +42,10 @@ export class PrService {
     async summary(ref: PrRef): Promise<Summary> {
         const { client, versions } = await this.load(ref);
         const src = client.source(ref.workspace, ref.repo);
-        const results = await Promise.all(versions.map((v) => this.cache.getOrCompute(
-            summaryKey(ref, v, versions[v.index - 2]),
-            () => summarizeVersion(src, versions, v.index),
-        )));
+        // Version indisponible : résumé immédiat, jamais mis en cache.
+        const results = await Promise.all(versions.map((v) => (v.available
+            ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
+            : summarizeVersion(src, versions, v.index))));
         // Mémorise le type de chaque version pour l'accueil (pas de recalcul là-bas).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
@@ -60,9 +60,7 @@ export class PrService {
 
     async compare(ref: PrRef, from: number, to: number, context: number): Promise<Comparison> {
         const { client, versions, detail } = await this.load(ref);
-        if (to > versions.length || from >= to) {
-            throw badRequest(`Comparaison invalide : de ${from} à ${to} (versions 1 à ${versions.length}).`);
-        }
+        assertComparable(versions, from, to);
         const src = client.source(ref.workspace, ref.repo);
         const result = await compareVersions(src, versions, from, to, { context });
         return placeThreads(src, versions, result, detail.threads);
@@ -71,9 +69,7 @@ export class PrService {
     /** Contenu des deux côtés d'un fichier, tel que comparé (pour l'éditeur de diff de VS Code). */
     async fileSides(ref: PrRef, from: number, to: number, file: { path: string; oldPath: string | null }): Promise<{ oldText: string; newText: string }> {
         const { client, versions } = await this.load(ref);
-        if (to > versions.length || from >= to) {
-            throw badRequest(`Comparaison invalide : de ${from} à ${to} (versions 1 à ${versions.length}).`);
-        }
+        assertComparable(versions, from, to);
         return fileSides(client.source(ref.workspace, ref.repo), versions, from, to, file);
     }
 
@@ -212,6 +208,7 @@ export class PrService {
 /** Versions de la PR : commit de chaque push + base réelle (merge-base avec master au moment du push). */
 async function loadVersions(client: BitbucketClient, ref: PrRef, pr: BbPullRequest, activity: BbActivity[]): Promise<Version[]> {
     const updates = extractUpdates(activity, pr);
+    // null : commit effacé par Bitbucket (version écrasée par un force-push), la version est marquée indisponible.
     const commits = await Promise.all(updates.map((u) => client.commit(ref.workspace, ref.repo, u.hash)));
     const bases = await Promise.all(updates.map(async (update, i) => {
         const commit = commits[i];
@@ -223,7 +220,19 @@ async function loadVersions(client: BitbucketClient, ref: PrRef, pr: BbPullReque
     return buildVersions(updates, commits, bases);
 }
 
-/** Clé de cache d'un résumé : dépend uniquement des commits (immuables) de la version et de la précédente. */
+/** Bornes valides et versions lisibles (une version dont Bitbucket a effacé le commit ne peut pas être comparée). */
+function assertComparable(versions: readonly Version[], from: number, to: number): void {
+    if (to > versions.length || from >= to) {
+        throw badRequest(`Comparaison invalide : de ${from} à ${to} (versions 1 à ${versions.length}).`);
+    }
+    const unreadable = [from, to].find((index) => index > 0 && !isReadable(versions[index - 1]));
+    if (unreadable !== undefined) {
+        throw new AppError(410, 'VERSION_UNAVAILABLE',
+            `La version v${unreadable} n'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).`);
+    }
+}
+
+/** Clé de cache d'un résumé : dépend uniquement des commits (immuables) de la version et de sa version de référence. */
 function summaryKey(ref: PrRef, v: Version, prev: Version | undefined): string {
     const previous = prev ? `${prev.hash}:${prev.base}` : 'creation';
     return `summary:${SUMMARY_VERSION}:${ref.workspace}/${ref.repo}:${previous}:${v.hash}:${v.base}:${v.isRebase}:${v.messageChanged}`;

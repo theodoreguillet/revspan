@@ -49,9 +49,11 @@ export interface VersionOptions {
     messageChanged?: number[];
     /** Écart en jours entre deux pushs (à partir du 1er juin 2026, midi UTC). */
     stepDays?: number;
+    /** Versions dont Bitbucket a effacé le commit. */
+    unavailable?: number[];
 }
 
-export function makeVersions(count: number, { rebases = [], messageChanged = [], stepDays = 1 }: VersionOptions = {}): Version[] {
+export function makeVersions(count: number, { rebases = [], messageChanged = [], stepDays = 1, unavailable = [] }: VersionOptions = {}): Version[] {
     return Array.from({ length: count }, (_, k) => ({
         index: k + 1,
         hash: `h${k + 1}`.padEnd(40, '0'),
@@ -64,6 +66,7 @@ export function makeVersions(count: number, { rebases = [], messageChanged = [],
         isRebase: rebases.includes(k + 1),
         message: 'msg',
         messageChanged: messageChanged.includes(k + 1),
+        available: !unavailable.includes(k + 1),
     }));
 }
 

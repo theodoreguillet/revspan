@@ -9,6 +9,7 @@ import { buildHunks, diffLines, diffStats, NO_EOL, splitDiffLines } from './diff
 import { merge3 } from './merge3.ts';
 import { mapLine } from './linemap.ts';
 import { categoryOf, sameHash } from './classify.ts';
+import { isReadable, previousAvailable } from './model.ts';
 
 const MAX_LINES = 60000;
 
@@ -37,7 +38,8 @@ export interface CompareSource {
     content(hash: string, path: string): Promise<FileContent>;
 }
 
-export type CompareVersion = Pick<Version, 'index' | 'hash' | 'base' | 'message' | 'isRebase' | 'messageChanged'>;
+/** Version comparée ; `available` absent = lisible. */
+export type CompareVersion = Pick<Version, 'index' | 'hash' | 'base' | 'message' | 'isRebase' | 'messageChanged'> & Partial<Pick<Version, 'available'>>;
 
 export class InvalidComparisonError extends Error {
     override name = 'InvalidComparisonError';
@@ -329,8 +331,9 @@ export async function placeThreads(
             if (thread.version === result.to) {
                 line = anchorLine;
             } else {
+                // Version du fil indisponible (commit effacé) : position d'origine illisible, fil laissé au niveau du fichier.
                 const vc = versions[thread.version - 1];
-                if (vc) {
+                if (vc && isReadable(vc)) {
                     const [oldContent, newContent] = await Promise.all([src.content(vc.hash, thread.path), src.content(vb.hash, file.path)]);
                     const oldSide = sideOf(oldContent);
                     const newSide = sideOf(newContent);
@@ -352,20 +355,42 @@ export async function placeThreads(
     return result;
 }
 
-/** Ce que l'auteur a changé dans une version (par rapport à la précédente, bruit master retiré). */
+type SummaryFile = VersionSummary['files'][number];
+
+/** Type d'une version d'après les fichiers changés par l'auteur. */
+function kindOf(files: readonly SummaryFile[], version: CompareVersion): VersionKind {
+    if (files.length > 0) {
+        return files.every((f) => f.category === 'deps') ? 'deps' : 'code';
+    }
+    if (version.isRebase) {
+        return 'rebase-only';
+    }
+    return version.messageChanged ? 'message-only' : 'none';
+}
+
+/**
+ * Ce que l'auteur a changé dans une version, bruit master retiré : par rapport à la précédente, ou à la dernière
+ * version lisible si les intermédiaires sont indisponibles (`since`), ou à la base s'il n'y en a aucune.
+ */
 export async function summarizeVersion(src: CompareSource, versions: readonly CompareVersion[], index: number): Promise<VersionSummary> {
     const version = versions[index - 1];
     if (!version) {
         throw new InvalidComparisonError(`Version inconnue : ${index}`);
     }
-    if (index === 1) {
-        const files = (await src.diffstat(version.hash, version.base)).map((e) => {
+    if (!isReadable(version)) {
+        return { index, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 };
+    }
+    const since = previousAvailable(versions, index);
+    const sinceField = since === index - 1 ? {} : { since };
+    if (since === 0) {
+        const files = (await src.diffstat(version.hash, version.base)).map((e): SummaryFile => {
             const path = pathOf(e);
             return { path, added: e.added, removed: e.removed, category: categoryOf(path) };
         });
         return {
             index,
-            kind: 'creation',
+            kind: index === 1 ? 'creation' : kindOf(files, version),
+            ...sinceField,
             added: files.reduce((sum, f) => sum + f.added, 0),
             removed: files.reduce((sum, f) => sum + f.removed, 0),
             files,
@@ -373,17 +398,12 @@ export async function summarizeVersion(src: CompareSource, versions: readonly Co
             conflicts: 0,
         };
     }
-    const result = await compareVersions(src, versions, index - 1, index, { withHunks: false });
-    const files = result.files.map(({ path, added, removed, category }) => ({ path, added, removed, category }));
-    let kind: VersionKind;
-    if (files.length === 0) {
-        kind = version.isRebase ? 'rebase-only' : version.messageChanged ? 'message-only' : 'none';
-    } else {
-        kind = files.every((f) => f.category === 'deps') ? 'deps' : 'code';
-    }
+    const result = await compareVersions(src, versions, since, index, { withHunks: false });
+    const files = result.files.map(({ path, added, removed, category }): SummaryFile => ({ path, added, removed, category }));
     return {
         index,
-        kind,
+        kind: kindOf(files, version),
+        ...sinceField,
         added: result.stats.added,
         removed: result.stats.removed,
         files,

@@ -38,7 +38,8 @@
       "baseShort": "11b7943",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 2,
@@ -55,7 +56,8 @@
       "baseShort": "11b7943",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 3,
@@ -72,7 +74,8 @@
       "baseShort": "11b7943",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 4,
@@ -89,7 +92,8 @@
       "baseShort": "11b7943",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 5,
@@ -106,7 +110,8 @@
       "baseShort": "9d36749",
       "isRebase": true,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 6,
@@ -123,7 +128,8 @@
       "baseShort": "9d36749",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 7,
@@ -140,7 +146,8 @@
       "baseShort": "5d191a4",
       "isRebase": true,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 8,
@@ -157,7 +164,8 @@
       "baseShort": "5d191a4",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 9,
@@ -174,7 +182,8 @@
       "baseShort": "5d191a4",
       "isRebase": false,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     },
     {
       "index": 10,
@@ -191,7 +200,8 @@
       "baseShort": "2e2b735",
       "isRebase": true,
       "message": "DEMO-118 - fix(report): trim labels in the PDF report",
-      "messageChanged": false
+      "messageChanged": false,
+      "available": true
     }
   ],
   "participants": [

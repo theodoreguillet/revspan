@@ -8,7 +8,7 @@ run-against-fake.ts démarre le faux Bitbucket et le serveur, puis lance ce scri
     STRATA_BASE_URL    URL du serveur Strata (obligatoire).
     STRATA_CALLS_URL   Journal des écritures reçues par le faux Bitbucket (GET → JSON array).
     STRATA_PR          PR principale, « workspace/dépôt/id » (acme/demo-repo/42).
-    STRATA_FAKE_PRS    JSON des PR du faux Bitbucket : main, long, rebaseOnly, mine, neverReviewed, others.
+    STRATA_FAKE_PRS    JSON des PR du faux Bitbucket : main, long, rebaseOnly, mine, neverReviewed, others, purged.
     STRATA_FAKE_EMAIL, STRATA_FAKE_TOKEN   Identifiants du faux Bitbucket (remise du jeton après suppression).
 Options :
     STRATA_SHOTS_DIR   Dossier des captures (défaut : <tmp>/strata-shots).
@@ -637,6 +637,23 @@ def run_checks(page):
             expect(page.locator('.rv-seen')).to_have_count(1)
             wait_api(lambda: api(pr_api(ref))['review']['lastReviewed'] == total, 'lastReviewed avancé (marque locale)')
         never_reviewed(page)
+
+        @check('version effacée par Bitbucket : page chargée, v1 indisponible et non cliquable, plage depuis master')
+        def purged(page):
+            open_pr(page, fake_ref('purged'))
+            gone = page.locator('.rv-v[data-i="1"]')
+            expect(gone).to_have_class(re.compile(r'\bgone\b'))
+            expect(gone).to_have_attribute('aria-disabled', 'true')
+            expect(gone.locator('.rv-dl')).to_have_text('indisponible')
+            assert 'Bitbucket a effacé ce commit' in (gone.get_attribute('title') or '')
+            # Ma relecture date de v1 (indisponible) : la plage par défaut part de master.
+            assert current_selection(page) == (0, 3), page.evaluate('location.hash')
+            gone.click(force=True)  # aria-disabled : Playwright refuse le clic ordinaire, un utilisateur peut cliquer
+            assert current_selection(page) == (0, 3), 'un clic sur une version indisponible ne doit rien changer'
+            page.click('.rv-v[data-i="2"]')
+            assert current_selection(page) == (0, 2), page.evaluate('location.hash')
+            expect(page.locator('.rv-v[data-i="2"]')).to_have_attribute('title', re.compile('changements comptés depuis la base'))
+        purged(page)
 
     @check('réglages : enregistrer et tester la connexion')
     def settings(page):

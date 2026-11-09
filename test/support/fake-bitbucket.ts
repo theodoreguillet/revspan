@@ -26,6 +26,8 @@ export const FAKE_PRS = {
     neverReviewed: 46,
     /** Ne me concerne pas (auteur Yann, 1 version). */
     others: 47,
+    /** v1 effacée par Bitbucket (commit introuvable), v2 et v3 lisibles ; mon commentaire date de v1. */
+    purged: 48,
 } as const;
 
 /** PR du scénario principal (rétrocompatibilité des tests). */
@@ -240,6 +242,33 @@ function rebaseOnlyPr(b: FakeBuilder): void {
     });
 }
 
+/**
+ * #48 : PR ancienne dont Bitbucket a effacé le commit de v1 (écrasé par un force-push) ; v2 et v3 lisibles.
+ * Mon commentaire en ligne date de v1 : ma dernière relecture tombe sur une version indisponible.
+ */
+function purgedPr(b: FakeBuilder): void {
+    const title = 'DEMO-48 - feat(purged): long running pull request';
+    b.commit('purged:m0', { 'src/Purged.ts': lines(['a', 'b']) });
+    b.derive('purged:v1', 'purged:m0', { 'src/Purged.ts': lines(['a', 'b', 'v1']) }, title);
+    b.derive('purged:v2', 'purged:m0', { 'src/Purged.ts': lines(['a', 'b', 'v2']) }, title);
+    b.derive('purged:v3', 'purged:v2', { 'src/Purged.ts': lines(['a', 'b', 'v2', 'v3']) }, title);
+    b.pr(FAKE_PRS.purged, {
+        title,
+        author: CAM,
+        participants: [
+            { user: ME, role: 'REVIEWER', approved: false, state: null },
+            { user: CAM, role: 'PARTICIPANT', approved: false, state: null },
+        ],
+        plan: [
+            { commit: 'purged:v1', base: 'purged:m0', date: '2026-08-30T10:00:00Z' },
+            { commit: 'purged:v2', base: 'purged:m0', date: '2026-10-14T09:00:00Z' },
+            { commit: 'purged:v3', base: 'purged:m0', date: '2026-10-19T15:00:00Z' },
+        ],
+        comments: [b.comment(ME, '2026-09-01T09:00:00Z', 'Pourquoi cette ligne ?', { inline: { path: 'src/Purged.ts', to: 3, from: null } })],
+    });
+    b.repo.commits.delete(hex('purged:v1'));
+}
+
 /** PR simple à 1 ou 2 versions de code (mine, jamais relue, autres). */
 function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number): void {
     b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']) });
@@ -262,6 +291,7 @@ export function buildFakeData(): FakeData {
         [{ user: ME, role: 'REVIEWER', approved: false, state: null }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 2);
     simplePr(b, FAKE_PRS.others, 'others', 'DEMO-47 - chore(others): not about me', YAN,
         [{ user: CAM, role: 'REVIEWER', approved: false, state: null }], 1);
+    purgedPr(b);
     return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, nextId: b.nextId };
 }
 

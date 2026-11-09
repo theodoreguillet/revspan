@@ -74,16 +74,20 @@ export function extractUpdates(activity: readonly BbActivity[], pr: BbPullReques
     return out;
 }
 
-/** commits[i] et bases[i] (merge-base réelle, ou null) correspondent à updates[i]. */
-export function buildVersions(updates: readonly PushUpdate[], commits: readonly (CommitInfo | undefined)[], bases: readonly (string | null)[]): Version[] {
+/**
+ * commits[i] et bases[i] (merge-base réelle, ou null) correspondent à updates[i]. Un commit absent (null) = version
+ * indisponible : Bitbucket l'a effacé. Rebase et message se comparent à la dernière version lisible.
+ */
+export function buildVersions(updates: readonly PushUpdate[], commits: readonly (CommitInfo | null | undefined)[], bases: readonly (string | null)[]): Version[] {
     const versions: Version[] = [];
+    let previousReadable: Version | undefined;
     updates.forEach((update, i) => {
-        const commit = commits[i];
+        const commit = commits[i] ?? null;
+        const available = commit !== null;
         const hash = commit?.hash ?? update.hash;
-        const base = bases[i] ?? commit?.parents[0] ?? update.destHash ?? '';
-        const prev = versions[i - 1];
+        const base = available ? bases[i] ?? commit.parents[0] ?? update.destHash ?? '' : '';
         const message = commit?.message ?? '';
-        versions.push({
+        const version: Version = {
             index: i + 1,
             hash,
             shortHash: hash.slice(0, 7),
@@ -92,12 +96,30 @@ export function buildVersions(updates: readonly PushUpdate[], commits: readonly 
             destHash: update.destHash ?? '',
             base,
             baseShort: base.slice(0, 7),
-            isRebase: prev !== undefined && !sameHash(prev.base, base),
+            isRebase: available && previousReadable !== undefined && !sameHash(previousReadable.base, base),
             message,
-            messageChanged: prev !== undefined && prev.message.trim() !== message.trim(),
-        });
+            messageChanged: available && previousReadable !== undefined && previousReadable.message.trim() !== message.trim(),
+            available,
+        };
+        versions.push(version);
+        if (available) {
+            previousReadable = version;
+        }
     });
     return versions;
+}
+
+/** Version dont le commit existe encore (`available` absent = lisible). */
+export const isReadable = (version: Partial<Pick<Version, 'available'>> | undefined): boolean => version !== undefined && version.available !== false;
+
+/** Dernière version lisible avant `index` (0 = base master si aucune). */
+export function previousAvailable(versions: readonly Partial<Pick<Version, 'available'>>[], index: number): number {
+    for (let k = index - 1; k >= 1; k--) {
+        if (isReadable(versions[k - 1])) {
+            return k;
+        }
+    }
+    return 0;
 }
 
 /** Index de la version en cours à une date donnée (1 si l'événement précède la 1re version). */

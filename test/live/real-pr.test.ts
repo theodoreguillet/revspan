@@ -15,7 +15,7 @@ import { createSecretStore } from '../../src/server/infra/secrets.ts';
 const ref = parsePrUrl(process.env.STRATA_LIVE_PR);
 const email = process.env.STRATA_LIVE_EMAIL ?? '';
 const enabled = process.env.STRATA_LIVE === '1' && email !== '' && ref !== null;
-const KINDS: readonly VersionKind[] = ['creation', 'code', 'deps', 'rebase-only', 'message-only', 'none'];
+const KINDS: readonly VersionKind[] = ['creation', 'code', 'deps', 'rebase-only', 'message-only', 'none', 'unavailable'];
 const route = ref ? `/api/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '';
 let app: RunningApp | null = null;
 let dir: string | null = null;
@@ -74,20 +74,23 @@ describe.runIf(enabled)('PR réelle (lecture seule)', () => {
         expect(dates).toEqual([...dates].sort());
     });
 
-    it('un résumé par version, types connus, la première est une création', async () => {
+    it('un résumé par version, types connus ; versions effacées par Bitbucket = indisponibles, jamais la dernière', async () => {
         const [{ versions }, summary] = await Promise.all([get<PrDetail>(route), get<Summary>(`${route}/summary`)]);
         expect(summary.versions.map((s) => s.index)).toEqual(versions.map((v) => v.index));
         expect(summary.versions.every((s) => KINDS.includes(s.kind))).toBe(true);
-        expect(summary.versions[0]!.kind).toBe('creation');
+        expect(summary.versions.map((s) => s.kind === 'unavailable')).toEqual(versions.map((v) => !v.available));
+        expect(versions.at(-1)!.available).toBe(true);
+        expect(['creation', 'unavailable']).toContain(summary.versions[0]!.kind);
     });
 
-    it('la comparaison de la dernière version avec la précédente correspond à son résumé', async () => {
+    it('la comparaison de la dernière version avec sa référence correspond à son résumé', async () => {
         const { versions } = await get<Summary>(`${route}/summary`);
         const last = versions.at(-1)!;
         if (last.index < 2) {
             return;
         }
-        const { stats } = await get<Comparison>(`${route}/compare?from=${last.index - 1}&to=${last.index}`);
+        const reference = last.since ?? last.index - 1;
+        const { stats } = await get<Comparison>(`${route}/compare?from=${reference}&to=${last.index}`);
         expect([stats.added, stats.removed]).toEqual([last.added, last.removed]);
     });
 

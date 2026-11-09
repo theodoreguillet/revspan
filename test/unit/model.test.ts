@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../../src/server/bitbucket/types.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, versionAt,
+    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, previousAvailable, versionAt,
 } from '../../src/server/core/model.ts';
 
 const ME = '{me}';
@@ -63,6 +63,23 @@ describe('buildVersions / versionAt', () => {
         expect(versionAt(versions, '2026-11-03T15:03:05Z')).toBe(2);
         expect(versionAt(versions, '2026-11-05T11:02:08Z')).toBe(3);
         expect(versionAt(versions, '2020-01-01T00:00:00Z')).toBe(1);
+    });
+
+    it('commit effacé par Bitbucket : version indisponible, rebase et message comparés à la dernière version lisible', () => {
+        const updates = extractUpdates(activity, pr);
+        // v2 effacée ; v3 a la même base que v1 et le même message : ni rebase ni message modifié.
+        const commits = [
+            { hash: '8e1996ba0000', message: 'msg', parents: ['p0'] },
+            null,
+            { hash: '2a2fc2060000', message: 'msg', parents: ['p2'] },
+            { hash: '178703a10000', message: 'msg', parents: ['p3'] },
+        ];
+        const versions = buildVersions(updates, commits, ['e1d4f60', null, 'e1d4f60', '070b8d3']);
+        expect(versions.map((v) => [v.available, v.isRebase, v.messageChanged])).toEqual([
+            [true, false, false], [false, false, false], [true, false, false], [true, true, false],
+        ]);
+        expect(versions[1]).toMatchObject({ hash: 'a0a11ced5099', base: '', message: '' });
+        expect([1, 2, 3, 4].map((index) => previousAvailable(versions, index))).toEqual([0, 1, 1, 3]);
     });
 });
 

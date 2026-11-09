@@ -113,4 +113,15 @@ describe('nodeDelta / nodeTooltip', () => {
         expect(nodeTooltip(versionAt(data.versions, 7), sums.get(7), opts)).toContain('relue par toi');
         expect(nodeTooltip(versionAt(data.versions, 10), sums.get(10), opts)).toMatch(/dernière version$/);
     });
+
+    it('version indisponible : explication à la place de la base et du type ; référence ancienne signalée', () => {
+        const versions = makeVersions(3, { unavailable: [1] });
+        const unavailable = nodeTooltip(versionAt(versions, 1), { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
+        expect(unavailable).toContain('indisponible : Bitbucket a effacé ce commit');
+        expect(unavailable).toContain('relue par toi');
+        expect(unavailable).not.toContain('base');
+        expect(nodeDelta({ index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 })).toEqual({ code: false, text: 'indisponible' });
+        const afterGap = nodeTooltip(versionAt(versions, 2), { index: 2, kind: 'code', since: 0, added: 1, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
+        expect(afterGap).toContain('changements comptés depuis la base (versions précédentes indisponibles)');
+    });
 });

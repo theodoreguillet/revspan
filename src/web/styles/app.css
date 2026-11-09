@@ -115,6 +115,11 @@ code, .rv-mono { font-family: var(--rv-mono); }
 .rv-dl.muted { color: var(--text-tertiary); font-family: inherit; }
 .rv-v.nocode .rv-dot { opacity: .55; }
 .rv-v.nocode .rv-vl { color: var(--text-secondary); font-weight: 500; }
+/* Version indisponible (commit effacé par Bitbucket) : point creux en pointillé, non cliquable. */
+.rv-v.gone { cursor: not-allowed; }
+.rv-v.gone .rv-dot { background: transparent; border: 1.5px dashed var(--text-secondary); opacity: .8; }
+.rv-v.gone .rv-vl { color: var(--text-secondary); text-decoration: line-through; text-decoration-thickness: 1px; }
+.rv-v.gone .rv-dl { color: var(--text-secondary); font-style: italic; }
 .rv-v.new::before { content: ''; position: absolute; top: 4px; right: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--rv-new); }
 .rv-v.in, .rv-v.to { background: var(--rv-range); border-radius: 0; }
 .rv-v.to { border-radius: 0 7px 7px 0; }

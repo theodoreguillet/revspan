@@ -120,6 +120,11 @@ celles de l'auteur restent. Détails : [docs/DESIGN.md](docs/DESIGN.md). Routes 
 
 ## Limites connues
 
+- **Anciennes versions effacées** : Bitbucket finit par supprimer les commits écrasés par un force-push. Ces versions
+  restent dans la frise, marquées « indisponible » (point en pointillé) et ne peuvent pas être comparées ; la version
+  suivante est résumée par rapport à la dernière version encore lisible (ou à la base), et un fil posé sur une version
+  effacée s'affiche au niveau du fichier.
+
 - **Like** : l'API Bitbucket n'expose pas les réactions. Un 👍 est posté comme une réponse « 👍 » (visible comme telle
   dans Bitbucket) ; les réponses d'un seul emoji sont affichées comme des réactions. Recliquer supprime ta réponse.
 - **Commentaire sur une ligne** : seulement sur la dernière version (Bitbucket ancre les commentaires sur la version

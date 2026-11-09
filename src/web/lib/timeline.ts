@@ -164,9 +164,21 @@ export function nodeDelta(sum: VersionSummary | undefined): NodeDelta {
 /** Infobulle d'un nœud : version, date, hash, base, type, fichiers. */
 export function nodeTooltip(v: Version, sum: VersionSummary | undefined, opts: { lastReviewed: number | null; n: number }): string {
     const parts = [`v${v.index}`, fmtDateTime(v.pushedAt), v.shortHash];
+    if (!v.available) {
+        parts.push('indisponible : Bitbucket a effacé ce commit (version écrasée par un force-push), elle ne peut pas être comparée');
+        if (v.index === opts.lastReviewed) {
+            parts.push('relue par toi');
+        }
+        return parts.join(' · ');
+    }
     parts.push(v.isRebase
         ? `rebase sur ${v.baseShort}${sum?.masterFiles ? ` (${plural(sum.masterFiles, 'fichier')} de master)` : ''}`
         : `base ${v.baseShort}`);
+    if (sum?.since !== undefined) {
+        parts.push(sum.since === 0
+            ? 'changements comptés depuis la base (versions précédentes indisponibles)'
+            : `changements comptés depuis v${sum.since} (versions intermédiaires indisponibles)`);
+    }
     if (sum) {
         parts.push(KIND_LABELS[sum.kind]);
         if (sum.files.length) {

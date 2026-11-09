@@ -230,11 +230,15 @@ export class BitbucketClient {
 
     // ---------- Données immuables (cache disque) ----------
 
-    commit(ws: string, repo: string, hash: string): Promise<CommitSummary> {
+    /**
+     * Commit, ou null s'il n'existe plus : Bitbucket efface au bout d'un moment les commits écrasés par un force-push
+     * (anciennes versions d'une PR). L'absence n'est pas mise en cache.
+     */
+    commit(ws: string, repo: string, hash: string): Promise<CommitSummary | null> {
         return this.cache.getOrCompute(`commit:${ws}/${repo}:${hash}`, async () => {
-            const raw = await this.getJson<BbCommit>(`${this.repoPath(ws, repo)}/commit/${hash}`);
-            return { hash: raw.hash, message: raw.message ?? '', date: raw.date ?? null, parents: (raw.parents ?? []).map((p) => p.hash) };
-        });
+            const raw = await this.json<BbCommit>('GET', `${this.repoPath(ws, repo)}/commit/${hash}`, { allow404: true });
+            return raw ? { hash: raw.hash, message: raw.message ?? '', date: raw.date ?? null, parents: (raw.parents ?? []).map((p) => p.hash) } : null;
+        }, (commit) => commit !== null);
     }
 
     mergeBase(ws: string, repo: string, a: string, b: string): Promise<string | null> {

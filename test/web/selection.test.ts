@@ -1,8 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
-    clickSelection, defaultSelection, isValidSelection, parseRangeQuery, presets, readout, singleVersion,
+    clickSelection, defaultSelection, floorAvailable, isValidSelection, parseRangeQuery, presets, readout, singleVersion, unavailableVersions,
 } from '../../src/web/lib/selection.ts';
-import { prLong } from './fixtures.ts';
+import { makeVersions, prLong } from './fixtures.ts';
+
+describe('versions indisponibles (commit effacé par Bitbucket)', () => {
+    // v2 et v3 effacées sur 6 versions.
+    const gone = new Set([2, 3]);
+
+    it('repérées depuis les versions ; une borne « de » recule jusqu\'à la dernière lisible (ou master)', () => {
+        expect([...unavailableVersions(makeVersions(6, { unavailable: [2, 3] }))]).toEqual([2, 3]);
+        expect(floorAvailable(3, gone)).toBe(1);
+        expect(floorAvailable(5, gone)).toBe(5);
+        expect(floorAvailable(1, new Set([1]))).toBe(0);
+    });
+
+    it('clic : rien sur une version indisponible ; sinon « de » = dernière lisible avant', () => {
+        expect(clickSelection({ from: 4, to: 6 }, 3, false, gone)).toEqual({ from: 4, to: 6 });
+        expect(clickSelection({ from: 4, to: 6 }, 4, false, gone)).toEqual({ from: 1, to: 4 });
+        expect(clickSelection({ from: 5, to: 6 }, 4, true, gone)).toEqual({ from: 1, to: 6 });
+    });
+
+    it('plage par défaut, préréglages, version seule et validité évitent les versions indisponibles', () => {
+        expect(defaultSelection(6, 3, gone)).toEqual({ from: 1, to: 6 });
+        expect(defaultSelection(3, 1, new Set([1]))).toEqual({ from: 0, to: 3 });
+        expect(presets(6, 3, gone).map((p) => [p.key, p.from, p.to])).toEqual([['since', 1, 6], ['last', 5, 6], ['all', 0, 6]]);
+        expect(singleVersion(6, 4, gone)).toEqual({ from: 1, to: 4 });
+        expect(isValidSelection(6, 2, 6, gone)).toBe(false);
+        expect(isValidSelection(6, 1, 3, gone)).toBe(false);
+        expect(isValidSelection(6, 1, 4, gone)).toBe(true);
+    });
+});
 
 describe('clickSelection', () => {
     it('clic simple : ce que la version a changé (N-1 → N)', () => {
