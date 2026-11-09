@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isShortcutEvent, isTyping, trappedFocus } from '../../src/web/lib/keyboard.ts';
 
-/** Touche pressée sur `target` (document par défaut), avec les modificateurs donnés. */
+/** Key pressed on `target` (document by default), with the given modifiers. */
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document): KeyboardEvent {
     let seen: KeyboardEvent | null = null;
     const listener = (event: Event): void => {
@@ -11,7 +11,7 @@ function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = 
     target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
     target.removeEventListener('keydown', listener);
     if (!seen) {
-        throw new Error('événement non reçu');
+        throw new Error('event not received');
     }
     return seen;
 }
@@ -23,40 +23,40 @@ function input(type: string): HTMLInputElement {
     return el;
 }
 
-describe('raccourcis clavier : modificateurs', () => {
-    it('touche seule ou avec Maj : raccourci', () => {
+describe('keyboard shortcuts: modifiers', () => {
+    it('key alone or with Shift: shortcut', () => {
         expect(isShortcutEvent(press('j'))).toBe(true);
         expect(isShortcutEvent(press('?', { shiftKey: true }))).toBe(true);
     });
 
-    it('⌘ (meta) ou Ctrl seul : jamais (raccourcis du navigateur et de VS Code)', () => {
+    it('Cmd (meta) or Ctrl alone: never (browser and VS Code shortcuts)', () => {
         expect(isShortcutEvent(press('[', { metaKey: true }))).toBe(false);
         expect(isShortcutEvent(press(']', { ctrlKey: true }))).toBe(false);
         expect(isShortcutEvent(press('j', { ctrlKey: true }))).toBe(false);
     });
 
-    it('AZERTY : [ et ] avec Option (Mac) ou AltGr (Ctrl + Alt sous Windows) restent des raccourcis', () => {
+    it('AZERTY: [ and ] with Option (Mac) or AltGr (Ctrl + Alt on Windows) stay shortcuts', () => {
         expect(isShortcutEvent(press('[', { altKey: true }))).toBe(true);
         expect(isShortcutEvent(press(']', { altKey: true, shiftKey: true }))).toBe(true);
         expect(isShortcutEvent(press('[', { ctrlKey: true, altKey: true }))).toBe(true);
         expect(isShortcutEvent(press(']', { ctrlKey: true, altKey: true }))).toBe(true);
     });
 
-    it('Alt + lettre ou chiffre : ignoré (raccourcis Alt+lettre du système)', () => {
+    it('Alt + letter or digit: ignored (system Alt+letter shortcuts)', () => {
         expect(isShortcutEvent(press('j', { altKey: true }))).toBe(false);
         expect(isShortcutEvent(press('é', { altKey: true }))).toBe(false);
         expect(isShortcutEvent(press('5', { ctrlKey: true, altKey: true }))).toBe(false);
     });
 
-    it('événement déjà traité : ignoré', () => {
+    it('event already handled: ignored', () => {
         const event = new KeyboardEvent('keydown', { key: 'j', cancelable: true });
         event.preventDefault();
         expect(isShortcutEvent(event)).toBe(false);
     });
 });
 
-describe('raccourcis clavier : saisie de texte', () => {
-    it('champ texte, zone de texte, liste : saisie (raccourcis ignorés)', () => {
+describe('keyboard shortcuts: text input', () => {
+    it('text field, text area, list: input (shortcuts ignored)', () => {
         for (const type of ['text', 'search', 'email', 'password']) {
             const el = input(type);
             expect(isTyping(el)).toBe(true);
@@ -66,7 +66,7 @@ describe('raccourcis clavier : saisie de texte', () => {
         expect(isTyping(document.createElement('select'))).toBe(true);
     });
 
-    it('case à cocher, bouton : pas de saisie (raccourcis actifs après avoir coché « Masquer… »)', () => {
+    it('checkbox, button: no input (shortcuts active after ticking "Hide...")', () => {
         for (const type of ['checkbox', 'radio', 'button']) {
             const el = input(type);
             expect(isTyping(el)).toBe(false);
@@ -76,7 +76,7 @@ describe('raccourcis clavier : saisie de texte', () => {
         expect(isTyping(null)).toBe(false);
     });
 
-    it('élément éditable (contentEditable) : saisie', () => {
+    it('editable element (contentEditable): input', () => {
         const div = document.createElement('div');
         div.contentEditable = 'true';
         document.body.append(div);
@@ -85,7 +85,7 @@ describe('raccourcis clavier : saisie de texte', () => {
     });
 });
 
-describe('boîte modale : Tab ne sort pas de la boîte', () => {
+describe('modal box: Tab does not leave the box', () => {
     function dialog(html: string): HTMLElement {
         const root = document.createElement('div');
         root.tabIndex = -1;
@@ -94,7 +94,7 @@ describe('boîte modale : Tab ne sort pas de la boîte', () => {
         return root;
     }
 
-    it('Tab sur le dernier élément : retour au premier ; Maj+Tab sur le premier : le dernier ; sinon le navigateur avance', () => {
+    it('Tab on the last element: back to the first; Shift+Tab on the first: the last; otherwise the browser moves on', () => {
         const root = dialog('<a href="#a">a</a><p>texte</p><button disabled>x</button><button>Fermer</button>');
         const [link, , close] = [...root.querySelectorAll<HTMLElement>('a, button')];
         expect(trappedFocus(root, close ?? null, false)).toBe(link);
@@ -103,14 +103,14 @@ describe('boîte modale : Tab ne sort pas de la boîte', () => {
         expect(trappedFocus(root, close ?? null, true)).toBeNull();
     });
 
-    it('un seul élément : le focus y reste', () => {
+    it('a single element: focus stays there', () => {
         const root = dialog('<button>Fermer</button>');
         const close = root.querySelector('button');
         expect(trappedFocus(root, close, false)).toBe(close);
         expect(trappedFocus(root, close, true)).toBe(close);
     });
 
-    it('focus hors de la boîte ou sur la boîte elle-même : ramené dedans', () => {
+    it('focus outside the box or on the box itself: brought back inside', () => {
         const root = dialog('<button>Un</button><button>Deux</button>');
         const [one, two] = [...root.querySelectorAll('button')];
         expect(trappedFocus(root, document.body, false)).toBe(one);

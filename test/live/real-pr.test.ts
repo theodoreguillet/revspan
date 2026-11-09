@@ -1,7 +1,7 @@
-// Test réel en LECTURE SEULE sur une PR Bitbucket de ton choix (uniquement des GET, aucune écriture).
-// Lancement : REVSPAN_LIVE_PR=<URL de la PR> REVSPAN_LIVE_EMAIL=<e-mail Atlassian> npm run test:live
-// (REVSPAN_KEYCHAIN_SERVICE si le jeton est rangé sous un autre service du trousseau).
-// Invariants valables pour toute PR ; le diff complet doit être identique au diffstat calculé par Bitbucket.
+// Real READ-ONLY test on a Bitbucket PR of your choice (GET requests only, no write).
+// Launch: REVSPAN_LIVE_PR=<PR URL> REVSPAN_LIVE_EMAIL=<Atlassian e-mail> npm run test:live
+// (REVSPAN_KEYCHAIN_SERVICE if the token is stored under another keychain service).
+// Invariants valid for any PR; the full diff must match the diffstat computed by Bitbucket.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,7 +27,7 @@ async function get<T>(url: string): Promise<T> {
     return body;
 }
 
-/** Diffstat de la PR calculé par Bitbucket (toutes les pages). */
+/** Diffstat of the PR computed by Bitbucket (all pages). */
 async function bitbucketDiffstat(): Promise<{ files: number; added: number; removed: number }> {
     const token = await (await createSecretStore({ dir: dir! })).get(email);
     expect(token, 'jeton absent du trousseau').toBeTruthy();
@@ -64,8 +64,8 @@ afterAll(async () => {
     }
 });
 
-describe.runIf(enabled)('PR réelle (lecture seule)', () => {
-    it('versions numérotées dans l\'ordre des pushs, la première n\'est pas un rebase', async () => {
+describe.runIf(enabled)('real PR (read-only)', () => {
+    it('versions numbered in push order, the first is not a rebase', async () => {
         const { versions } = await get<PrDetail>(route);
         expect(versions.length).toBeGreaterThanOrEqual(1);
         expect(versions.map((v) => v.index)).toEqual(versions.map((_, k) => k + 1));
@@ -74,7 +74,7 @@ describe.runIf(enabled)('PR réelle (lecture seule)', () => {
         expect(dates).toEqual([...dates].sort());
     });
 
-    it('un résumé par version, types connus ; versions effacées par Bitbucket = indisponibles, jamais la dernière', async () => {
+    it('one summary per version, known types; versions erased by Bitbucket = unavailable, never the last', async () => {
         const [{ versions }, summary] = await Promise.all([get<PrDetail>(route), get<Summary>(`${route}/summary`)]);
         expect(summary.versions.map((s) => s.index)).toEqual(versions.map((v) => v.index));
         expect(summary.versions.every((s) => KINDS.includes(s.kind))).toBe(true);
@@ -83,7 +83,7 @@ describe.runIf(enabled)('PR réelle (lecture seule)', () => {
         expect(['creation', 'unavailable']).toContain(summary.versions[0]!.kind);
     });
 
-    it('la comparaison de la dernière version avec sa référence correspond à son résumé', async () => {
+    it('the comparison of the latest version with its reference matches its summary', async () => {
         const { versions } = await get<Summary>(`${route}/summary`);
         const last = versions.at(-1)!;
         if (last.index < 2) {
@@ -94,13 +94,13 @@ describe.runIf(enabled)('PR réelle (lecture seule)', () => {
         expect([stats.added, stats.removed]).toEqual([last.added, last.removed]);
     });
 
-    it('diff complet identique au diffstat de Bitbucket', async () => {
+    it('full diff identical to Bitbucket\'s diffstat', async () => {
         const { versions } = await get<PrDetail>(route);
         const { stats } = await get<Comparison>(`${route}/compare?from=0&to=${versions.length}`);
         expect(stats).toEqual(await bitbucketDiffstat());
     });
 
-    it('accueil réel sur le dépôt de la PR : lu sans erreur', async () => {
+    it('real home page on the PR\'s repository: read without error', async () => {
         const home = await get<Home>('/api/home');
         expect(home.errors).toEqual([]);
         expect(home.repos).toEqual([`${ref!.workspace}/${ref!.repo}`]);

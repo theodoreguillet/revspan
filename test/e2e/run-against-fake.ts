@@ -1,6 +1,6 @@
-// Lance le VRAI serveur Revspan (page construite) branché sur le faux Bitbucket, puis le test UI Playwright.
-// Usage : npm run test:e2e   (construit puis lance ; Python : argument ou variable PYTHON)
-// Le test UI reçoit l'URL du serveur, celle des appels enregistrés et la liste des PR du faux Bitbucket.
+// Runs the REAL Revspan server (built page) wired to the fake Bitbucket, then the Playwright UI test.
+// Usage: npm run test:e2e   (builds then runs; Python: argument or PYTHON variable)
+// The UI test receives the server URL, the URL of the recorded calls and the list of the fake Bitbucket's PRs.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

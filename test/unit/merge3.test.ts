@@ -5,32 +5,32 @@ const base = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
 const edit = (index: number, value: string): string[] => base.map((l, i) => (i === index ? value : l));
 
 describe('merge3', () => {
-    it('changements disjoints : les deux côtés sont appliqués', () => {
+    it('disjoint changes: both sides are applied', () => {
         expect(merge3(base, edit(1, 'B'), edit(5, 'F'))).toEqual({ lines: ['a', 'B', 'c', 'd', 'e', 'F', 'g'], conflicts: 0 });
     });
 
-    it('lignes voisines : pas de conflit', () => {
+    it('adjacent lines: no conflict', () => {
         expect(merge3(base, edit(1, 'B'), edit(2, 'C'))).toEqual({ lines: ['a', 'B', 'C', 'd', 'e', 'f', 'g'], conflicts: 0 });
     });
 
-    it('même changement des deux côtés : pas de conflit', () => {
+    it('same change on both sides: no conflict', () => {
         expect(merge3(base, edit(2, 'X'), edit(2, 'X'))).toEqual({ lines: edit(2, 'X'), conflicts: 0 });
     });
 
-    it('conflit : la version theirs gagne et le conflit est compté', () => {
+    it('conflict: the theirs version wins and the conflict is counted', () => {
         expect(merge3(base, edit(2, 'OURS'), edit(2, 'THEIRS'))).toEqual({ lines: edit(2, 'THEIRS'), conflicts: 1 });
     });
 
-    it('insertions différentes au même endroit : conflit', () => {
+    it('different insertions at the same place: conflict', () => {
         const theirs = ['a', 'b', 'y1', 'c', 'd', 'e', 'f', 'g'];
         expect(merge3(base, ['a', 'b', 'x1', 'c', 'd', 'e', 'f', 'g'], theirs)).toEqual({ lines: theirs, conflicts: 1 });
     });
 
-    it('insertion d\'un côté, suppression de l\'autre ailleurs', () => {
+    it('insertion on one side, deletion on the other elsewhere', () => {
         expect(merge3(base, [...base, 'h'], base.slice(1))).toEqual({ lines: ['b', 'c', 'd', 'e', 'f', 'g', 'h'], conflicts: 0 });
     });
 
-    it('lockfile : master et l\'auteur montent des libs, la ligne commune garde la RC de l\'auteur', () => {
+    it('lockfile: master and the author bump libs, the shared line keeps the author\'s RC', () => {
         const lockBase = ['"a": "1.0.0",', '"b": "1.0.0",', '"c": "1.0.0",', '"d": "1.0.0",', '"e": "1.0.0",'];
         const master = ['"a": "1.1.0",', '"b": "1.0.0",', '"c": "1.0.0",', '"d": "1.0.0",', '"e": "2.0.0",'];
         const author = ['"a": "1.0.0",', '"b": "1.0.0",', '"c": "1.0.0-rc.1",', '"d": "1.0.0",', '"e": "2.0.0-rc.1",'];
@@ -40,7 +40,7 @@ describe('merge3', () => {
         });
     });
 
-    it('très gros fichiers divergents : pas de dépassement de pile', () => {
+    it('very large diverging files: no stack overflow', () => {
         const big = Array.from({ length: 250000 }, (_, i) => `l${i}`);
         const result = merge3(big, big.map((l) => `${l}-o`), big.slice());
         expect(result.lines).toHaveLength(250000);

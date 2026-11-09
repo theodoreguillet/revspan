@@ -12,7 +12,7 @@ const tempDir = (): string => {
 };
 const configFile = (dir: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
 
-/** Source de dépôts en mémoire (comme le réglage VS Code revspan.repositories). */
+/** In-memory repository source (like the VS Code revspan.repositories setting). */
 function memorySource(initial: string[]): RepoSource & { value: string[] } {
     return {
         value: initial,
@@ -29,8 +29,8 @@ afterEach(() => {
     dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }));
 });
 
-describe('réglages locaux (Store)', () => {
-    it('sans source externe : dépôts et e-mail dans config.json', async () => {
+describe('local settings (Store)', () => {
+    it('without an external source: repositories and e-mail in config.json', async () => {
         const dir = tempDir();
         const store = new Store(dir);
         expect(store.config).toEqual({ email: '', repos: [] });
@@ -39,9 +39,9 @@ describe('réglages locaux (Store)', () => {
         expect(new Store(dir).config.repos).toEqual(['ws/a']);
     });
 
-    it('avec une source externe : dépôts lus et écrits dans la source, normalisés, jamais dans config.json', async () => {
+    it('with an external source: repositories read and written in the source, normalized, never in config.json', async () => {
         const dir = tempDir();
-        const source = memorySource(['https://bitbucket.org/ws/a/src/main/', 'pas un dépôt', 'ws/a', 'ws/b']);
+        const source = memorySource(['https://bitbucket.org/ws/a/src/main/', 'not a repo', 'ws/a', 'ws/b']);
         const store = new Store(dir, { repoSource: source });
         expect(store.config.repos).toEqual(['ws/a', 'ws/b']);
 
@@ -55,8 +55,8 @@ describe('réglages locaux (Store)', () => {
     });
 });
 
-describe('état partagé entre plusieurs fenêtres (deux Store, même dossier)', () => {
-    it('deux marques sur des PR différentes sont toutes les deux conservées et visibles des deux côtés', () => {
+describe('state shared between several windows (two Stores, same folder)', () => {
+    it('two marks on different PRs are both kept and visible on both sides', () => {
         const dir = tempDir();
         const a = new Store(dir);
         const b = new Store(dir);
@@ -72,7 +72,7 @@ describe('état partagé entre plusieurs fenêtres (deux Store, même dossier)',
         expect(b.prState('acme/records-api#1').reviewedAt).toBe('2026-01-01T00:00:00Z');
     });
 
-    it('une marque faite par A après la création de B est lue par B', () => {
+    it('a mark made by A after B was created is read by B', () => {
         const dir = tempDir();
         const a = new Store(dir);
         const b = new Store(dir);
@@ -83,7 +83,7 @@ describe('état partagé entre plusieurs fenêtres (deux Store, même dossier)',
         expect(b.prState('acme/records-api#1').viewed).toEqual({ 'x.ts': 'h1' });
     });
 
-    it('la config modifiée par A est visible par B, et B ne l\'écrase pas en enregistrant autre chose', async () => {
+    it('config modified by A is visible to B, and B does not overwrite it when saving something else', async () => {
         const dir = tempDir();
         const a = new Store(dir);
         const b = new Store(dir);
@@ -95,7 +95,7 @@ describe('état partagé entre plusieurs fenêtres (deux Store, même dossier)',
         expect(configFile(dir)).toEqual({ email: 'rev@example.com', repos: ['acme/records-api', 'acme/billing'] });
     });
 
-    it('fichier supprimé ou corrompu : valeurs par défaut', () => {
+    it('deleted or corrupt file: default values', () => {
         const dir = tempDir();
         const a = new Store(dir);
         a.updatePrState('acme/records-api#1', (s) => {

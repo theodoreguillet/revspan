@@ -1,5 +1,5 @@
-// Pont de l'extension : l'application HTTP en mémoire (comme dans VS Code) branchée sur le faux Bitbucket,
-// et le panneau qui la sert à la page (VS Code simulé par test/support/fake-vscode.ts).
+// Extension bridge: the in-memory HTTP application (as in VS Code) wired to the fake Bitbucket,
+// and the panel that serves it to the page (VS Code simulated by test/support/fake-vscode.ts).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,14 +43,14 @@ afterEach(async () => {
 
 const PR = `/api/pr/${WS}/${REPO}/${FAKE_PRS.main}`;
 
-describe('pont de l\'extension (application HTTP en mémoire)', () => {
-    it('lecture : même réponse qu\'en HTTP', async () => {
+describe('extension bridge (in-memory HTTP application)', () => {
+    it('read: same response as over HTTP', async () => {
         const result = await callApi(http, { method: 'GET', path: PR });
         expect(result.status).toBe(200);
         expect((result.body as PrDetail).versions).toHaveLength(6);
     });
 
-    it('écriture : l\'en-tête de mutation est ajouté par le pont, l\'appel atteint Bitbucket', async () => {
+    it('write: the mutation header is added by the bridge, the call reaches Bitbucket', async () => {
         const thread = ((await callApi(http, { method: 'GET', path: PR })).body as PrDetail).threads[0];
         const call = { method: 'POST', path: `${PR}/comments`, body: { raw: 'Depuis VS Code', parentId: thread?.id } };
         const result = await callApi(http, call);
@@ -59,7 +59,7 @@ describe('pont de l\'extension (application HTTP en mémoire)', () => {
         expect(fake.calls.at(-1)?.body).toEqual({ content: { raw: 'Depuis VS Code' }, parent: { id: thread?.id } });
     });
 
-    it('erreurs : validation (400) et chemin hors API refusé', async () => {
+    it('errors: validation (400) and path outside the API rejected', async () => {
         const invalid = await callApi(http, { method: 'POST', path: `${PR}/comments`, body: { raw: ' ' } });
         expect(invalid.status).toBe(400);
         expect(isSuccessfulWrite({ method: 'POST', path: '' }, invalid)).toBe(false);
@@ -67,19 +67,19 @@ describe('pont de l\'extension (application HTTP en mémoire)', () => {
         expect((await callApi(http, { method: 'PATCH', path: PR })).status).toBe(400);
     });
 
-    it('le contrôle d\'hôte reste actif pour tout autre hôte', async () => {
+    it('the host check stays active for any other host', async () => {
         const response = await http.request(`http://evil.example${PR}`, { method: 'GET' });
         expect(response.status).toBe(403);
     });
 
-    it('côtés d\'un fichier pour l\'éditeur de diff (rejoués à travers le rebase)', async () => {
+    it('sides of a file for the diff editor (replayed across the rebase)', async () => {
         const sides = await services.prs.fileSides({ workspace: WS, repo: REPO, id: FAKE_PRS.main }, 2, 4, { path: 'package-lock.json', oldPath: null });
         expect(sides.oldText).toContain('1.0.0-rc.1');
         expect(sides.newText).toContain('1.0.0-rc.2');
     });
 });
 
-describe('panneau de l\'extension (VS Code simulé)', () => {
+describe('extension panel (simulated VS Code)', () => {
     const ref = { workspace: WS, repo: REPO, id: FAKE_PRS.main };
     let subscriptions: { dispose(): unknown }[];
 
@@ -95,18 +95,18 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         return new RevspanPanel({ context, app: { services, http }, diffs: { open: vi.fn() } as unknown as DiffDocuments, onWrite: () => undefined });
     }
 
-    /** Ouvre le panneau sur une route ; renvoie le faux panneau VS Code. */
+    /** Opens the panel on a route; returns the fake VS Code panel. */
     function open(route: string): { revspan: RevspanPanel; panel: FakeWebviewPanel } {
         const revspan = create();
         revspan.show(route);
         const panel = recorded.panels.at(-1);
         if (!panel) {
-            throw new Error('panneau non créé');
+            throw new Error('panel not created');
         }
         return { revspan, panel };
     }
 
-    it('messages mal formés de la page ignorés, sans exception ni réponse', async () => {
+    it('malformed page messages ignored, no exception or response', async () => {
         const { panel } = open('/');
         for (const data of [null, 42, { type: 'request', id: 'x', method: 'GET', path: '/api/health' }, { type: 'openFile', ref: { ...ref, workspace: '..' }, path: 'a', line: 1 }]) {
             panel.receive(data);
@@ -117,7 +117,7 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         expect([...recorded.errors, ...recorded.warnings]).toEqual([]);
     });
 
-    it('« Ouvrir le fichier » refuse un chemin absolu ou qui sort du dépôt local', async () => {
+    it('"Open file" rejects an absolute path or one leaving the local repository', async () => {
         const root = path.join(dir, 'workspace');
         fs.mkdirSync(path.join(root, REPO, '.git'), { recursive: true });
         fs.writeFileSync(path.join(root, REPO, '.git', 'HEAD'), 'ref: refs/heads/master\n');
@@ -133,7 +133,7 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         await vi.waitFor(() => expect(recorded.opened).toEqual([path.join(root, REPO, 'README.md')]));
     });
 
-    it('titre de l\'onglet : celui de l\'écran, aussi quand la page revient à l\'accueil ou aux réglages', async () => {
+    it('tab title: that of the screen, also when the page goes back to the home page or the settings', async () => {
         const prTitle = `PR #${FAKE_PRS.main} · ${REPO}`;
         const { panel } = open(`/pr/${WS}/${REPO}/${FAKE_PRS.main}`);
         expect(panel.title).toBe(prTitle);
@@ -160,7 +160,7 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         await vi.waitFor(() => expect(recorded.warnings).toEqual([`Dépôt « ${WS}/${REPO} » introuvable dans l'espace de travail (ni remote Bitbucket, ni dossier ${REPO}, ni worktree).`]));
     });
 
-    it('rouvert par VS Code après rechargement : même construction que show(), sur la route enregistrée', async () => {
+    it('reopened by VS Code after a reload: same construction as show(), on the saved route', async () => {
         const route = `/pr/${WS}/${REPO}/${FAKE_PRS.main}?from=2&to=6`;
         const restored = new FakeWebviewPanel('revspan', 'Revspan');
         const revspan = create();
@@ -179,7 +179,7 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         expect(restored.disposed).toBe(false);
     });
 
-    it('écouteurs propres au panneau, libérés à sa fermeture ; un nouveau panneau ensuite', () => {
+    it('panel-specific listeners, released when it closes; a new panel afterwards', () => {
         const { revspan, panel } = open('/');
         expect(subscriptions).toEqual([]);
         expect(panel.listenerCount).toBeGreaterThan(0);
@@ -190,7 +190,7 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         expect(subscriptions).toEqual([]);
     });
 
-    it('vue « Mes PR » : émetteur libéré avec l\'extension', () => {
+    it('"My PRs" view: emitter released with the extension', () => {
         const tree = new HomeTreeProvider(services.home);
         const listener = vi.fn();
         tree.onDidChangeTreeData(listener);

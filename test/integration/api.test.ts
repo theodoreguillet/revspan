@@ -1,5 +1,5 @@
-// Vrai serveur Revspan (Hono) branché sur le faux Bitbucket. Chaque test part d'un environnement neuf
-// (faux Bitbucket + configuration temporaire) : aucun test ne dépend d'un autre.
+// Real Revspan server (Hono) wired to the fake Bitbucket. Each test starts from a fresh environment
+// (fake Bitbucket + temporary configuration): no test depends on another.
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -22,7 +22,7 @@ let env: Env | null = null;
 const startRevspan = (dir: string, fake: FakeBitbucket, fetchImpl: typeof fetch = fetch): Promise<RunningApp> =>
     startApp({ port: 0, fetchImpl, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
 
-/** Environnement neuf ; avec jeton configuré par défaut. */
+/** Fresh environment; with a token configured by default. */
 async function setup({ withToken = true } = {}): Promise<Env> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-it-'));
     const fake = await startFakeBitbucket();
@@ -34,7 +34,7 @@ async function setup({ withToken = true } = {}): Promise<Env> {
     return env;
 }
 
-/** Relance Revspan sur la même configuration : cache mémoire vide, cache disque conservé. */
+/** Restarts Revspan on the same configuration: empty memory cache, disk cache kept. */
 async function restart(current: Env, fetchImpl?: typeof fetch): Promise<void> {
     await current.app.close();
     current.app = await startRevspan(current.dir, current.fake, fetchImpl);
@@ -61,7 +61,7 @@ async function api<T = unknown>(method: string, route: string, body?: unknown, {
     return { status: response.status, body: (text ? JSON.parse(text) : null) as T };
 }
 
-/** Requête avec un en-tête Host choisi (fetch ne permet pas de le forcer). */
+/** Request with a chosen Host header (fetch cannot force it). */
 function rawGet(route: string, host: string): Promise<number> {
     return new Promise((resolve, reject) => {
         const req = http.request({ host: '127.0.0.1', port: env?.app.port, path: route, headers: { Host: host } }, (res) => {
@@ -76,8 +76,8 @@ function rawGet(route: string, host: string): Promise<number> {
 const shortCall = (c: RecordedCall): string => `${c.method} ${c.path.replace(/^.*pullrequests\/\d+/, '')}`;
 const detail = async (id?: number): Promise<PrDetail> => (await api<PrDetail>('GET', prPath(id))).body;
 
-describe('réglages et sécurité', () => {
-    it('sans jeton : réglages vides et NO_TOKEN', async () => {
+describe('settings and security', () => {
+    it('no token: empty settings and NO_TOKEN', async () => {
         await setup({ withToken: false });
         expect((await api<Settings>('GET', '/api/settings')).body).toMatchObject({ hasToken: false, tokenStore: 'file' });
         const home = await api<ApiErrorBody>('GET', '/api/home');
@@ -85,7 +85,7 @@ describe('réglages et sécurité', () => {
         expect(home.body.error.code).toBe('NO_TOKEN');
     });
 
-    it('en-tête X-Revspan obligatoire, Host et origine étrangers refusés, en-têtes de sécurité', async () => {
+    it('X-Revspan header required, foreign Host and origin rejected, security headers', async () => {
         const { app } = await setup();
         expect((await api('PUT', '/api/settings', { email: 'x@y.z' }, { header: false })).status).toBe(403);
         expect(await rawGet('/api/health', 'evil.example:80')).toBe(403);
@@ -99,9 +99,9 @@ describe('réglages et sécurité', () => {
         expect(health.headers.get('cache-control')).toBe('no-store');
     });
 
-    it('jeton invalide puis valide, fichier de jeton en 0600, jeton jamais renvoyé', async () => {
+    it('invalid then valid token, token file with mode 0600, token never returned', async () => {
         const { dir } = await setup({ withToken: false });
-        const bad = await api<Settings>('PUT', '/api/settings', { email: FAKE_EMAIL, token: 'wrong', repos: [`${WS}/${REPO}`, 'pas un repo', '../..'] });
+        const bad = await api<Settings>('PUT', '/api/settings', { email: FAKE_EMAIL, token: 'wrong', repos: [`${WS}/${REPO}`, 'not a repo', '../..'] });
         expect(bad.body.repos).toEqual([`${WS}/${REPO}`]);
         expect((await api('POST', '/api/settings/test')).body).toMatchObject({ ok: false, error: { code: 'BB_UNAUTHORIZED' } });
 
@@ -113,7 +113,7 @@ describe('réglages et sécurité', () => {
         expect(JSON.stringify((await api('GET', '/api/settings')).body)).not.toContain(FAKE_TOKEN);
     });
 
-    it('validation des entrées (400) et routes inconnues (404)', async () => {
+    it('input validation (400) and unknown routes (404)', async () => {
         const { app } = await setup();
         expect((await api('PUT', '/api/settings', { repos: 'pas une liste' })).status).toBe(400);
         expect((await api('POST', `${prPath()}/comments`, { raw: '   ' })).status).toBe(400);
@@ -123,7 +123,7 @@ describe('réglages et sécurité', () => {
         expect(nullBody.status).toBe(400);
     });
 
-    it('redirection /open et fichiers statiques protégés', async () => {
+    it('/open redirect and protected static files', async () => {
         const { app } = await setup();
         const open = await fetch(`${app.url}/open?url=${encodeURIComponent(`https://bitbucket.org/${WS}/${REPO}/pull-requests/42/overview`)}`, { redirect: 'manual' });
         expect(open.status).toBe(302);
@@ -153,7 +153,7 @@ describe('réglages et sécurité', () => {
         expect(noEmail.body.error).toMatchObject({ code: 'BAD_REQUEST', params: { reason: 'email-required' } });
     });
 
-    it('erreurs Bitbucket traduites (403 → BB_FORBIDDEN)', async () => {
+    it('Bitbucket errors translated (403 -> BB_FORBIDDEN)', async () => {
         const { fake } = await setup();
         await fetch(`http://127.0.0.1:${fake.port}/__fail-next?status=403`);
         const res = await api<ApiErrorBody>('POST', `${prPath()}/approve`);
@@ -162,14 +162,14 @@ describe('réglages et sécurité', () => {
     });
 });
 
-describe('lecture d\'une PR', () => {
-    it('versions, rebases, participants, dernière relecture, fils', async () => {
+describe('reading a PR', () => {
+    it('versions, rebases, participants, last review, threads', async () => {
         await setup();
         const body = await detail();
         expect(body.pr.title).toBe('DEMO-1 - feat(records): archive records in bulk');
         expect(body.versions.map((v) => v.isRebase)).toEqual([false, false, true, false, true, false]);
         expect(body.versions[5]?.messageChanged).toBe(true);
-        // Mon commentaire du 2 oct. → v2
+        // My comment of Oct 2 -> v2
         expect(body.review).toMatchObject({ lastReviewed: 2, lastReviewedSource: 'comment' });
         expect(body.participants.find((p) => p.user?.uuid === '{yan}')?.approvedVersion).toBe(6);
         expect(body.threads).toHaveLength(4);
@@ -179,14 +179,14 @@ describe('lecture d\'une PR', () => {
         expect(mine?.comments[1]?.isNew).toBe(true);
     });
 
-    it('résumé des versions', async () => {
+    it('version summary', async () => {
         await setup();
         const { body } = await api<Summary>('GET', `${prPath()}/summary`);
         expect(body.versions.map((v) => v.kind)).toEqual(['creation', 'code', 'rebase-only', 'deps', 'code', 'message-only']);
         expect(body.versions[2]?.masterFiles).toBe(3);
     });
 
-    it('comparaison à travers un rebase et placement des fils', async () => {
+    it('comparison across a rebase and thread placement', async () => {
         await setup();
         const { body } = await api<Comparison>('GET', `${prPath()}/compare?from=2&to=5`);
         expect(body.files.map((f) => f.path)).toEqual(['src/Action.ts', 'package-lock.json']);
@@ -196,7 +196,7 @@ describe('lecture d\'une PR', () => {
         expect((await api<Comparison>('GET', `${prPath()}/compare?from=0&to=6&context=100000`)).body.files).toHaveLength(3);
     });
 
-    it('PR longue : 34 versions, rebases toutes les 7, relue à v30 (approbation)', async () => {
+    it('long PR: 34 versions, a rebase every 7, reviewed at v30 (approval)', async () => {
         await setup();
         const body = await detail(FAKE_PRS.long);
         expect(body.versions).toHaveLength(34);
@@ -204,14 +204,14 @@ describe('lecture d\'une PR', () => {
         expect(body.review).toMatchObject({ lastReviewed: 30, lastReviewedSource: 'approval' });
     });
 
-    it('rebase seul depuis ma relecture : v2 sans changement de l\'auteur', async () => {
+    it('rebase only since my review: v2 with no author change', async () => {
         await setup();
         expect((await detail(FAKE_PRS.rebaseOnly)).review.lastReviewed).toBe(1);
         const { body } = await api<Summary>('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
         expect(body.versions.map((v) => v.kind)).toEqual(['creation', 'rebase-only']);
     });
 
-    it('version effacée par Bitbucket : page chargée, v1 indisponible, résumés et comparaisons sans elle', async () => {
+    it('version erased by Bitbucket: page loaded, v1 unavailable, summaries and comparisons without it', async () => {
         await setup();
         const pr = await detail(FAKE_PRS.purged);
         expect(pr.versions.map((v) => [v.index, v.available, v.isRebase])).toEqual([[1, false, false], [2, true, false], [3, true, false]]);
@@ -226,19 +226,19 @@ describe('lecture d\'une PR', () => {
         expect(refused.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE' });
         expect(refused.body.error.message).toContain('v1');
 
-        // Le fil posé sur v1 reste visible, au niveau du fichier (sa position d'origine est illisible).
+        // The thread placed on v1 stays visible, at file level (its original position is unreadable).
         const { body: full } = await api<Comparison>('GET', `${prPath(FAKE_PRS.purged)}/compare?from=0&to=3`);
         expect(full.stats).toEqual({ files: 1, added: 2, removed: 0 });
         const thread = pr.threads.find((t) => t.path === 'src/Purged.ts');
         expect(full.files[0]?.threads.find((p) => p.threadId === thread?.id)).toMatchObject({ line: null, moved: false });
     });
 
-    it('version effacée après mise en cache, puis nouveau push : résumé 200 sans elle, comparaison 410', async () => {
+    it('version erased after being cached, then a new push: summary 200 without it, comparison 410', async () => {
         const current = await setup();
         const route = prPath(FAKE_PRS.mine);
         expect((await api<Summary>('GET', `${route}/summary`)).body.versions.map((s) => s.kind)).toEqual(['creation', 'code']);
         const v2 = (await detail(FAKE_PRS.mine)).versions[1]?.hash ?? '';
-        // Plus tard : Bitbucket efface v2 (écrasée par un force-push), l'auteur pousse v3 ; le commit de v2 reste en cache disque.
+        // Later: Bitbucket erases v2 (overwritten by a force-push), the author pushes v3; v2's commit stays in the disk cache.
         current.fake.data.repo.commits.delete(v2);
         pushVersion(current.fake.data, FAKE_PRS.mine, {
             commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
@@ -254,7 +254,7 @@ describe('lecture d\'une PR', () => {
         expect((await detail(FAKE_PRS.mine)).versions.map((v) => v.available)).toEqual([true, false, true]);
     });
 
-    it('version effacée détectée alors qu\'une autre devient lisible au rechargement : pas de 410 à tort', async () => {
+    it('erased version detected while another becomes readable on reload: no wrongful 410', async () => {
         const current = await setup();
         const route = prPath(FAKE_PRS.mine);
         await api('GET', `${route}/summary`);
@@ -265,14 +265,14 @@ describe('lecture d\'une PR', () => {
         pushVersion(current.fake.data, FAKE_PRS.mine, {
             commit: 'mine:v4', from: 'mine:v3', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\ny4\n' }, date: '2026-10-21T09:00:00Z',
         });
-        // Le commit de v4 répond 404 au premier chargement seulement : comme un push arrivé entre les deux chargements,
-        // le rechargement compte une version lisible de plus en même temps que v2 devient indisponible.
+        // The commit of v4 answers 404 on the first load only: like a push that arrived between the two loads,
+        // the reload counts one more readable version at the same time as v2 becomes unavailable.
         const v4 = current.fake.data.prs.get(FAKE_PRS.mine)?.pr.source?.commit?.hash ?? '';
         let pending = true;
         await restart(current, async (input, init) => {
             if (pending && String(input).endsWith(`/commit/${v4}`)) {
                 pending = false;
-                return new Response(JSON.stringify({ error: { message: 'pas encore' } }), { status: 404, headers: { 'content-type': 'application/json' } });
+                return new Response(JSON.stringify({ error: { message: 'not yet' } }), { status: 404, headers: { 'content-type': 'application/json' } });
             }
             return fetch(input, init);
         });
@@ -282,7 +282,7 @@ describe('lecture d\'une PR', () => {
         expect(summary.body.versions.map((s) => [s.kind, s.since ?? null])).toEqual([['creation', null], ['unavailable', null], ['code', 1], ['code', null]]);
     });
 
-    it('fichier absent d\'une version encore lisible (ajouté à travers un rebase) : comparaison normale', async () => {
+    it('file absent from a still-readable version (added across a rebase): normal comparison', async () => {
         const { fake } = await setup();
         pushVersion(fake.data, FAKE_PRS.rebaseOnly, {
             commit: 'rebase:v3', from: 'rebase:v2', base: 'rebase:m1', changes: { 'src/Extra.ts': 'e\n' }, date: '2026-10-06T09:00:00Z',
@@ -293,10 +293,10 @@ describe('lecture d\'une PR', () => {
         expect((await detail(FAKE_PRS.rebaseOnly)).versions.every((v) => v.available)).toBe(true);
     });
 
-    it('version effacée après mise en cache : un contenu en 404 la rend indisponible (410), sans fichier perdu', async () => {
+    it('version erased after being cached: content returning 404 makes it unavailable (410), no file lost', async () => {
         const { fake } = await setup();
         await api('GET', `${prPath()}/summary`);
-        // Diffstat de v2 en cache, mais pas tests/ActionSpec.ts à v2 : son contenu est demandé à Bitbucket.
+        // Diffstat of v2 cached, but not tests/ActionSpec.ts at v2: its content is requested from Bitbucket.
         fake.data.repo.commits.delete((await detail()).versions[1]?.hash ?? '');
 
         const refused = await api<ApiErrorBody>('GET', `${prPath()}/compare?from=0&to=2`);
@@ -310,7 +310,7 @@ describe('lecture d\'une PR', () => {
 });
 
 describe('actions', () => {
-    it('répondre, commenter en ligne, résoudre, approuver', async () => {
+    it('reply, comment inline, resolve, approve', async () => {
         const { fake } = await setup();
         const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
         expect(thread).toBeTruthy();
@@ -338,21 +338,21 @@ describe('actions', () => {
         expect(fake.calls[1]?.body).toEqual({ content: { raw: 'Nit' }, inline: { path: 'src/Action.ts', to: 3 } });
     });
 
-    it('une réponse ne fait pas avancer la dernière relecture', async () => {
+    it('a reply does not advance the last review', async () => {
         await setup();
         const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
         await api('POST', `${prPath()}/comments`, { raw: 'Merci !', parentId: thread?.id });
         expect((await detail()).review.lastReviewed).toBe(2);
     });
 
-    it('réapprouver : l\'ancienne approbation est retirée puis remise (datée de maintenant)', async () => {
+    it('re-approve: the old approval is removed then put back (dated now)', async () => {
         const { fake } = await setup();
         await api('POST', `${prPath()}/approve`);
         await api('POST', `${prPath()}/approve`);
         expect(fake.calls.map(shortCall)).toEqual(['POST /approve', 'DELETE /approve', 'POST /approve']);
     });
 
-    it('état local : fichiers vus et marque « relue » persistés', async () => {
+    it('local state: seen files and "reviewed" mark persisted', async () => {
         const { dir } = await setup();
         expect((await api('POST', `${prPath()}/viewed`, { path: 'src/Action.ts', contentHash: 'abc', viewed: true })).status).toBe(200);
         expect((await api('POST', `${prPath()}/reviewed`, { version: 6 })).status).toBe(200);
@@ -365,8 +365,8 @@ describe('actions', () => {
     });
 });
 
-describe('accueil', () => {
-    it('aucun dépôt suivi par défaut : accueil vide, sans erreur', async () => {
+describe('home', () => {
+    it('no tracked repository by default: empty home, no error', async () => {
         const { app } = await setup({ withToken: false });
         await app.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN });
         expect((await api<Settings>('GET', '/api/settings')).body.repos).toEqual([]);
@@ -375,9 +375,9 @@ describe('accueil', () => {
         expect(body.groups.flatMap((g) => g.prs)).toEqual([]);
     });
 
-    it('groupe chaque PR selon ce qui a bougé depuis ma relecture', async () => {
+    it('groups each PR by what moved since my review', async () => {
         await setup();
-        // Le type des versions de #44 n'est connu qu'une fois son résumé calculé (ouverture de la PR).
+        // The type of #44's versions is only known once its summary is computed (PR opening).
         await api('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
         const { body } = await api<Home>('GET', '/api/home');
         expect(body.me?.displayName).toBe('Thomas Girard');
@@ -401,21 +401,21 @@ describe('accueil', () => {
         expect(card(FAKE_PRS.others)).toMatchObject({ versionsCount: null, lastReviewed: null });
     });
 
-    it('ouvrir une PR qui ne me concerne pas ne la fait pas changer de groupe', async () => {
+    it('opening a PR that does not concern me does not change its group', async () => {
         await setup();
         await detail(FAKE_PRS.others);
         const { body } = await api<Home>('GET', '/api/home');
         expect(body.groups.find((g) => g.key === 'others')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.others]);
     });
 
-    it('une PR relue jusqu\'à la dernière version est « à jour »', async () => {
+    it('a PR reviewed up to the latest version is "up to date"', async () => {
         await setup();
         await api('POST', `${prPath()}/reviewed`, { version: 6 });
         const { body } = await api<Home>('GET', '/api/home');
         expect(body.groups.find((g) => g.key === 'up-to-date')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.main]);
     });
 
-    it('seulement des rebases depuis mon approbation, que Bitbucket a gardée : « à jour », pas de réapprobation', async () => {
+    it('only rebases since my approval, which Bitbucket kept: "up to date", no re-approval', async () => {
         const { fake } = await setup();
         const me = fake.data.prs.get(FAKE_PRS.rebaseOnly)?.pr.participants.find((p) => p.user?.uuid === '{me}');
         expect(me).toBeTruthy();

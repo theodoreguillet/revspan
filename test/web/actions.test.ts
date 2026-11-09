@@ -16,7 +16,7 @@ vi.mock('../../src/web/composables/useErrors.ts', () => ({ showError }));
 
 const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
 
-/** Promesse résolue ou rejetée à la main (requête lente). */
+/** Promise resolved or rejected by hand (slow request). */
 function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: Error) => void } {
     let resolve!: (value: T) => void;
     let reject!: (error: Error) => void;
@@ -27,7 +27,7 @@ function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => voi
     return { promise, resolve, reject };
 }
 
-/** Laisse passer les promesses déjà résolues (rechargements lancés sans attente). */
+/** Lets already-resolved promises through (reloads started without awaiting). */
 const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 
 const summaryOf = (detail: PrDetail): Summary => ({ versions: [...prLong().sums.values()].filter((s) => s.index <= detail.versions.length) });
@@ -45,7 +45,7 @@ function fileDiff(path: string, contentHash: string): FileDiff {
     };
 }
 
-describe('actions de la page PR : indicateur de chargement', () => {
+describe('PR page actions: loading indicator', () => {
     let detail: PrDetail;
 
     beforeEach(() => {
@@ -54,7 +54,7 @@ describe('actions de la page PR : indicateur de chargement', () => {
         api.pr.mockResolvedValue(detail);
     });
 
-    it('bouton « en cours » pendant l\'écriture et le rechargement, une seule action à la fois', async () => {
+    it('button "in progress" during the write and the reload, one action at a time', async () => {
         const load = usePrLoad(ref, detail);
         const write = deferred();
         api.approve.mockReturnValue(write.promise);
@@ -72,7 +72,7 @@ describe('actions de la page PR : indicateur de chargement', () => {
         expect(load.acting.value).toBe(false);
     });
 
-    it('écriture refusée : erreur affichée, bouton libéré, pas de rechargement', async () => {
+    it('write refused: error shown, button released, no reload', async () => {
         const load = usePrLoad(ref, detail);
         const write = deferred();
         const running = load.act(() => write.promise, { key: 'resolve:1' });
@@ -84,7 +84,7 @@ describe('actions de la page PR : indicateur de chargement', () => {
     });
 });
 
-describe('autre action en cours (⌘/Ctrl+Entrée pendant une écriture)', () => {
+describe('another action in progress (Cmd/Ctrl+Enter during a write)', () => {
     let detail: PrDetail;
 
     beforeEach(() => {
@@ -96,7 +96,7 @@ describe('autre action en cours (⌘/Ctrl+Entrée pendant une écriture)', () =>
 
     afterEach(() => setLocale('en'));
 
-    it('message visible, rien n\'est envoyé, brouillon conservé', async () => {
+    it('message shown, nothing is sent, draft kept', async () => {
         const load = usePrLoad(ref, detail);
         const discussion = useDiscussion(ref, load);
         const thread = threadById(detail, detail.threads[0]?.id ?? 0);
@@ -114,7 +114,7 @@ describe('autre action en cours (⌘/Ctrl+Entrée pendant une écriture)', () =>
     });
 });
 
-describe('rechargement : résumé et détail cohérents', () => {
+describe('reload: consistent summary and detail', () => {
     let detail: PrDetail;
 
     beforeEach(() => {
@@ -128,7 +128,7 @@ describe('rechargement : résumé et détail cohérents', () => {
     const pushed = (base: PrDetail, change: (versions: Version[]) => Version[]): PrDetail => ({ ...base, versions: change(base.versions) });
     const v11 = (versions: Version[]): Version => ({ ...versions[9] as Version, index: 11, hash: 'f'.repeat(40), shortHash: 'fffffff' });
 
-    it('même liste de versions après une écriture : résumé pas redemandé', async () => {
+    it('same version list after a write: summary not requested again', async () => {
         const load = usePrLoad(ref, detail);
         await load.loadSummary();
         expect(await load.act(() => api.approve(ref, true))).toBe(true);
@@ -136,7 +136,7 @@ describe('rechargement : résumé et détail cohérents', () => {
         expect(api.summary).toHaveBeenCalledTimes(1);
     });
 
-    it('nouvelle version poussée pendant la lecture : le rechargement après une écriture recharge aussi le résumé', async () => {
+    it('new version pushed while reading: the reload after a write reloads the summary too', async () => {
         const load = usePrLoad(ref, detail);
         await load.loadSummary();
         const after = pushed(detail, (versions) => [...versions, v11(versions)]);
@@ -150,7 +150,7 @@ describe('rechargement : résumé et détail cohérents', () => {
         expect(load.sums.value.get(11)?.kind).toBe('code');
     });
 
-    it('dernière version remplacée (même nombre, autre hash) : résumé rechargé', async () => {
+    it('latest version replaced (same count, other hash): summary reloaded', async () => {
         const load = usePrLoad(ref, detail);
         await load.loadSummary();
         api.pr.mockResolvedValue(pushed(detail, (versions) => versions.map((v) => (v.index === 10 ? { ...v, hash: 'e'.repeat(40) } : v))));
@@ -158,7 +158,7 @@ describe('rechargement : résumé et détail cohérents', () => {
         await vi.waitFor(() => expect(api.summary).toHaveBeenCalledTimes(2));
     });
 
-    it('deux résumés en vol : une réponse plus ancienne n\'écrase pas la plus récente', async () => {
+    it('two summaries in flight: an older response does not overwrite the most recent one', async () => {
         const load = usePrLoad(ref, detail);
         const first = deferred<Summary>();
         const second = deferred<Summary>();
@@ -173,7 +173,7 @@ describe('rechargement : résumé et détail cohérents', () => {
         expect(load.summary.value).toBe(fresh);
     });
 
-    it('le résumé découvre une version effacée que le détail croit lisible : détail rechargé une fois', async () => {
+    it('the summary discovers an erased version that the detail thinks is readable: detail reloaded once', async () => {
         const load = usePrLoad(ref, detail);
         api.summary.mockResolvedValue({ versions: summaryOf(detail).versions.map((s) => (s.index === 7 ? { ...s, kind: 'unavailable' as const } : s)) });
         const purged = pushed(detail, (versions) => versions.map((v) => (v.index === 7 ? { ...v, available: false } : v)));
@@ -185,7 +185,7 @@ describe('rechargement : résumé et détail cohérents', () => {
         expect(api.summary).toHaveBeenCalledTimes(1);
     });
 
-    it('… et si le serveur la dit encore lisible : pas de boucle', async () => {
+    it('... and if the server still says it is readable: no loop', async () => {
         const load = usePrLoad(ref, detail);
         api.summary.mockResolvedValue({ versions: summaryOf(detail).versions.map((s) => (s.index === 7 ? { ...s, kind: 'unavailable' as const } : s)) });
 
@@ -196,7 +196,7 @@ describe('rechargement : résumé et détail cohérents', () => {
     });
 });
 
-describe('comparaison en vol et rechargement forcé', () => {
+describe('comparison in flight and forced reload', () => {
     let detail: PrDetail;
 
     beforeEach(() => {
@@ -205,7 +205,7 @@ describe('comparaison en vol et rechargement forcé', () => {
         api.pr.mockResolvedValue(detail);
     });
 
-    it('une réponse non forcée arrivée après le rechargement forcé n\'écrit ni le cache ni le diff', async () => {
+    it('an unforced response arriving after the forced reload writes neither the cache nor the diff', async () => {
         const load = usePrLoad(ref, detail);
         const params = { from: 7, to: 10, context: 3 };
         const stale = deferred<Comparison>();
@@ -229,7 +229,7 @@ describe('comparaison en vol et rechargement forcé', () => {
     });
 });
 
-describe('« Vu » optimiste', () => {
+describe('optimistic "Seen"', () => {
     let detail: PrDetail;
 
     beforeEach(() => {
@@ -243,7 +243,7 @@ describe('« Vu » optimiste', () => {
         return { load, review: useReviewActions(ref, load, useDiffOptions(load.detail), () => undefined) };
     }
 
-    it('« Vu » refusé sur A après un « Vu » réussi sur B : seul A est annulé', async () => {
+    it('"Seen" refused on A after a successful "Seen" on B: only A is rolled back', async () => {
         const { load, review } = setup();
         const onA = deferred<{ ok: true }>();
         api.viewed.mockImplementation((_ref: unknown, body: { path: string }) => (body.path === 'src/A.ts' ? onA.promise : Promise.resolve({ ok: true })));
@@ -257,7 +257,7 @@ describe('« Vu » optimiste', () => {
         expect(showError).toHaveBeenCalledOnce();
     });
 
-    it('décoche refusée : le fichier retrouve sa coche et son empreinte', async () => {
+    it('untick refused: the file gets its tick and fingerprint back', async () => {
         const { load, review } = setup();
         api.viewed.mockRejectedValue(new Error('refusé'));
         await review.setViewed(fileDiff('src/C.ts', 'hc-new'), false);

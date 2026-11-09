@@ -1,6 +1,6 @@
-// Faux Bitbucket Cloud (API 2.0) en mémoire pour les tests d'intégration, l'UI et le développement.
-// Dépôt acme/demo-repo, plusieurs PR couvrant les cas de la page (voir FAKE_PRS). Les écritures sont
-// enregistrées (GET /__calls). Lancement manuel : node test/support/fake-bitbucket.ts [port]
+// In-memory fake Bitbucket Cloud (API 2.0) for integration tests, the UI and development.
+// Repository acme/demo-repo, several PRs covering the page's cases (see FAKE_PRS). Writes are
+// recorded (GET /__calls). Manual launch: node test/support/fake-bitbucket.ts [port]
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -12,25 +12,25 @@ export const FAKE_TOKEN = 'fake-token-123';
 export const WS = 'acme';
 export const REPO = 'demo-repo';
 
-/** PR servies par le faux Bitbucket (moi = Thomas Girard, uuid {me}). */
+/** PRs served by the fake Bitbucket (me = Thomas Girard, uuid {me}). */
 export const FAKE_PRS = {
-    /** 6 versions, rebases en v3 et v5 ; mon commentaire sur v2 ; Yann a approuvé ; plusieurs fils. */
+    /** 6 versions, rebases at v3 and v5; my comment on v2; Yann approved; several threads. */
     main: 42,
-    /** 34 versions de juin à octobre, 5 rebases, chacune modifie src/Long.ts ; j'ai approuvé v30. */
+    /** 34 versions from June to October, 5 rebases, each modifies src/Long.ts; I approved v30. */
     long: 43,
-    /** v1 avec du code, mon approbation (retirée par Bitbucket au push suivant), puis v2 = rebase pur. */
+    /** v1 with code, my approval (removed by Bitbucket on the next push), then v2 = pure rebase. */
     rebaseOnly: 44,
-    /** Ma PR (2 versions), approuvée par Yann. */
+    /** My PR (2 versions), approved by Yann. */
     mine: 45,
-    /** Je suis relecteur mais n'ai rien fait (2 versions). */
+    /** I am a reviewer but did nothing (2 versions). */
     neverReviewed: 46,
-    /** Ne me concerne pas (auteur Yann, 1 version). */
+    /** Does not concern me (author Yann, 1 version). */
     others: 47,
-    /** v1 effacée par Bitbucket (commit introuvable), v2 et v3 lisibles ; mon commentaire date de v1. */
+    /** v1 erased by Bitbucket (commit not found), v2 and v3 readable; my comment dates from v1. */
     purged: 48,
 } as const;
 
-/** PR du scénario principal (rétrocompatibilité des tests). */
+/** PR of the main scenario (backward compatibility of the tests). */
 export const PR_ID = FAKE_PRS.main;
 
 const ME: BbUser = { uuid: '{me}', display_name: 'Thomas Girard', nickname: 'tgirard' };
@@ -54,7 +54,7 @@ export interface FakePr {
 
 export interface FakeData {
     repo: FakeRepo;
-    /** « version..master » → base réelle. */
+    /** "version..master" -> real base. */
     mergeBases: Map<string, string>;
     prs: Map<number, FakePr>;
     nextId(): number;
@@ -68,7 +68,7 @@ export interface FakeBitbucket {
     close(): Promise<void>;
 }
 
-/** Version d'une PR : commit (nom), base master (nom) et date du push. */
+/** Version of a PR: commit (name), master base (name) and push date. */
 interface PlanStep {
     commit: string;
     base: string;
@@ -144,7 +144,7 @@ class FakeBuilder {
                     update: { date: step.date, author, source: { commit: { hash: hex(step.commit).slice(0, 12) } }, destination: { commit: { hash: hex(step.base).slice(0, 12) } } },
                 })),
                 ...events,
-                // Comme Bitbucket, l'activité contient aussi chaque commentaire.
+                // Like Bitbucket, the activity also contains every comment.
                 ...comments.map((comment): BbActivity => ({ comment })),
             ],
             comments,
@@ -152,7 +152,7 @@ class FakeBuilder {
     }
 }
 
-/** #42 : scénario de fake-repo.ts (amend, rebase pur, montée de RC, rebase + code, message seul). */
+/** #42: scenario of fake-repo.ts (amend, pure rebase, RC bump, rebase + code, message only). */
 function mainPr(b: FakeBuilder): void {
     const { repo, versions } = scenario();
     const named = (name: string): string => `main:${name}`;
@@ -164,7 +164,7 @@ function mainPr(b: FakeBuilder): void {
         raw: '## Test impact',
         html: '<h2>Test impact</h2><table><tr><th>Test</th></tr><tr><td>ActionSpec</td></tr></table><img src=x onerror="alert(1)">',
     };
-    // Mon commentaire sur v2, ligne 7 (return this.save(id) → modifiée en v5).
+    // My comment on v2, line 7 (return this.save(id) -> modified in v5).
     const mine = b.comment(ME, '2026-10-02T12:00:00Z', 'Utilise le repository pour sauver.', { inline: { path: 'src/Action.ts', to: 7, from: null } });
     const reply = b.comment(CAM, '2026-10-20T10:30:00Z', 'Fait dans la dernière version.', { parent: { id: mine.id } });
     b.pr(FAKE_PRS.main, {
@@ -187,7 +187,7 @@ function mainPr(b: FakeBuilder): void {
     });
 }
 
-/** #43 : 34 versions de juin à octobre ; rebase sur un nouveau master toutes les 7 versions ; j'ai approuvé v30. */
+/** #43: 34 versions from June to October; rebase onto a new master every 7 versions; I approved v30. */
 function longPr(b: FakeBuilder): void {
     const longFile = (version: number): string => lines(Array.from({ length: 40 }, (_, i) => (i < version ? `    line ${i + 1} // v${i + 1}` : `    line ${i + 1}`)));
     b.commit('long:m0', { 'src/Long.ts': longFile(0), 'src/Master.ts': lines(['export const master = 0;']) });
@@ -220,7 +220,7 @@ function longPr(b: FakeBuilder): void {
     });
 }
 
-/** #44 : v1 (code), mon approbation, puis v2 = rebase pur sur un master qui a avancé. */
+/** #44: v1 (code), my approval, then v2 = pure rebase onto a master that moved on. */
 function rebaseOnlyPr(b: FakeBuilder): void {
     b.commit('rebase:m0', { 'src/R.ts': lines(['a', 'b']), 'src/Other.ts': lines(['1']) });
     b.derive('rebase:v1', 'rebase:m0', { 'src/R.ts': lines(['a', 'B']) }, 'DEMO-44 - fix(r): rebase only since review');
@@ -229,7 +229,7 @@ function rebaseOnlyPr(b: FakeBuilder): void {
     b.pr(FAKE_PRS.rebaseOnly, {
         title: 'DEMO-44 - fix(r): rebase only since review',
         author: CAM,
-        // Mon approbation de v1 a été retirée par Bitbucket au push de v2 (réglage du dépôt) : réapprobation rapide.
+        // My approval of v1 was removed by Bitbucket on the push of v2 (repository setting): quick re-approval.
         participants: [
             { user: ME, role: 'REVIEWER', approved: false, state: null },
             { user: CAM, role: 'PARTICIPANT', approved: false, state: null },
@@ -243,8 +243,8 @@ function rebaseOnlyPr(b: FakeBuilder): void {
 }
 
 /**
- * #48 : PR ancienne dont Bitbucket a effacé le commit de v1 (écrasé par un force-push) ; v2 et v3 lisibles.
- * Mon commentaire en ligne date de v1 : ma dernière relecture tombe sur une version indisponible.
+ * #48: old PR whose v1 commit Bitbucket erased (overwritten by a force-push); v2 and v3 readable.
+ * My inline comment dates from v1: my last review falls on an unavailable version.
  */
 function purgedPr(b: FakeBuilder): void {
     const title = 'DEMO-48 - feat(purged): long running pull request';
@@ -269,7 +269,7 @@ function purgedPr(b: FakeBuilder): void {
     b.repo.commits.delete(hex('purged:v1'));
 }
 
-/** PR simple à 1 ou 2 versions de code (mine, jamais relue, autres). */
+/** Simple PR with 1 or 2 code versions (mine, never reviewed, others). */
 function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number): void {
     b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']) });
     const plan: PlanStep[] = [];
@@ -280,7 +280,7 @@ function simplePr(b: FakeBuilder, id: number, key: string, title: string, author
     b.pr(id, { title, author, participants, plan });
 }
 
-/** Nouveau push sur une PR : commit `commit` (contenu de `from` modifié par `changes`, même message) sur la base `base`. */
+/** New push on a PR: commit `commit` (content of `from` modified by `changes`, same message) on base `base`. */
 export function pushVersion(data: FakeData, id: number, { commit, from, base, changes, date }: {
     commit: string;
     from: string;
@@ -435,7 +435,7 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
     function handlePr(req: IncomingMessage, res: ServerResponse, fake: FakePr, sub: string, body: Record<string, unknown> | null): void {
         const now = new Date().toISOString();
         const findComment = (id: string): BbComment | undefined => fake.comments.find((c) => c.id === Number(id));
-        // Comme Bitbucket : on ne devient participant qu'en agissant (approbation, demande de modifs), pas en lisant.
+        // Like Bitbucket: you only become a participant by acting (approval, change request), not by reading.
         const participant = (): BbParticipant => {
             let me = fake.pr.participants.find((p) => p.user?.uuid === ME.uuid);
             if (!me) {

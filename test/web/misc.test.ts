@@ -21,20 +21,20 @@ afterEach(() => {
 });
 
 describe('prRoute', () => {
-    it('route nommée de la page PR (l\'analyse des URL est testée avec src/shared)', () => {
+    it('named route of the PR page (URL parsing is tested with src/shared)', () => {
         expect(prRoute({ workspace: 'acme', repo: 'records-api', id: 212 }, { from: '7', to: '10' }))
             .toEqual({ name: 'pr', params: { ws: 'acme', repo: 'records-api', id: '212' }, query: { from: '7', to: '10' } });
     });
 });
 
 describe('format', () => {
-    it('pluriels et listes', () => {
+    it('plurals and lists', () => {
         expect(masterMasked(fr, 1)).toBe('1 fichier de master masqué');
         expect(masterMasked(fr, 137)).toBe('137 fichiers de master masqués');
         expect(masterMasked(en, 137)).toBe('137 master files hidden');
     });
 
-    it('écarts de la frise', () => {
+    it('timeline gaps', () => {
         expect(daysBetween('2026-10-14', '2026-10-29')).toBe(15);
         expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2); // changement d'heure
         expect(gapLabel(fr, 15)).toBe('15 j');
@@ -43,7 +43,7 @@ describe('format', () => {
         expect([15, 21, 62].map((days) => gapLabel(en, days))).toEqual(['15d', '3w', '2mo']);
     });
 
-    it('dates relatives', () => {
+    it('relative dates', () => {
         expect(relTime(fr, '2026-11-05T13:59:30Z')).toBe('à l\'instant');
         expect(relTime(fr, '2026-11-05T13:15:00Z')).toBe('il y a 45 min');
         expect(relTime(fr, '2026-11-05T11:02:00Z')).toBe('il y a 2 h');
@@ -66,7 +66,7 @@ describe('format', () => {
     });
 });
 
-describe('cartes de l\'accueil', () => {
+describe('home cards', () => {
     const me: User = { uuid: '{me}', displayName: 'Moi' };
     const card = (over: Partial<PrCard>): PrCard => ({
         workspace: 'acme', repo: 'records-api', id: 1, title: 't', author: { uuid: '{a}', displayName: 'Auteur' }, url: 'u',
@@ -75,18 +75,18 @@ describe('cartes de l\'accueil', () => {
     });
     const badges = (c: PrCard, key: HomeGroupKey = 'to-review'): string[] => cardBadges(fr, c, key, me).map((b) => b.text);
 
-    it('nouvelles versions, code, commentaires, approbation', () => {
+    it('new versions, code, comments, approval', () => {
         expect(badges(card({}))).toEqual(['+3 versions', 'dont 1 avec du code', '💬 2 nouveaux']);
         expect(badges(card({ newCodeVersions: 0, newComments: 0, myApproval: true }))).toEqual(['+3 versions', 'rebase seul', '✓ approuvée']);
         expect(badges(card({ newCodeVersions: null, newComments: 0 }), 'rebase-only')).toEqual(['+3 versions', 'rebase seul']);
     });
 
-    it('jamais relue : avec le nombre de versions, ou sans s\'il est inconnu (carte légère)', () => {
+    it('never reviewed: with the version count, or without it if unknown (light card)', () => {
         expect(badges(card({ lastReviewed: null, newComments: 0 }))).toEqual(['pas encore relue · 10 versions']);
         expect(badges(card({ lastReviewed: null, versionsCount: null, newComments: 0 }), 'others')).toEqual(['pas encore relue']);
     });
 
-    it('sous-titre ; ma PR : « toi », pas de badge de versions', () => {
+    it('subtitle; my PR: "you", no versions badge', () => {
         expect(cardSubtitle(fr, card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
         expect(cardSubtitle(en, card({}), me)).toBe('Auteur · open for 22 days · pushed 2 hours ago · 2 approvals');
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
@@ -95,21 +95,21 @@ describe('cartes de l\'accueil', () => {
     });
 });
 
-describe('fils', () => {
+describe('threads', () => {
     const { data } = prLong();
 
-    it('groupes : nouveaux, ouverts, résolus', () => {
+    it('groups: new, open, resolved', () => {
         const g = threadGroups(data.threads);
         expect(g.fresh.map((t) => t.id)).toEqual([120]);
         expect(g.open.map((t) => t.id)).toEqual([110]);
         expect(g.resolved.map((t) => t.id).sort()).toEqual([101, 103, 105]);
     });
 
-    it('nouveaux fils et réponses depuis ma relecture', () => {
+    it('new threads and replies since my review', () => {
         expect(newActivity(data.threads)).toEqual({ newThreads: 1, replies: 1, names: ['Yann', 'Camille'] });
     });
 
-    it('initiales d\'avatar', () => {
+    it('avatar initials', () => {
         expect(initials('Yann Bernard')).toBe('YB');
         expect(initials('review-bot')).toBe('RE');
         expect(initials('')).toBe('?');

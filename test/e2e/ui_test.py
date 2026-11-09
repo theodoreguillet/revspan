@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Test UI de Revspan (Playwright pour Python, sans pytest), contre le vrai serveur branché sur le faux Bitbucket.
+"""Revspan UI test (Playwright for Python, no pytest), against the real server wired to the fake Bitbucket.
 
-Lancement normal (après « npx --no-install vite build ») :
+Normal launch (after "npx --no-install vite build"):
     node test/e2e/run-against-fake.ts
 
-run-against-fake.ts démarre le faux Bitbucket et le serveur, puis lance ce script avec :
-    REVSPAN_BASE_URL    URL du serveur Revspan (obligatoire).
-    REVSPAN_CALLS_URL   Journal des écritures reçues par le faux Bitbucket (GET → JSON array).
-    REVSPAN_PR          PR principale, « workspace/dépôt/id » (acme/demo-repo/42).
-    REVSPAN_FAKE_PRS    JSON des PR du faux Bitbucket : main, long, rebaseOnly, mine, neverReviewed, others, purged.
-    REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Identifiants du faux Bitbucket (remise du jeton après suppression).
-Options :
-    REVSPAN_SHOTS_DIR   Dossier des captures (défaut : <tmp>/revspan-shots).
-    REVSPAN_FIXED_TIME  Heure figée du navigateur (ISO).
-    REVSPAN_HEADED=1    Navigateur visible.
+run-against-fake.ts starts the fake Bitbucket and the server, then runs this script with:
+    REVSPAN_BASE_URL    URL of the Revspan server (required).
+    REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
+    REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
+    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged.
+    REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Credentials of the fake Bitbucket (token put back after deletion).
+Options:
+    REVSPAN_SHOTS_DIR   Screenshots folder (default: <tmp>/revspan-shots).
+    REVSPAN_FIXED_TIME  Frozen browser time (ISO).
+    REVSPAN_HEADED=1    Visible browser.
 
-Un seul serveur pour tout le script : chaque vérification voit les écritures des précédentes (ordre important).
-Sort avec un code non nul si une vérification échoue.
+A single server for the whole script: each check sees the writes of the previous ones (order matters).
+Exits with a non-zero code if a check fails.
 """
 import json
 import os
@@ -46,7 +46,7 @@ def log(msg):
 
 
 def check(name):
-    """Décorateur : exécute une vérification, journalise PASS/FAIL, continue en cas d'échec (capture d'écran à l'appui)."""
+    """Decorator: runs a check, logs PASS/FAIL, continues on failure (with a screenshot)."""
     def wrap(fn):
         def run(page):
             try:
@@ -92,7 +92,7 @@ def url(hash_part=''):
 
 
 # ---------------------------------------------------------------------------
-# Journal des écritures du faux Bitbucket (format de l'API Bitbucket 2.0)
+# Log of the writes of the fake Bitbucket (Bitbucket 2.0 API format)
 # ---------------------------------------------------------------------------
 
 class Calls:
@@ -108,7 +108,7 @@ class Calls:
 
     def wait(self, predicate, desc, timeout=8.0):
         if not self.url:
-            log(f'      (journal des appels absent : « {desc} » non vérifié)')
+            log(f'      (call log missing: "{desc}" not checked)')
             return None
         deadline = time.time() + timeout
         seen = []
@@ -118,7 +118,7 @@ class Calls:
                 if predicate(call):
                     return call
             time.sleep(0.1)
-        raise AssertionError(f'appel attendu absent : {desc} ; reçus : {json.dumps(seen, ensure_ascii=False)[:600]}')
+        raise AssertionError(f'expected call missing: {desc}; received: {json.dumps(seen, ensure_ascii=False)[:600]}')
 
 
 calls = Calls(CALLS_URL)
@@ -141,7 +141,7 @@ def comment_parent(call):
 
 
 # ---------------------------------------------------------------------------
-# Attentes
+# Expectations
 # ---------------------------------------------------------------------------
 
 def expected_default(n, lr):
@@ -190,12 +190,12 @@ def wait_api(predicate, desc, timeout=8.0):
     deadline = time.time() + timeout
     while not predicate():
         if time.time() > deadline:
-            raise AssertionError(f'état serveur attendu absent : {desc}')
+            raise AssertionError(f'expected server state missing: {desc}')
         time.sleep(0.1)
 
 
 # ---------------------------------------------------------------------------
-# Captures (avant les écritures)
+# Screenshots (before the writes)
 # ---------------------------------------------------------------------------
 
 def screenshots(browser, fixed_time):
@@ -237,11 +237,11 @@ def screenshots(browser, fixed_time):
                 page.screenshot(path=os.path.join(SHOTS, f'pr-split-{scheme}-{width}.png'), full_page=True)
                 page.locator('.rv-seg button[data-seg="unified"]').click()
             context.close()
-    log(f'      captures dans {SHOTS}')
+    log(f'      screenshots in {SHOTS}')
 
 
 # ---------------------------------------------------------------------------
-# Vérifications
+# Checks
 # ---------------------------------------------------------------------------
 
 def run_checks(page):
@@ -251,10 +251,10 @@ def run_checks(page):
     me = data['me'] or {}
     exp_from, exp_to = expected_default(n, lr)
     by_id = {t['id']: t for t in data['threads']}
-    # mon fil en ligne encore ouvert
+    # my inline thread, still open
     my_thread = next((t for t in data['threads'] if t['path'] and not t['resolved'] and t['comments'][0]['mine']), None)
 
-    @check('accueil : groupes et cartes (avant d\'ouvrir les PR)')
+    @check('home: groups and cards (before opening the PRs)')
     def home(page):
         page.goto(url(''))
         expect(page.locator('.rv-list').first).to_be_visible(timeout=20000)
@@ -266,13 +266,13 @@ def run_checks(page):
             expect(card).to_contain_text('💬 2 nouveaux')
             expect(page.locator(f'section[data-group="mine"] .rv-row[data-pr="{fake_ref("mine")}"]')).to_contain_text('toi')
             others = page.locator('details[data-group="others"]')
-            assert not others.evaluate('d => d.open'), '« Autres PR ouvertes » doit être replié quand on connaît l\'utilisateur'
+            assert not others.evaluate('d => d.open'), '"Autres PR ouvertes" must be collapsed when the user is known'
             others.locator('summary').click()
             light = others.locator(f'.rv-row[data-pr="{fake_ref("others")}"]')
             expect(light.locator('.rv-nb')).to_have_text('pas encore relue')  # versionsCount null : pas de nombre
     home(page)
 
-    @check('ouverture de la PR depuis l\'accueil, plage par défaut')
+    @check('opening the PR from the home page, default range')
     def open_main(page):
         page.locator(f'.rv-row[data-pr="{MAIN_PR}"]').click()
         wait_pr_ready(page)
@@ -293,28 +293,28 @@ def run_checks(page):
             expect(page.locator('.rv-preset.on[data-preset="since"]')).to_be_visible()
     open_main(page)
 
-    @check('clic sur une version = ce qu\'elle a changé')
+    @check('click on a version = what it changed')
     def click_version(page):
         page.click('.rv-v[data-i="4"]')
         expect(readout(page)).to_have_text('Changements de v4 · par rapport à v3 · aucun changement de code')
         assert current_selection(page) == (3, 4)
     click_version(page)
 
-    @check('Maj+clic : étendre, puis déplacer la borne la plus proche')
+    @check('Shift+click: extend, then move the closest bound')
     def shift_click(page):
         page.click(f'.rv-v[data-i="{n}"]', modifiers=['Shift'])
         expect(readout(page)).to_contain_text(f'Changements de v4 à v{n} · par rapport à v3')
         page.click('.rv-v[data-i="2"]')
         page.click('.rv-v[data-i="6"]', modifiers=['Shift'])
         expect(readout(page)).to_contain_text('Changements de v2 à v6 · par rapport à v1')
-        page.click('.rv-v[data-i="3"]', modifiers=['Shift'])  # 3-1 ≤ 6-3 : « de » plus proche → from = 2
+        page.click('.rv-v[data-i="3"]', modifiers=['Shift'])  # 3-1 <= 6-3: "from" is closer -> from = 2
         expect(readout(page)).to_contain_text('Changements de v3 à v6 · par rapport à v2')
-        page.click('.rv-v[data-i="5"]', modifiers=['Shift'])  # 5-2 > 6-5 : « à » plus proche → to = 5
+        page.click('.rv-v[data-i="5"]', modifiers=['Shift'])  # 5-2 > 6-5: "to" is closer -> to = 5
         expect(readout(page)).to_contain_text('Changements de v3 à v5 · par rapport à v2')
         assert current_selection(page) == (2, 5)
     shift_click(page)
 
-    @check('préréglage « Tout vs master »')
+    @check('"All vs master" preset')
     def all_vs_master(page):
         page.click('.rv-preset[data-preset="all"]')
         cmp = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')
@@ -324,7 +324,7 @@ def run_checks(page):
         expect(page.locator('.rv-diff .rv-file')).to_have_count(len(cmp['files']))
     all_vs_master(page)
 
-    @check('masquer rebases seuls et deps : garde la version relue et les bornes')
+    @check('hide rebase-only and deps: keeps the reviewed version and the bounds')
     def hide_no_code(page):
         page.click('.rv-preset[data-preset="last"]')  # v5 → v6
         page.check('#hide-no-code')
@@ -334,35 +334,35 @@ def run_checks(page):
         expect(page.locator('.rv-v[data-i="4"]')).to_have_count(0)  # deps
         tick = page.locator('.rv-tick')
         expect(tick).to_have_text('⋯2')
-        tick.click()  # clic = tout réafficher
+        tick.click()  # click = show everything again
         expect(page.locator('#hide-no-code')).not_to_be_checked()
         expect(page.locator('.rv-v[data-i="3"]')).to_be_visible()
     hide_no_code(page)
 
-    # À partir d'ici : plage par défaut (depuis ma relecture).
+    # From here on: default range (since my review).
     open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
     cmp = api(f'{pr_api(MAIN_PR)}/compare?from={exp_from}&to={exp_to}&context=3')
     thread_sel = f'.rv-diff .rv-th[data-thread="{my_thread["id"]}"]' if my_thread else '.rv-diff .rv-th:not([data-resolved])'
     code_file = next(f for f in cmp['files'] if f['category'] == 'code')
 
-    @check('diff : fichiers, fil placé (ligne modifiée), en-tête de hunk, fichiers de master masqués')
+    @check('diff: files, placed thread (modified line), hunk header, hidden master files')
     def diff_view(page):
         expect(page.locator('.rv-diff .rv-file')).to_have_count(len(cmp['files']))
-        assert my_thread, 'aucun fil ouvert de moi dans la PR'
+        assert my_thread, 'no open thread of mine in the PR'
         placement = next(p for f in cmp['files'] for p in f['threads'] if p['threadId'] == my_thread['id'])
         expect(page.locator(thread_sel)).to_contain_text(my_thread['comments'][0]['raw'])
         expect(page.locator(thread_sel)).to_contain_text(f'Posté sur v{my_thread["version"]} · ligne {my_thread["anchor"]["to"]}')
         if placement['moved']:
             expect(page.locator(f'{thread_sel} .rv-moved')).to_have_text('ligne modifiée depuis')
         previous = page.evaluate(f'() => document.querySelector(\'{thread_sel}\').previousElementSibling.dataset.n')
-        assert previous == str(placement['line']), f'le fil devrait suivre la ligne {placement["line"]}, suit {previous}'
+        assert previous == str(placement['line']), f'the thread should follow line {placement["line"]}, follows {previous}'
         header = code_file['hunks'][0]['header']
         block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
         if header:
             expect(block.locator('.rv-hunk .hh').first).to_have_text(header)
         resolved = [p['threadId'] for f in cmp['files'] for p in f['threads'] if by_id[p['threadId']]['resolved']]
         for tid in resolved:
-            expect(page.locator(f'.rv-diff .rv-th[data-thread="{tid}"]')).to_have_count(0)  # résolus masqués par défaut
+            expect(page.locator(f'.rv-diff .rv-th[data-thread="{tid}"]')).to_have_count(0)  # resolved ones hidden by default
         if cmp['masterOnly']:
             expect(page.locator('.rv-masked')).to_contain_text(f'{len(cmp["masterOnly"])} fichiers modifiés uniquement par master sont masqués')
         if cmp['messageChanged']:
@@ -370,7 +370,7 @@ def run_checks(page):
         expect(page.locator('.rv-prog')).to_contain_text(f'0 / {len(cmp["files"])} vus')
     diff_view(page)
 
-    @check('contexte « fichier entier » puis 3 lignes')
+    @check('"whole file" context then 3 lines')
     def full_context(page):
         before = page.locator('.rv-diff .rv-l').count()
         page.locator('.rv-seg button[data-seg="full"]').click()
@@ -379,7 +379,7 @@ def run_checks(page):
         page.wait_for_function(f'() => !document.querySelector(".rv-body.loading") && document.querySelectorAll(".rv-diff .rv-l").length === {before}', timeout=10000)
     full_context(page)
 
-    @check('commentaire en ligne (bouton +, ⌘/Ctrl+Entrée)')
+    @check('inline comment (+ button, Cmd/Ctrl+Enter)')
     def inline_comment(page):
         line_no = next(ln['n'] for h in code_file['hunks'] for ln in h['lines'] if ln['t'] == ' ' and ln['n'] is not None)
         row = page.locator(f'.rv-file[data-path="{code_file["path"]}"] .rv-l[data-n="{line_no}"]').first
@@ -396,9 +396,9 @@ def run_checks(page):
         expect(page.locator('.rv-comp')).to_have_count(0)
     inline_comment(page)
 
-    @check('répondre à un fil, puis supprimer ma réponse')
+    @check('reply to a thread, then delete my reply')
     def reply_and_delete(page):
-        assert my_thread, 'aucun fil ouvert de moi'
+        assert my_thread, 'no open thread of mine'
         page.locator(f'{thread_sel} .rv-th-f textarea').fill('Merci, c\'est bon pour moi.')
         calls.start()
         page.locator(f'{thread_sel} [data-action="send-reply"]').click()
@@ -407,15 +407,15 @@ def run_checks(page):
         expect(mine).to_have_count(1, timeout=10000)
         cid = int(mine.get_attribute('data-comment'))
         calls.start()
-        mine.locator('[data-action="delete"]').click()  # confirm() accepté par le gestionnaire de dialogues
+        mine.locator('[data-action="delete"]').click()  # confirm() accepted by the dialog handler
         calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{cid}'), f'DELETE comments/{cid}')
         expect(page.locator(f'{thread_sel} .rv-cm', has_text='Merci, c\'est bon pour moi.')).to_have_count(0, timeout=10000)
     reply_and_delete(page)
 
-    @check('commentaire sur une ligne supprimée (commentaire général avec citation)')
+    @check('comment on a deleted line (general comment with quote)')
     def deleted_line(page):
         target = next(((f['path'], ln['o'], ln['text']) for f in cmp['files'] for h in f['hunks'] for ln in h['lines'] if ln['t'] == '-'), None)
-        assert target, 'aucune ligne supprimée dans le diff'
+        assert target, 'no deleted line in the diff'
         path, old_no, code = target
         block = page.locator(f'.rv-file[data-path="{path}"]')
         row = block.locator(f'.rv-l.r[data-o="{old_no}"]').first
@@ -429,13 +429,13 @@ def run_checks(page):
         frm_label = 'master' if exp_from == 0 else f'v{exp_from}'
         expected_raw = f'`{path}` — ligne supprimée ({frm_label} → v{exp_to}) :\n```\n{code}\n```\nPourquoi supprimer cette ligne ?'
         calls.wait(lambda c: is_post_comment(c) and comment_raw(c) == expected_raw and not body_of(c).get('inline') and comment_parent(c) is None,
-                   'POST comments général avec citation')
+                   'POST general comment with quote')
         expect(page.locator('.rv-comp')).to_have_count(0, timeout=10000)
     deleted_line(page)
 
-    @check('résoudre un fil')
+    @check('resolve a thread')
     def resolve(page):
-        assert my_thread, 'aucun fil ouvert de moi'
+        assert my_thread, 'no open thread of mine'
         calls.start()
         page.locator(f'{thread_sel} [data-action="resolve"]').click()
         calls.wait(lambda c: c['method'] == 'POST' and c['path'].endswith(f'/comments/{my_thread["id"]}/resolve'), f'POST comments/{my_thread["id"]}/resolve')
@@ -445,17 +445,17 @@ def run_checks(page):
         page.uncheck('#show-resolved')
     resolve(page)
 
-    @check('marquer un fichier « Vu » (état local du serveur)')
+    @check('mark a file "Seen" (server local state)')
     def viewed(page):
         block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
         block.locator('input[data-action="viewed"]').check()
         expect(block).to_have_class(re.compile(r'\bfolded\b'))
         expect(page.locator(f'.rv-f[data-path="{code_file["path"]}"] .ck.seen')).to_be_visible()
         expect(page.locator('.rv-prog')).to_contain_text(f'1 / {len(cmp["files"])} vus')
-        wait_api(lambda: api(pr_api(MAIN_PR))['review']['viewed'].get(code_file['path']) == code_file['contentHash'], 'review.viewed mis à jour')
+        wait_api(lambda: api(pr_api(MAIN_PR))['review']['viewed'].get(code_file['path']) == code_file['contentHash'], 'review.viewed updated')
     viewed(page)
 
-    @check('demander des modifs (bascule)')
+    @check('request changes (toggle)')
     def request_changes(page):
         calls.start()
         page.click('[data-action="request-changes"]')
@@ -467,7 +467,7 @@ def run_checks(page):
         expect(page.locator('[data-action="request-changes"]')).to_have_text('Demander des modifs', timeout=10000)
     request_changes(page)
 
-    @check('approuver')
+    @check('approve')
     def approve(page):
         button = page.locator('[data-action="approve"]')
         expect(button).to_have_text(re.compile(f'Approuver v{n}$'))
@@ -479,18 +479,18 @@ def run_checks(page):
         expect(page.locator('.rv-banner')).to_contain_text(f'Tu es à jour : v{n} relue')
     approve(page)
 
-    @check('onglet Discussions : commentaire général, groupes, « Voir dans le diff », HTML assaini')
+    @check('Discussions tab: general comment, groups, "View in diff", sanitized HTML')
     def discussions(page):
         page.click('.rv-tab[data-tab="discussions"]')
         page.fill('.rv-disc .rv-comp textarea', 'Commentaire général de test')
         calls.start()
         page.click('[data-action="send-general"]')
         calls.wait(lambda c: is_post_comment(c) and comment_raw(c) == 'Commentaire général de test' and comment_parent(c) is None and not body_of(c).get('inline'),
-                   'POST comments général')
+                   'POST general comment')
         expect(page.locator('.rv-ditem', has_text='Commentaire général de test')).to_be_visible(timeout=10000)
         expect(page.locator('.rv-dgrp[data-group="open"]')).to_contain_text('Ouverts')
         expect(page.locator('details[data-group="resolved"] summary')).to_contain_text('Résolus')
-        # HTML des commentaires (le faux Bitbucket en sert un avec <img onerror>) : rien d'exécutable dans le DOM
+        # comment HTML (the fake Bitbucket serves one with <img onerror>): nothing executable in the DOM
         out = page.evaluate('''() => {
             const bad = [];
             const roots = [...document.querySelectorAll('.rv-html')];
@@ -507,8 +507,8 @@ def run_checks(page):
             }
             return { count: roots.length, bad };
         }''')
-        assert out['count'] > 0, 'aucun commentaire rendu'
-        assert not out['bad'], f'HTML non assaini : {out["bad"]}'
+        assert out['count'] > 0, 'no comment rendered'
+        assert not out['bad'], f'unsanitized HTML: {out["bad"]}'
         shown = page.locator('.rv-ditem:visible [data-action="show-in-diff"]').first
         tid = shown.evaluate('b => b.closest(".rv-ditem").dataset.thread')
         shown.click()
@@ -516,7 +516,7 @@ def run_checks(page):
         expect(page.locator(f'.rv-diff .rv-th[data-thread="{tid}"]')).to_be_visible()
     discussions(page)
 
-    @check('onglet Versions : clic sur une ligne')
+    @check('Versions tab: click on a row')
     def versions_tab(page):
         page.click('.rv-tab[data-tab="versions"]')
         expect(page.locator('.rv-tbl tbody tr')).to_have_count(n)
@@ -528,7 +528,7 @@ def run_checks(page):
         page.click('.rv-tab[data-tab="diff"]')
     versions_tab(page)
 
-    @check('raccourcis clavier ([ ] n j k ?)')
+    @check('keyboard shortcuts ([ ] n j k ?)')
     def keyboard(page):
         page.locator('body').click(position={'x': 5, 'y': 5})
         _, to = current_selection(page)
@@ -551,20 +551,20 @@ def run_checks(page):
         expect(page.locator('.rv-overlay')).to_be_visible()
         page.keyboard.press('Escape')
         expect(page.locator('.rv-overlay')).to_have_count(0)
-        # AZERTY sous Windows : AltGr (Ctrl + Alt) + 5 donne [
+        # AZERTY on Windows: AltGr (Ctrl + Alt) + 5 gives [
         _, to = current_selection(page)
         page.keyboard.press('Control+Alt+[')
         expect(readout(page)).to_contain_text(readout_bold(to - 2, to - 1))
     keyboard(page)
 
-    @check('liste des fichiers au clavier : Espace et Entrée ouvrent le fichier, même vu')
+    @check('file list with the keyboard: Space and Enter open the file, even when seen')
     def file_list_keys(page):
         block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
         row = page.locator(f'.rv-f[data-path="{code_file["path"]}"]')
         folded = re.compile(r'\bfolded\b')
         for key in (' ', 'Enter'):
             open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
-            page.reload()  # page neuve : fichier vu plus haut, donc replié
+            page.reload()  # fresh page: file seen earlier, hence collapsed
             wait_pr_ready(page)
             expect(block).to_have_class(folded)
             row.focus()
@@ -573,7 +573,7 @@ def run_checks(page):
             expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', row.get_attribute('data-idx'))
     file_list_keys(page)
 
-    @check('aide des raccourcis : focus piégé dans la boîte, rendu au bouton à la fermeture')
+    @check('shortcuts help: focus trapped in the box, returned to the button on close')
     def shortcuts_focus(page):
         opener = page.locator('.rv-nav button[aria-label="Raccourcis clavier"]')
         opener.click()
@@ -584,16 +584,16 @@ def run_checks(page):
         try:
             for key in ('Tab', 'Tab', 'Shift+Tab'):
                 page.keyboard.press(key)
-                assert page.evaluate(inside), f'focus sorti de la boîte après {key}'
+                assert page.evaluate(inside), f'focus left the box after {key}'
             page.keyboard.press('Escape')
             expect(overlay).to_have_count(0)
             expect(opener).to_be_focused()
         finally:
             if overlay.count():
-                overlay.locator('button', has_text='Fermer').click()  # ne pas bloquer les vérifications suivantes
+                overlay.locator('button', has_text='Fermer').click()  # do not block the following checks
     shortcuts_focus(page)
 
-    @check('collage d\'une URL Bitbucket dans la barre du haut')
+    @check('pasting a Bitbucket URL in the top bar')
     def url_paste(page):
         ws, repo, pid = MAIN_PR.split('/')
         page.goto(url(''))
@@ -604,7 +604,7 @@ def run_checks(page):
     url_paste(page)
 
     if FAKE_PRS:
-        @check('PR longue : repli automatique, approbation périmée, dépliage')
+        @check('long PR: automatic folding, stale approval, unfolding')
         def long_pr(page):
             ref = fake_ref('long')
             info = api(pr_api(ref))
@@ -622,10 +622,10 @@ def run_checks(page):
             expect(page.locator('.rv-track .rv-v:not(.base)')).to_have_count(total)
         long_pr(page)
 
-        @check('seulement des rebases depuis ma relecture : groupe d\'accueil et réapprobation rapide')
+        @check('only rebases since my review: home group and quick re-approval')
         def fast_path(page):
             ref = fake_ref('rebaseOnly')
-            open_pr(page, ref)  # calcule le résumé : la PR passe dans « Réapprobation rapide »
+            open_pr(page, ref)  # computes the summary: the PR moves to "Quick re-approval"
             banner = page.locator('.rv-banner[data-banner="fast"]')
             expect(banner).to_contain_text('Depuis ta relecture de v1 : seulement des rebases, aucun changement de l\'auteur')
             expect(page.locator('.rv-empty')).to_contain_text('Aucun changement de l\'auteur entre v1 et v2')
@@ -636,11 +636,11 @@ def run_checks(page):
             wait_pr_ready(page)
             calls.start()
             page.click('[data-action="reapprove"]')
-            calls.wait(lambda c: c['method'] == 'POST' and c['path'].endswith(f'/pullrequests/{FAKE_PRS["rebaseOnly"]}/approve'), 'POST approve (réapprobation)')
+            calls.wait(lambda c: c['method'] == 'POST' and c['path'].endswith(f'/pullrequests/{FAKE_PRS["rebaseOnly"]}/approve'), 'POST approve (re-approval)')
             expect(page.locator('.rv-banner')).to_contain_text('Tu es à jour : v2 relue', timeout=10000)
         fast_path(page)
 
-        @check('ma PR : pas de bouton d\'approbation')
+        @check('my PR: no approve button')
         def mine(page):
             open_pr(page, fake_ref('mine'))
             expect(page.locator('.rv-head .own')).to_have_text('Ta PR')
@@ -648,7 +648,7 @@ def run_checks(page):
             expect(page.locator('[data-action="request-changes"]')).to_have_count(0)
         mine(page)
 
-        @check('jamais relue : « Première relecture » puis « Marquer vN comme relue »')
+        @check('never reviewed: "First review" then "Mark vN as reviewed"')
         def never_reviewed(page):
             ref = fake_ref('neverReviewed')
             total = len(api(pr_api(ref))['versions'])
@@ -659,10 +659,10 @@ def run_checks(page):
             banner.locator('[data-action="mark-reviewed"]').click()
             expect(page.locator('.rv-banner')).to_contain_text(f'Tu es à jour : v{total} relue', timeout=10000)
             expect(page.locator('.rv-seen')).to_have_count(1)
-            wait_api(lambda: api(pr_api(ref))['review']['lastReviewed'] == total, 'lastReviewed avancé (marque locale)')
+            wait_api(lambda: api(pr_api(ref))['review']['lastReviewed'] == total, 'lastReviewed advanced (local mark)')
         never_reviewed(page)
 
-        @check('version effacée par Bitbucket : page chargée, v1 indisponible et non cliquable, plage depuis master')
+        @check('version erased by Bitbucket: page loaded, v1 unavailable and not clickable, range from master')
         def purged(page):
             open_pr(page, fake_ref('purged'))
             gone = page.locator('.rv-v[data-i="1"]')
@@ -670,16 +670,16 @@ def run_checks(page):
             expect(gone).to_have_attribute('aria-disabled', 'true')
             expect(gone.locator('.rv-dl')).to_have_text('indisponible')
             assert 'Bitbucket a effacé ce commit' in (gone.get_attribute('title') or '')
-            # Ma relecture date de v1 (indisponible) : la plage par défaut part de master.
+            # My review dates from v1 (unavailable): the default range starts from master.
             assert current_selection(page) == (0, 3), page.evaluate('location.hash')
-            gone.click(force=True)  # aria-disabled : Playwright refuse le clic ordinaire, un utilisateur peut cliquer
-            assert current_selection(page) == (0, 3), 'un clic sur une version indisponible ne doit rien changer'
+            gone.click(force=True)  # aria-disabled: Playwright refuses the ordinary click, a user can click
+            assert current_selection(page) == (0, 3), 'a click on an unavailable version must change nothing'
             page.click('.rv-v[data-i="2"]')
             assert current_selection(page) == (0, 2), page.evaluate('location.hash')
             expect(page.locator('.rv-v[data-i="2"]')).to_have_attribute('title', re.compile('changements comptés depuis la base'))
         purged(page)
 
-        @check('version effacée, onglet Versions : la ligne v2 montre v2 depuis la base ; Entrée et Espace')
+        @check('erased version, Versions tab: the v2 row shows v2 since the base; Enter and Space')
         def purged_versions_tab(page):
             open_pr(page, fake_ref('purged'), '?from=0&to=3')
             page.click('.rv-tab[data-tab="versions"]')
@@ -697,7 +697,7 @@ def run_checks(page):
             expect_selection(page, 0, 2)
         purged_versions_tab(page)
 
-    @check('réglages : enregistrer et tester la connexion')
+    @check('settings: save and test the connection')
     def settings(page):
         page.goto(url('settings'))
         expect(page.locator('#set-email')).to_be_visible()
@@ -716,7 +716,7 @@ def run_checks(page):
     settings(page)
 
     if FAKE_TOKEN:
-        @check('jeton supprimé : l\'accueil renvoie vers les réglages, puis jeton remis')
+        @check('token deleted: the home page points to the settings, then token put back')
         def no_token(page):
             page.goto(url('settings'))
             expect(page.locator('#set-email')).to_be_visible()
@@ -727,10 +727,10 @@ def run_checks(page):
             page.click('text=Supprimer le jeton')
             expect(page.locator('.rv-status')).to_have_text('Jeton supprimé.')
             expect(page.locator('#set-token')).to_have_attribute('placeholder', 'Colle ici ton jeton API Atlassian')
-            # saisie en cours non enregistrée : gardée
+            # input in progress not saved: kept
             expect(page.locator('#set-email')).to_have_value('brouillon@example.test')
             expect(page.locator('#set-repos')).to_have_value(draft_repos)
-            assert api('/settings')['email'] == saved['email'], 'l\'e-mail en cours de saisie ne doit pas être enregistré'
+            assert api('/settings')['email'] == saved['email'], 'the e-mail being typed must not be saved'
             page.goto(url(''))
             expect(page).to_have_url(re.compile('#/settings$'), timeout=10000)
             page.goto(url(f'pr/{MAIN_PR}'))
@@ -830,9 +830,9 @@ def run_language_checks(page, fr_page):
 
 def main():
     if not BASE:
-        log('REVSPAN_BASE_URL manquant : lancer « node test/e2e/run-against-fake.ts » (après « npx --no-install vite build »).')
+        log('REVSPAN_BASE_URL missing: run "node test/e2e/run-against-fake.ts" (after "npx --no-install vite build").')
         sys.exit(2)
-    log(f'Revspan UI test — {BASE} — PR {MAIN_PR}')
+    log(f'Revspan UI test -- {BASE} — PR {MAIN_PR}')
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=CHROMIUM_ARGS, headless=not os.environ.get('REVSPAN_HEADED'))
         fixed_time = os.environ.get('REVSPAN_FIXED_TIME')
@@ -857,11 +857,11 @@ def main():
             en_page.clock.set_fixed_time(fixed_time)
         en_page.on('pageerror', lambda e: errors.append(str(e)))
         run_language_checks(en_page, page)
-        results.append(('aucune erreur JavaScript', not errors))
-        log('PASS  aucune erreur JavaScript' if not errors else f'FAIL  aucune erreur JavaScript\n      {errors}')
+        results.append(('no JavaScript error', not errors))
+        log('PASS  no JavaScript error' if not errors else f'FAIL  no JavaScript error\n      {errors}')
         browser.close()
     failed = [r for r in results if not r[1]]
-    log(f'\n{len(results) - len(failed)}/{len(results)} vérifications réussies')
+    log(f'\n{len(results) - len(failed)}/{len(results)} checks passed')
     sys.exit(1 if failed else 0)
 
 

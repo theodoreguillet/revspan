@@ -1,5 +1,5 @@
-// Dépôt git simulé en mémoire (commits = instantanés { chemin: contenu }) et scénario de PR réaliste :
-// création, amend, rebase pur, montée de RC dans le lockfile, rebase + code, message seul.
+// Simulated git repository in memory (commits = { path: content } snapshots) and realistic PR scenario:
+// creation, amend, pure rebase, RC bump in the lockfile, rebase + code, message only.
 import { diffLines, diffStats, splitLines } from '../../src/server/core/diff.ts';
 import type { CompareSource, CompareVersion, DiffstatEntry } from '../../src/server/core/compare.ts';
 
@@ -85,7 +85,7 @@ export interface ScenarioVersion extends CompareVersion {
     baseShort: string;
 }
 
-/** M0 → v1 (création) → v2 (amend code) → M1 → v3 (rebase pur) → v4 (amend deps) → M2 → v5 (rebase + code) → v6 (message seul). */
+/** M0 -> v1 (creation) -> v2 (amend code) -> M1 -> v3 (pure rebase) -> v4 (amend deps) -> M2 -> v5 (rebase + code) -> v6 (message only). */
 export function scenario(): { repo: FakeRepo; versions: ScenarioVersion[] } {
     const repo = new FakeRepo();
     const action = (idExpression: string): string => lines([
@@ -118,7 +118,7 @@ export function scenario(): { repo: FakeRepo; versions: ScenarioVersion[] } {
         'changelog.md': lines(['# Changelog', '## 1.1.0', '## 1.0.0']),
         'package-lock.json': lockfile({ ...lockM0, a: '1.1.0', e: '2.0.0' }),
     });
-    // Rebase de v2 sur m1 ; conflit sur « e » résolu en gardant la RC de l'auteur.
+    // Rebase of v2 onto m1; conflict on "e" resolved by keeping the author's RC.
     repo.derive('v3', 'm1', {
         'src/Action.ts': action('this.repo.buildIdFromPayload(data)'),
         'tests/ActionSpec.ts': spec,

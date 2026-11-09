@@ -15,7 +15,7 @@ const line = (t: DiffLine['t'], o: number | null, n: number | null, text = ''): 
 describe('viewedStatus', () => {
     const file = { path: 'a.ts', contentHash: 'h2' };
 
-    it('jamais vu / vu avec ce contenu / modifié depuis vu', () => {
+    it('never seen / seen with this content / modified since seen', () => {
         expect(viewedStatus(file, {})).toBe('none');
         expect(viewedStatus(file, { 'a.ts': 'h2' })).toBe('seen');
         expect(viewedStatus(file, { 'a.ts': 'h1' })).toBe('changed');
@@ -23,19 +23,19 @@ describe('viewedStatus', () => {
 });
 
 describe('splitRows', () => {
-    it('aligne les suites - puis + ligne à ligne, contexte des deux côtés', () => {
+    it('aligns the - then + runs line by line, context on both sides', () => {
         const rows = splitRows([line(' ', 1, 1), line('-', 2, null), line('-', 3, null), line('+', null, 2), line(' ', 4, 3), line('+', null, 4)]);
         expect(rows.map((r) => [r.left?.o ?? null, r.right?.n ?? null])).toEqual([[1, 1], [2, 2], [3, null], [4, 3], [null, 4]]);
     });
 
-    it('un - après des + ouvre une nouvelle paire', () => {
+    it('a - after some + opens a new pair', () => {
         const rows = splitRows([line('+', null, 1), line('-', 1, null)]);
         expect(rows.map((r) => [r.left?.o ?? null, r.right?.n ?? null])).toEqual([[null, 1], [1, null]]);
     });
 });
 
 describe('highlightParts / hunkRange / composerKey', () => {
-    it('découpe selon les plages à surligner', () => {
+    it('splits according to the ranges to highlight', () => {
         expect(highlightParts('const a = b;', [[10, 11]])).toEqual([
             { text: 'const a = ', hl: false }, { text: 'b', hl: true }, { text: ';', hl: false },
         ]);
@@ -43,14 +43,14 @@ describe('highlightParts / hunkRange / composerKey', () => {
         expect(highlightParts('abc', [[1, 99]])).toEqual([{ text: 'a', hl: false }, { text: 'bc', hl: true }]);
     });
 
-    it('plage de hunk façon git et clé de composeur', () => {
+    it('git-style hunk range and composer key', () => {
         expect(hunkRange({ oldStart: 37, oldLines: 7, newStart: 37, newLines: 7 })).toBe('@@ -37,7 +37,7 @@');
         expect(composerKey('new', 41, 'src/a.ts')).toBe('n41:src/a.ts');
         expect(composerKey('old', 40, 'src/a.ts')).toBe('o40:src/a.ts');
     });
 });
 
-// Un fichier avec un hunk (ligne 5 modifiée) et des fils : ouvert en ligne, résolu en ligne, hors hunk, niveau fichier, inconnu.
+// A file with a hunk (line 5 modified) and threads: open inline, resolved inline, outside a hunk, file level, unknown.
 const thread = (id: number, resolved: boolean): Thread => ({
     id, path: 'src/Action.ts', anchor: { to: 5, from: null }, version: 2, resolved, resolvedBy: null, comments: [],
 });
@@ -73,33 +73,33 @@ const file: FileDiff = {
 const ids = (list: { thread: Thread }[]): number[] => list.map((t) => t.thread.id);
 
 describe('placeFileThreads', () => {
-    it('fil ouvert sur sa ligne côté « to » ; hors hunk ou niveau fichier en tête ; fil inconnu ignoré', () => {
+    it('open thread on its "to" side line; outside a hunk or file level at the top; unknown thread ignored', () => {
         const placed = placeFileThreads(file, threads, false);
         expect([...placed.byLine.keys()]).toEqual([5]);
         expect(ids(placed.byLine.get(5) ?? [])).toEqual([1]);
         expect(ids(placed.fileLevel)).toEqual([3, 4]);
     });
 
-    it('fils résolus omis, sauf si on les affiche', () => {
+    it('resolved threads omitted, unless shown', () => {
         expect(ids(placeFileThreads(file, threads, true).byLine.get(7) ?? [])).toEqual([2]);
         expect(fileThreadCount(file, threads, false)).toBe(3);
         expect(fileThreadCount(file, threads, true)).toBe(4);
     });
 });
 
-describe('lignes de hunk (vues unifiée et côte à côte)', () => {
+describe('hunk lines (unified and side-by-side views)', () => {
     const hunk = file.hunks[0]?.lines ?? [];
     const byLine = placeFileThreads(file, threads, false).byLine;
     const deleted = composerTargetFor(file.path, line('-', 5, null, '    return false;'), 'both');
 
-    it('cibles du « + » : ligne côté nouveau, ou ligne supprimée citée', () => {
+    it('"+" targets: new-side line, or quoted deleted line', () => {
         expect(deleted).toEqual({ key: 'o5:src/Action.ts', path: 'src/Action.ts', kind: 'old', line: 5, code: '    return false;' });
         expect(composerTargetFor(file.path, line('+', null, 5, 'x'), 'both')).toMatchObject({ kind: 'new', line: 5 });
         expect(composerTargetFor(file.path, line('-', 5, null, 'x'), 'new')).toBeNull();
         expect(composerTargetFor(file.path, line(' ', 6, 6, '}'), 'old')).toBeNull();
     });
 
-    it('vue unifiée : fils sous leur ligne, composeur ouvert, pas de « + » hors dernière version', () => {
+    it('unified view: threads under their line, open composer, no "+" outside the latest version', () => {
         const rows = unifiedRows({ path: file.path, lines: hunk, byLine, canComment: true, composer: deleted });
         expect(rows.map((r) => r.target?.key ?? null)).toEqual(['n4:src/Action.ts', 'o5:src/Action.ts', 'n5:src/Action.ts', 'n6:src/Action.ts', 'n7:src/Action.ts']);
         expect(rows.map((r) => ids(r.threads))).toEqual([[], [], [1], [], []]);
@@ -107,7 +107,7 @@ describe('lignes de hunk (vues unifiée et côte à côte)', () => {
         expect(unifiedRows({ path: file.path, lines: hunk, byLine, canComment: false, composer: null }).every((r) => r.target === null)).toBe(true);
     });
 
-    it('vue côte à côte : la ligne supprimée et la ligne ajoutée face à face', () => {
+    it('side-by-side view: the deleted line and the added line face to face', () => {
         const rows = sideBySideRows({ path: file.path, lines: hunk, byLine, canComment: true, composer: deleted });
         expect(rows).toHaveLength(4);
         const [, changed] = rows;
@@ -119,7 +119,7 @@ describe('lignes de hunk (vues unifiée et côte à côte)', () => {
 });
 
 describe('firstChangedLine', () => {
-    it('première ligne ajoutée côté nouveau, sinon null', () => {
+    it('first added line on the new side, otherwise null', () => {
         expect(firstChangedLine(file)).toBe(5);
         expect(firstChangedLine({ hunks: [{ oldStart: 1, oldLines: 1, newStart: 0, newLines: 0, header: '', lines: [line('-', 1, null, 'x')] }] })).toBeNull();
         expect(firstChangedLine({ hunks: [] })).toBeNull();
@@ -129,7 +129,7 @@ describe('firstChangedLine', () => {
 describe('lastTouched', () => {
     const { sums } = prLong();
 
-    it('dernière version de la plage (from, to] qui a modifié le fichier', () => {
+    it('latest version of the range (from, to] that modified the file', () => {
         expect(lastTouched(sums, 7, 10, 'package-lock.json')).toBe(9);
         expect(lastTouched(sums, 7, 10, 'coverage.config.json')).toBe(10);
         expect(lastTouched(sums, 0, 3, 'coverage.config.json')).toBe(1);
@@ -138,13 +138,13 @@ describe('lastTouched', () => {
 });
 
 describe('deletedLineComment', () => {
-    it('commentaire général citant la ligne supprimée', () => {
+    it('general comment quoting the deleted line', () => {
         expect(deletedLineComment(fr, 'src/a.ts', 9, 10, '    return x;', 'Pourquoi ?'))
             .toBe('`src/a.ts` — ligne supprimée (v9 → v10) :\n```\n    return x;\n```\nPourquoi ?');
         expect(deletedLineComment(fr, 'src/a.ts', 0, 10, 'x', 'y')).toContain('(master → v10)');
     });
 
-    it('code contenant ``` : autre clôture', () => {
+    it('code containing ```: other fence', () => {
         expect(deletedLineComment(fr, 'README.md', 1, 2, '```js', 'ok')).toBe('`README.md` — ligne supprimée (v1 → v2) :\n~~~\n```js\n~~~\nok');
     });
 });

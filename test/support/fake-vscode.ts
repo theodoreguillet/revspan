@@ -1,5 +1,5 @@
-// Faux module « vscode » (vi.mock('vscode', …)) : juste ce qu'utilisent le panneau, « Ouvrir le fichier »
-// et la vue « Mes PR », avec l'enregistrement de ce que l'extension a montré à l'utilisateur.
+// Fake "vscode" module (vi.mock('vscode', ...)): just what the panel, "Open file"
+// and the "My PRs" view use, recording what the extension showed to the user.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -9,7 +9,7 @@ export class EventEmitter<T> {
     private readonly listeners = new Set<Listener<T>>();
     disposed = false;
 
-    /** Comme vscode.Event : l'abonnement est aussi ajouté à `disposables` s'il est fourni. */
+    /** Like vscode.Event: the subscription is also added to `disposables` if provided. */
     readonly event = (listener: Listener<T>, thisArgs?: unknown, disposables?: { dispose(): unknown }[]): { dispose(): void } => {
         const bound: Listener<T> = (value) => listener.call(thisArgs, value);
         this.listeners.add(bound);
@@ -74,7 +74,7 @@ export class Range {
 
 export const ViewColumn = { Active: -1 };
 
-/** Panneau webview : messages postés vers la page, écouteurs attachés, fermeture. */
+/** Webview panel: messages posted to the page, attached listeners, closing. */
 export class FakeWebviewPanel {
     readonly viewType: string;
     readonly options: unknown;
@@ -104,7 +104,7 @@ export class FakeWebviewPanel {
     }
 
     reveal(): void {
-        // rien à faire
+        // nothing to do
     }
 
     dispose(): void {
@@ -114,18 +114,18 @@ export class FakeWebviewPanel {
         }
     }
 
-    /** Message envoyé par la page. */
+    /** Message sent by the page. */
     receive(message: unknown): void {
         this.messages.fire(message);
     }
 
-    /** Écouteurs encore attachés au panneau (messages et fermeture). */
+    /** Listeners still attached to the panel (messages and closing). */
     get listenerCount(): number {
         return this.messages.listenerCount + this.disposal.listenerCount;
     }
 }
 
-/** Ce que l'extension a fait côté VS Code. */
+/** What the extension did on the VS Code side. */
 export const recorded = {
     panels: [] as FakeWebviewPanel[],
     warnings: [] as string[],

@@ -19,7 +19,7 @@ function prWith(count: number, lastReviewed: number | null, options: VersionOpti
     return { ...data, versions: makeVersions(count, options), review: { ...data.review, lastReviewed } };
 }
 
-/** Plage de la page PR sur un vrai routeur (historique en mémoire), comme sous PrLoaded. */
+/** PR page range on a real router (in-memory history), as under PrLoaded. */
 async function setup(initial: PrDetail, query = '') {
     const router = createRouter({
         history: createMemoryHistory(),
@@ -31,15 +31,15 @@ async function setup(initial: PrDetail, query = '') {
     scope = effectScope();
     const range = app.runWithContext(() => scope?.run(() => useRangeSelection(prRef, detail)));
     if (!range) {
-        throw new Error('plage non créée');
+        throw new Error('range not created');
     }
     const current = (): [number, number] => [range.from.value, range.to.value];
     const query$ = (): unknown => router.currentRoute.value.query;
     return { router, detail, range, current, query: query$ };
 }
 
-describe('plage de versions de la page PR', () => {
-    it('onglet Versions : version seule = depuis la dernière lisible avant (v1 effacée : depuis la base)', async () => {
+describe('PR page version range', () => {
+    it('Versions tab: single version = since the last readable one before it (v1 erased: since the base)', async () => {
         const { range, current, query } = await setup(prWith(3, 1, { unavailable: [1] }));
         expect(current()).toEqual([0, 3]);
         range.selectVersion(2);
@@ -49,7 +49,7 @@ describe('plage de versions de la page PR', () => {
         expect(current()).toEqual([2, 3]);
     });
 
-    it('version découverte effacée après coup (détail rechargé) : « de » recule sur la dernière lisible, URL remplacée', async () => {
+    it('version discovered erased afterwards (detail reloaded): "from" moves back to the last readable one, URL replaced', async () => {
         const { detail, current, query, router } = await setup(prWith(3, 1));
         expect(current()).toEqual([1, 3]);
         const push = vi.spyOn(router, 'push');
@@ -62,7 +62,7 @@ describe('plage de versions de la page PR', () => {
         expect(push).not.toHaveBeenCalled();
     });
 
-    it('version affichée effacée : plage par défaut', async () => {
+    it('displayed version erased: default range', async () => {
         const { detail, current } = await setup(prWith(6, 3), '?from=1&to=3');
         expect(current()).toEqual([1, 3]);
         detail.value = prWith(6, 3, { unavailable: [3] });
@@ -70,7 +70,7 @@ describe('plage de versions de la page PR', () => {
         expect(current()).toEqual([2, 6]);
     });
 
-    it('nouvelle version poussée : plage gardée', async () => {
+    it('new version pushed: range kept', async () => {
         const { detail, current } = await setup(prWith(3, 1));
         detail.value = prWith(4, 1);
         await nextTick();

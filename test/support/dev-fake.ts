@@ -1,5 +1,5 @@
-// Développement sans toucher au vrai Bitbucket : faux Bitbucket + serveur Revspan sur le port 7420
-// (configuration temporaire). Lancer ensuite `npm run dev:web` pour la page avec rechargement à chaud.
+// Development without touching the real Bitbucket: fake Bitbucket + Revspan server on port 7420
+// (temporary configuration). Then run `npm run dev:web` for the page with hot reload.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

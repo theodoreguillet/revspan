@@ -5,7 +5,7 @@ import {
 } from '../../src/server/core/model.ts';
 
 describe('approvalHoldsSince', () => {
-    it('vaut pour la dernière version si tout ce qui suit la version approuvée est connu et neutre', () => {
+    it('holds for the latest version if everything after the approved version is known and neutral', () => {
         expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'rebase-only'])).toBe(true);
         expect(approvalHoldsSince(5, ['creation', 'code', 'code', 'code', 'code'])).toBe(true);
         expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'code'])).toBe(false);
@@ -49,11 +49,11 @@ function versionsFixture(): ReturnType<typeof buildVersions> {
 }
 
 describe('extractUpdates', () => {
-    it('ordre chronologique, doublons retirés', () => {
+    it('chronological order, duplicates removed', () => {
         expect(extractUpdates(activity, pr).map((u) => u.hash)).toEqual(['8e1996bab906', 'a0a11ced5099', '2a2fc206db7e', '178703a1c7dc']);
     });
 
-    it('ajoute la version courante absente de l\'activité', () => {
+    it('adds the current version missing from the activity', () => {
         const updates = extractUpdates(activity, { ...pr, source: { commit: { hash: '666600005555' } }, updated_on: '2026-11-06T00:00:00Z' });
         expect(updates).toHaveLength(5);
         expect(updates[4]!.hash).toBe('666600005555');
@@ -61,7 +61,7 @@ describe('extractUpdates', () => {
 });
 
 describe('buildVersions / versionAt', () => {
-    it('rebase, message modifié, base réelle', () => {
+    it('rebase, modified message, real base', () => {
         const versions = versionsFixture();
         expect(versions.map((v) => v.isRebase)).toEqual([false, true, true, false]);
         expect(versions.map((v) => v.messageChanged)).toEqual([false, false, true, true]);
@@ -75,9 +75,9 @@ describe('buildVersions / versionAt', () => {
         expect(versionAt(versions, '2020-01-01T00:00:00Z')).toBe(1);
     });
 
-    it('commit effacé par Bitbucket : version indisponible, rebase et message comparés à la dernière version lisible', () => {
+    it('commit erased by Bitbucket: version unavailable, rebase and message compared with the last readable version', () => {
         const updates = extractUpdates(activity, pr);
-        // v2 effacée ; v3 a la même base que v1 et le même message : ni rebase ni message modifié.
+        // v2 erased; v3 has the same base as v1 and the same message: neither rebase nor modified message.
         const commits = [
             { hash: '8e1996ba0000', message: 'msg', parents: ['p0'] },
             null,
@@ -98,7 +98,7 @@ describe('computeReview', () => {
         id: 1, user: user(ME, 'Moi'), created_on: '2026-11-05T11:00:00Z', deleted: false, content: { raw }, ...extra,
     });
 
-    it('la plus récente entre approbation, nouveau commentaire et marque locale', () => {
+    it('the most recent of approval, new comment and local mark', () => {
         const versions = versionsFixture();
         expect(computeReview({ versions, activity, comments: [], meUuid: ME, local: null }))
             .toEqual({ lastReviewed: 2, lastReviewedSource: 'approval', lastReviewedAt: '2026-11-03T15:03:05Z', viewed: {} });
@@ -109,7 +109,7 @@ describe('computeReview', () => {
         expect(computeReview({ versions, activity, comments: [], meUuid: null, local: null }).lastReviewed).toBeNull();
     });
 
-    it('une réponse ne vaut pas relecture', () => {
+    it('a reply does not count as a review', () => {
         const versions = versionsFixture();
         const comments = [myComment('merci', { parent: { id: 9 } })];
         expect(computeReview({ versions, activity, comments, meUuid: ME, local: null }).lastReviewed).toBe(2);
@@ -117,7 +117,7 @@ describe('computeReview', () => {
 });
 
 describe('buildParticipants', () => {
-    it('version de l\'approbation', () => {
+    it('approval version', () => {
         const participants = buildParticipants(pr, activity, versionsFixture());
         expect(participants.map((p) => [p.user?.displayName, p.state, p.approvedVersion]))
             .toEqual([['Yann', 'approved', 4], ['Moi', 'approved', 2], ['Camille', null, null]]);
@@ -125,7 +125,7 @@ describe('buildParticipants', () => {
 });
 
 describe('buildThreads', () => {
-    it('fils (réponses imbriquées comprises), nouveaux, résolu, supprimés', () => {
+    it('threads (nested replies included), new, resolved, deleted', () => {
         const raw: BbComment[] = [
             {
                 id: 10, created_on: '2026-11-05T11:02:08Z', user: user(YAN, 'Yann'),
@@ -143,7 +143,7 @@ describe('buildThreads', () => {
         const [general, inline] = threads;
         expect(general).toMatchObject({ path: null, version: 1 });
         expect(inline).toMatchObject({ path: 'src/CreateRecord.ts', anchor: { to: 40, from: null }, version: 3, resolved: true });
-        // Une réponse « 👍 » est une réponse comme les autres (l'API Bitbucket n'expose pas de réactions).
+        // A "thumbs up" reply is a reply like any other (the Bitbucket API exposes no reactions).
         expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false], [12, false, true], [13, true, false]]);
     });
 });

@@ -4,8 +4,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createSecretStore } from '../../src/server/infra/secrets.ts';
 
-describe('stockage du jeton', () => {
-    it('fichier : écriture 0600, lecture, suppression', async () => {
+describe('token storage', () => {
+    it('file: write with mode 0600, read, delete', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-secrets-'));
         try {
             const store = await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
@@ -21,9 +21,9 @@ describe('stockage du jeton', () => {
         }
     });
 
-    // Opt-in : crée puis supprime une entrée temporaire dans le trousseau macOS.
+    // Opt-in: creates then deletes a temporary entry in the macOS keychain.
     it.runIf(process.platform === 'darwin' && process.env.REVSPAN_KEYCHAIN_TEST === '1')(
-        'trousseau macOS : jeton long passé par stdin, mise à jour, suppression',
+        'macOS keychain: long token passed through stdin, update, delete',
         async () => {
             const service = `revspan-test-${process.pid}-${Date.now()}`;
             const store = await createSecretStore({ dir: os.tmpdir(), env: { REVSPAN_KEYCHAIN_SERVICE: service } });

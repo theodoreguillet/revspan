@@ -1,6 +1,6 @@
-// Test de fumée de l'extension dans un VRAI VS Code, isolé (profil et dossier d'extensions temporaires),
-// branché sur le faux Bitbucket. Le pilotage se fait par Playwright (Python) via le port de débogage de VS Code.
-// Usage : npm run test:extension   (construit puis lance ; Python : argument ou variable PYTHON)
+// Smoke test of the extension in a REAL VS Code, isolated (temporary profile and extensions folder),
+// wired to the fake Bitbucket. It is driven by Playwright (Python) through VS Code's debugging port.
+// Usage: npm run test:extension   (builds then runs; Python: argument or PYTHON variable)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,7 +15,7 @@ const vscodeBinary = process.env.VSCODE_BINARY ?? '/Applications/Visual Studio C
 const extensionDir = path.join(root, 'extension');
 
 if (!fs.existsSync(path.join(extensionDir, 'dist', 'extension.cjs'))) {
-    console.error('Extension non construite : lance « npm run build:extension ».');
+    console.error('Extension not built: run "npm run build:extension".');
     process.exit(2);
 }
 
@@ -25,11 +25,11 @@ const userData = path.join(tmp, 'user');
 const workspace = path.join(tmp, 'workspace');
 const fake = await startFakeBitbucket();
 
-// Espace de travail : « clone » de demo-repo sur la branche de la PR principale (pour « Ouvrir le fichier »).
+// Workspace: "clone" of demo-repo on the main PR's branch (for "Open file").
 const main = fake.data.prs.get(FAKE_PRS.main);
 const tip = [...fake.data.repo.commits.keys()].find((hash) => hash.startsWith(main?.pr.source?.commit?.hash ?? '-'));
 if (!main || !tip) {
-    throw new Error('PR principale introuvable dans le faux Bitbucket');
+    throw new Error('Main PR not found in the fake Bitbucket');
 }
 const repoDir = path.join(workspace, REPO);
 for (const [file, content] of Object.entries(fake.data.repo.get(tip).files)) {
@@ -39,7 +39,7 @@ for (const [file, content] of Object.entries(fake.data.repo.get(tip).files)) {
 fs.mkdirSync(path.join(repoDir, '.git'), { recursive: true });
 fs.writeFileSync(path.join(repoDir, '.git', 'HEAD'), `ref: refs/heads/${main.pr.source?.branch?.name ?? 'master'}\n`);
 
-// Profil sans bruit (pas d'éditeur d'accueil, pas de mises à jour, confiance accordée).
+// Quiet profile (no welcome editor, no updates, trust granted).
 fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'workbench.startupEditor': 'none',
@@ -52,7 +52,7 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'chat.disableAIFeatures': true,
 }));
 
-// Variables de la session VS Code courante retirées : sinon le nouveau processus se rattacherait à elle.
+// Variables of the current VS Code session removed: otherwise the new process would attach to it.
 const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VSCODE_') && key !== 'ELECTRON_RUN_AS_NODE'));
 Object.assign(env, {
     REVSPAN_BITBUCKET_API: fake.url,
@@ -88,7 +88,7 @@ async function cdpReady(): Promise<boolean> {
                 return true;
             }
         } catch {
-            // pas encore prêt
+            // not ready yet
         }
         await sleep(500);
     }
@@ -98,10 +98,10 @@ async function cdpReady(): Promise<boolean> {
 let status = 1;
 try {
     if (!await cdpReady()) {
-        throw new Error(`VS Code ne répond pas sur le port ${port}.\n${stderr.slice(-2000)}`);
+        throw new Error(`VS Code is not answering on port ${port}.\n${stderr.slice(-2000)}`);
     }
     status = await new Promise<number>((resolve) => {
-        // SMOKE_SCRIPT : autre script de pilotage (diagnostic).
+        // SMOKE_SCRIPT: another driving script (diagnostics).
         const child = spawn(python, ['-I', process.env.SMOKE_SCRIPT ?? path.join(here, 'smoke.py')], {
             stdio: 'inherit',
             env: {
@@ -114,10 +114,10 @@ try {
         });
         child.on('close', (exitCode) => resolve(exitCode ?? 1));
     });
-    // Les dépôts suivis sont rangés dans le réglage VS Code revspan.repositories (réglages utilisateur du profil).
+    // Tracked repositories are stored in the VS Code setting revspan.repositories (the profile's user settings).
     const userSettings = JSON.parse(fs.readFileSync(path.join(userData, 'User', 'settings.json'), 'utf8')) as Record<string, unknown>;
     const reposSaved = JSON.stringify(userSettings['revspan.repositories']) === JSON.stringify([`${WS}/${REPO}`]);
-    console.log(`${reposSaved ? 'PASS' : 'FAIL'}  réglage VS Code revspan.repositories écrit`);
+    console.log(`${reposSaved ? 'PASS' : 'FAIL'}  VS Code setting revspan.repositories written`);
     if (!reposSaved) {
         status = 1;
     }

@@ -10,52 +10,52 @@ const fr = createTranslator('fr');
 describe('staleness', () => {
     const { sums } = prLong();
 
-    it('approbation à jour ou sans version : null', () => {
+    it('up-to-date approval or no version: null', () => {
         expect(staleness(fr, 10, sums, 10)).toBeNull();
         expect(staleness(fr, null, sums, 10)).toBeNull();
     });
 
-    it('du code depuis l\'approbation : périmée, versions de code citées', () => {
+    it('code since the approval: stale, code versions cited', () => {
         expect(staleness(fr, 7, sums, 10)).toEqual({ code: [10], deps: [9], text: 'code modifié en v10' });
         expect(staleness(fr, 3, sums, 10)?.text).toBe('code modifié en v4, v10');
     });
 
-    it('seulement des dépendances : périmée « dépendances modifiées »', () => {
+    it('only dependencies: stale "dependencies changed"', () => {
         expect(staleness(fr, 1, makeSums(['creation', 'rebase-only', 'deps']), 3)?.text).toBe('dépendances modifiées en v3');
     });
 
-    it('seulement des rebases : pas périmée', () => {
+    it('only rebases: not stale', () => {
         expect(staleness(fr, 1, makeSums(['creation', 'rebase-only', 'none']), 3)).toBeNull();
     });
 
-    it('plus de 3 versions : liste abrégée', () => {
+    it('more than 3 versions: shortened list', () => {
         expect(staleness(fr, 1, makeSums(['creation', 'code', 'code', 'code', 'code']), 5)?.text).toBe('code modifié en v2, v3, v4…');
     });
 });
 
-describe('approvalHolds : mon approbation vaut-elle pour la dernière version ?', () => {
+describe('approvalHolds: does my approval hold for the latest version?', () => {
     const part = (approved: boolean, approvedVersion: number | null): Participant => ({
         user: { uuid: '{me}', displayName: 'Moi' }, role: 'REVIEWER', approved, state: approved ? 'approved' : null, approvedVersion,
     });
     const sums = makeSums(['creation', 'code', 'rebase-only', 'none']);
 
-    it('active sur Bitbucket et seulement des rebases depuis : oui (rien à réapprouver)', () => {
+    it('active on Bitbucket and only rebases since: yes (nothing to re-approve)', () => {
         expect(approvalHolds(part(true, 2), sums, 4, true)).toBe(true);
         expect(approvalHolds(part(true, 4), sums, 4, true)).toBe(true);
     });
 
-    it('retirée par Bitbucket, ou du code / des dépendances depuis : non', () => {
+    it('removed by Bitbucket, or code / dependencies since: no', () => {
         expect(approvalHolds(part(false, 2), sums, 4, true)).toBe(false);
         expect(approvalHolds(part(true, 1), sums, 4, true)).toBe(false);
         expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'deps', 'none']), 4, true)).toBe(false);
         expect(approvalHolds(null, sums, 4, true)).toBe(false);
     });
 
-    it('résumé pas encore chargé : l\'état de Bitbucket fait foi', () => {
+    it('summary not loaded yet: Bitbucket\'s state is authoritative', () => {
         expect(approvalHolds(part(true, 1), sums, 4, false)).toBe(true);
     });
 
-    it('version poussée depuis, absente du résumé chargé : non (inconnu = pas valable, comme sur le serveur)', () => {
+    it('version pushed since, absent from the loaded summary: no (unknown = not valid, like on the server)', () => {
         expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'rebase-only']), 4, true)).toBe(false);
         expect(approvalHolds(part(true, 4), makeSums(['creation', 'code', 'rebase-only']), 5, true)).toBe(false);
     });
@@ -64,7 +64,7 @@ describe('approvalHolds : mon approbation vaut-elle pour la dernière version ?'
 describe('approvalItems / myActions', () => {
     const { data, sums } = prLong();
 
-    it('#212 : Yann à jour, William périmé, moi en attente', () => {
+    it('#212: Yann up to date, William stale, me pending', () => {
         const items = approvalItems(fr, data, sums, true);
         expect(items).toEqual([
             { kind: 'approved', name: 'Yann Bernard', version: 10, stale: null, title: 'Yann Bernard a approuvé v10' },
@@ -77,11 +77,11 @@ describe('approvalItems / myActions', () => {
         ]);
     });
 
-    it('résumé pas encore chargé : aucune approbation marquée périmée', () => {
+    it('summary not loaded yet: no approval marked stale', () => {
         expect(approvalItems(fr, data, sums, false).filter((i) => i.kind === 'approved' && i.stale)).toEqual([]);
     });
 
-    it('demande de modifs et mes actions', () => {
+    it('change request and my actions', () => {
         const meUuid = data.me?.uuid;
         const changed = {
             ...data,
@@ -93,13 +93,13 @@ describe('approvalItems / myActions', () => {
             ...data,
             participants: data.participants.map((p) => (p.user?.uuid === meUuid ? { ...p, approved: true, state: 'approved' as const, approvedVersion: 8 } : p)),
         };
-        // v9 deps et v10 code depuis v8 : réapprouver.
+        // v9 deps and v10 code since v8: re-approve.
         expect(myActions(approved, sums, true)).toMatchObject({ approvalHolds: false, reapprove: true });
         const latest = { ...approved, participants: approved.participants.map((p) => (p.user?.uuid === meUuid ? { ...p, approvedVersion: 10 } : p)) };
         expect(myActions(latest, sums, true)).toMatchObject({ approvalHolds: true, reapprove: false });
     });
 
-    it('nouvelle version pas encore dans le résumé : « Réapprouver », pas « Retirer l\'approbation »', () => {
+    it('new version not in the summary yet: "Re-approve", not "Remove approval"', () => {
         const meUuid = data.me?.uuid;
         const pushed = {
             ...data,
@@ -109,7 +109,7 @@ describe('approvalItems / myActions', () => {
         expect(myActions(pushed, sums, true)).toMatchObject({ approvalHolds: false, reapprove: true });
     });
 
-    it('ma PR : pas d\'entrée « toi » ni de bouton', () => {
+    it('my PR: no "you" entry and no button', () => {
         const mine = { ...data, pr: { ...data.pr, author: data.me } };
         expect(approvalItems(fr, mine, sums, true).some((i) => i.name === 'toi')).toBe(false);
         expect(myActions(mine, sums, true).mine).toBe(true);

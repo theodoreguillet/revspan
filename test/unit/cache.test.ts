@@ -17,14 +17,14 @@ afterEach(() => {
     dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }));
 });
 
-describe('Cache disque', () => {
-    it('relit une valeur écrite depuis le disque', () => {
+describe('Disk cache', () => {
+    it('reads a written value back from disk', () => {
         const dir = tempDir();
         new Cache(dir).set('k', { a: 1 });
         expect(new Cache(dir).get('k')).toEqual({ a: 1 });
     });
 
-    it('delete oublie une entrée en mémoire et sur disque', () => {
+    it('delete forgets an entry in memory and on disk', () => {
         const dir = tempDir();
         const cache = new Cache(dir);
         cache.set('k', { a: 1 });
@@ -36,11 +36,11 @@ describe('Cache disque', () => {
         expect(() => cache.delete('absente')).not.toThrow();
     });
 
-    it('delete ne lève jamais : suppression impossible = simple avertissement', () => {
+    it('delete never throws: a failed removal is only a warning', () => {
         const dir = tempDir();
         const cache = new Cache(dir);
         cache.set('k', 1);
-        // Un dossier à la place du fichier de l'entrée : rmSync échoue.
+        // A folder in place of the entry's file: rmSync fails.
         const hash = createHash('sha1').update('k').digest('hex');
         const file = path.join(dir, hash.slice(0, 2), `${hash}.json`);
         fs.rmSync(file);
@@ -55,7 +55,7 @@ describe('Cache disque', () => {
         }
     });
 
-    it('ignore un fichier de cache corrompu', () => {
+    it('ignores a corrupt cache file', () => {
         const dir = tempDir();
         new Cache(dir).set('k', 1);
         const file = fs.readdirSync(dir).flatMap((sub) => fs.readdirSync(path.join(dir, sub)).map((f) => path.join(dir, sub, f)))[0] as string;
@@ -65,7 +65,7 @@ describe('Cache disque', () => {
 });
 
 describe('Cache.getOrCompute', () => {
-    it('ne mémorise pas quand keep renvoie false', async () => {
+    it('does not memoize when keep returns false', async () => {
         const cache = new Cache(null);
         const compute = vi.fn(async () => null);
         await cache.getOrCompute('k', compute, (value) => value !== null);
@@ -73,7 +73,7 @@ describe('Cache.getOrCompute', () => {
         expect(compute).toHaveBeenCalledTimes(2);
     });
 
-    it('déduplique les appels concurrents', async () => {
+    it('deduplicates concurrent calls', async () => {
         const cache = new Cache(null);
         const compute = vi.fn(async () => 5);
         await Promise.all([cache.getOrCompute('k', compute), cache.getOrCompute('k', compute)]);
@@ -82,7 +82,7 @@ describe('Cache.getOrCompute', () => {
 });
 
 describe('Cache.getLive', () => {
-    it('partage le calcul de deux appels concurrents', async () => {
+    it('shares the computation of two concurrent calls', async () => {
         const cache = new Cache(null);
         const compute = vi.fn(async () => 'v');
         const [a, b] = await Promise.all([cache.getLive('k', 1000, compute), cache.getLive('k', 1000, compute)]);
@@ -90,7 +90,7 @@ describe('Cache.getLive', () => {
         expect(compute).toHaveBeenCalledTimes(1);
     });
 
-    it('ne met pas une erreur en cache', async () => {
+    it('does not cache an error', async () => {
         const cache = new Cache(null);
         const compute = vi.fn<() => Promise<string>>()
             .mockRejectedValueOnce(new Error('boom'))
@@ -100,7 +100,7 @@ describe('Cache.getLive', () => {
         expect(compute).toHaveBeenCalledTimes(2);
     });
 
-    it('respecte le TTL', async () => {
+    it('honors the TTL', async () => {
         vi.useFakeTimers();
         const cache = new Cache(null);
         const compute = vi.fn(async () => 'v');
@@ -112,7 +112,7 @@ describe('Cache.getLive', () => {
         expect(compute).toHaveBeenCalledTimes(2);
     });
 
-    it('invalidateLive efface les clés au préfixe', async () => {
+    it('invalidateLive clears the keys with the prefix', async () => {
         const cache = new Cache(null);
         const compute = vi.fn(async () => 'v');
         await cache.getLive('live:a:1', 1000, compute);

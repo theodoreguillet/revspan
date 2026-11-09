@@ -5,7 +5,7 @@ import type { SecretStore } from '../../src/server/infra/secrets.ts';
 import { BitbucketSession } from '../../src/server/services/session.ts';
 
 describe('BitbucketSession', () => {
-    it('ne relit le jeton qu\'une fois jusqu\'à reset()', async () => {
+    it('reads the token only once until reset()', async () => {
         const get = vi.fn(async () => 'tok-123456');
         const secrets = { kind: 'file', get, set: vi.fn(), remove: vi.fn() } as unknown as SecretStore;
         const store = { config: { email: 'a@acme.test', repos: [] } } as unknown as Store;

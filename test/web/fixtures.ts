@@ -1,5 +1,5 @@
-// Données de test de src/web/lib : PR #212 (longue, 10 versions) et #118 (rebase seul) en JSON, anonymisées ;
-// versions synthétiques.
+// Test data for src/web/lib: PR #212 (long, 10 versions) and #118 (rebase only) as JSON, anonymized;
+// synthetic versions.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,13 +35,13 @@ export function threadById(data: PrDetail, id: number): Thread {
 }
 
 export interface VersionOptions {
-    /** Versions qui sont des rebases. */
+    /** Versions that are rebases. */
     rebases?: number[];
-    /** Versions dont le message du commit a changé. */
+    /** Versions whose commit message changed. */
     messageChanged?: number[];
-    /** Écart en jours entre deux pushs (à partir du 1er juin 2026, midi UTC). */
+    /** Gap in days between two pushes (starting June 1, 2026, noon UTC). */
     stepDays?: number;
-    /** Versions dont Bitbucket a effacé le commit. */
+    /** Versions whose commit Bitbucket erased. */
     unavailable?: number[];
 }
 

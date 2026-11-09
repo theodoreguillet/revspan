@@ -50,7 +50,7 @@ describe('plurals', () => {
         expect(enT.t('banner.newReplies', { count: 2 })).toBe('2 new replies');
     });
 
-    it('a category missing from the entry falls back to « other » (French « many » for millions)', () => {
+    it('a category missing from the entry falls back to "other" (French "many" for millions)', () => {
         expect(selectPlural({ one: 'one', other: 'other' }, 1_000_000, 'fr')).toBe('other');
     });
 });

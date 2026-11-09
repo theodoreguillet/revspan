@@ -27,12 +27,12 @@ const frT: Translate = (message, args) => format(frenchBundle[message] ?? messag
 const en: L10n = createL10n(enT, 'en');
 const fr: L10n = createL10n(frT, 'fr');
 
-describe('manifeste de l\'extension', () => {
-    it('même version que le projet (la release vérifie le tag contre package.json)', () => {
+describe('extension manifest', () => {
+    it('same version as the project (the release checks the tag against package.json)', () => {
         expect(readJson('extension/package.json').version).toBe(readJson('package.json').version);
     });
 
-    it('commandes et vues déclarées = commandes et vues enregistrées par extension.ts', () => {
+    it('declared commands and views = commands and views registered by extension.ts', () => {
         const manifest = readJson('extension/package.json') as { contributes: { commands: { command: string }[]; views: Record<string, { id: string }[]> } };
         const source = fs.readFileSync(new URL('../../src/extension/extension.ts', import.meta.url), 'utf8');
         const registered = (pattern: RegExp): string[] => [...source.matchAll(pattern)].map((m) => m[1] ?? '').sort();
@@ -40,7 +40,7 @@ describe('manifeste de l\'extension', () => {
         expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
     });
 
-    it('panneau rouvert après « Recharger la fenêtre » : événement d\'activation et sérialiseur du même type', () => {
+    it('panel reopened after "Reload Window": activation event and serializer of the same type', () => {
         const manifest = readJson('extension/package.json') as { activationEvents?: string[] };
         expect(manifest.activationEvents).toContain(`onWebviewPanel:${PANEL_VIEW_TYPE}`);
         const source = (file: string): string => fs.readFileSync(new URL(`../../src/extension/${file}`, import.meta.url), 'utf8');
@@ -48,34 +48,34 @@ describe('manifeste de l\'extension', () => {
         expect(source('panel.ts')).toContain('createWebviewPanel(PANEL_VIEW_TYPE,');
     });
 
-    it('un espace de travail non approuvé ne peut pas imposer sa liste de dépôts', () => {
+    it('an untrusted workspace cannot impose its repository list', () => {
         const manifest = readJson('extension/package.json') as {
             capabilities: { untrustedWorkspaces: Record<string, unknown> };
             contributes: { configuration: { properties: Record<string, unknown> } };
         };
-        // VS Code n'applique restrictedConfigurations qu'avec supported: 'limited'.
+        // VS Code only applies restrictedConfigurations with supported: 'limited'.
         expect(manifest.capabilities.untrustedWorkspaces).toMatchObject({ supported: 'limited', restrictedConfigurations: ['revspan.repositories'] });
         expect(manifest.contributes.configuration.properties).toHaveProperty(['revspan.repositories']);
     });
 });
 
-describe('réglage des dépôts suivis', () => {
-    it('écrit là où la valeur effective est définie : espace de travail s\'il la définit, sinon utilisateur', () => {
+describe('tracked repositories setting', () => {
+    it('writes where the effective value is defined: workspace if it defines it, otherwise user', () => {
         expect(settingTarget({ workspaceValue: ['acme/records-api'], globalValue: ['acme/records-import'] }, true)).toBe('workspace');
         expect(settingTarget({ workspaceValue: [] }, true)).toBe('workspace');
         expect(settingTarget({ globalValue: ['acme/records-import'] }, true)).toBe('global');
         expect(settingTarget(undefined, true)).toBe('global');
     });
 
-    it('espace de travail non approuvé : sa valeur est ignorée par VS Code, on écrit au niveau utilisateur', () => {
+    it('untrusted workspace: VS Code ignores its value, we write at the user level', () => {
         expect(settingTarget({ workspaceValue: ['acme/records-api'] }, false)).toBe('global');
     });
 });
 
-describe('HTML du panneau', () => {
+describe('panel HTML', () => {
     const index = '<!doctype html><html><head>\n<title>Revspan</title><script type="module" src="./assets/a.js"></script></head><body></body></html>';
 
-    it('ajoute la politique de sécurité et la route initiale, réécrit les fichiers en adresses du panneau (sans <base>)', () => {
+    it('adds the security policy and the initial route, rewrites the files to panel addresses (no <base>)', () => {
         const html = buildWebviewHtml(index, { assetsBaseUri: 'https://file.vscode-cdn.net/ext/dist/web/', cspSource: 'https://*.vscode-cdn.net', initialRoute: '/pr/ws/repo/42', locale: 'fr' });
         expect(html).toMatch(/<head>\n {4}<meta http-equiv="Content-Security-Policy"/);
         expect(html).toContain('<meta name="revspan-route" content="/pr/ws/repo/42">');
@@ -84,13 +84,13 @@ describe('HTML du panneau', () => {
         expect(html).not.toContain('<base');
     });
 
-    it('échappe la route et refuse une page sans <head>', () => {
+    it('escapes the route and rejects a page without <head>', () => {
         const html = buildWebviewHtml(index, { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/"><script>', locale: 'en' });
         expect(html).toContain('content="/&#34;&#62;&#60;script&#62;"');
         expect(() => buildWebviewHtml('<html></html>', { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/', locale: 'en' })).toThrow('<head>');
     });
 
-    it('politique stricte : aucun script en ligne, aucun accès réseau', () => {
+    it('strict policy: no inline script, no network access', () => {
         const csp = contentSecurityPolicy('https://*.vscode-cdn.net');
         expect(csp).toContain("default-src 'none'");
         expect(csp).toContain('script-src https://*.vscode-cdn.net');
@@ -100,15 +100,15 @@ describe('HTML du panneau', () => {
     });
 });
 
-describe('titre du panneau', () => {
-    it('d\'après la route affichée', () => {
+describe('panel title', () => {
+    it('from the displayed route', () => {
         expect(panelTitle(enT, '/pr/acme/records-api/212?from=2&to=6')).toBe('PR #212 · records-api');
         expect(panelTitle(enT, '/')).toBe('Revspan');
         expect(panelTitle(enT, '/settings')).toBe('Revspan · Settings');
         expect(panelTitle(frT, '/settings')).toBe('Revspan · Réglages');
     });
 
-    it('lecture d\'API de la page : route de l\'écran qui la fait (accueil, réglages, PR), sinon null', () => {
+    it('page API read: route of the screen that makes it (home, settings, PR), otherwise null', () => {
         expect(routeOfApiRead('GET', '/api/home')).toBe('/');
         expect(routeOfApiRead('GET', '/api/home?fresh=1')).toBe('/');
         expect(routeOfApiRead('GET', '/api/settings')).toBe('/settings');
@@ -121,8 +121,8 @@ describe('titre du panneau', () => {
     });
 });
 
-describe('panneau restauré', () => {
-    it('route enregistrée par la page ; accueil si l\'état est absent ou invalide', () => {
+describe('restored panel', () => {
+    it('route saved by the page; home if the state is missing or invalid', () => {
         expect(restoredRoute({ route: '/pr/acme/records-api/212?from=2&to=6' })).toBe('/pr/acme/records-api/212?from=2&to=6');
         expect(restoredRoute({ route: '/settings' })).toBe('/settings');
         const invalid: unknown[] = [undefined, null, 'x', 42, {}, { route: 42 }, { route: '' }, { route: 'settings' }, { route: '//evil.example/x' }, { route: 'https://evil.example/' }];
@@ -132,10 +132,10 @@ describe('panneau restauré', () => {
     });
 });
 
-describe('messages de la page', () => {
+describe('page messages', () => {
     const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
 
-    it('messages bien formés acceptés ; seuls workspace, dépôt et numéro gardés dans la référence', () => {
+    it('well-formed messages accepted; only workspace, repo and number kept in the reference', () => {
         const read = { type: 'request', id: 3, method: 'GET', path: '/api/home' };
         const write = { type: 'request', id: 4, method: 'POST', path: '/api/pr/acme/records-api/212/comments', body: { raw: 'Merci' } };
         const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
@@ -146,7 +146,7 @@ describe('messages de la page', () => {
         expect(parseWebviewMessage({ ...openFile, ref: { ...ref, extra: 'x' } })).toEqual(openFile);
     });
 
-    it('message mal formé : null, sans exception', () => {
+    it('malformed message: null, no exception', () => {
         const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
         const openDiff = { type: 'openDiff', ref, from: 2, to: 3, path: 'src/A.ts', oldPath: null };
         const malformed: unknown[] = [
@@ -177,21 +177,21 @@ describe('messages de la page', () => {
     });
 });
 
-describe('fichier du dépôt local', () => {
-    it('chemin relatif dans le dépôt : chemin absolu du fichier', () => {
+describe('local repository file', () => {
+    it('relative path in the repository: absolute path of the file', () => {
         expect(fileInRepo('/dev/records-api', 'src/A.ts')).toBe('/dev/records-api/src/A.ts');
         expect(fileInRepo('/dev/records-api/', 'src/../README.md')).toBe('/dev/records-api/README.md');
     });
 
-    it('chemin absolu ou qui sort du dépôt : null', () => {
+    it('absolute path or one leaving the repository: null', () => {
         for (const file of ['../../.ssh/id_rsa', 'src/../../x', '../records-api-copy/x', '/etc/passwd', '', '.', 'src/\0A.ts']) {
             expect(fileInRepo('/dev/records-api', file), file).toBeNull();
         }
     });
 });
 
-describe('dépôt local', () => {
-    /** Système de fichiers simulé : chemins → contenu (null = dossier). */
+describe('local repository', () => {
+    /** Simulated file system: paths -> content (null = folder). */
     function fakeFs(entries: Record<string, string | null>): RepoFs {
         return {
             exists: (file) => file in entries,
@@ -203,7 +203,7 @@ describe('dépôt local', () => {
         };
     }
 
-    // Copie principale dans /dev, worktree enregistré par git hors de l'espace de travail (/tmp/wt/demo).
+    // Main copy in /dev, worktree registered by git outside the workspace (/tmp/wt/demo).
     const fs = fakeFs({
         '/dev/records-api': null,
         '/dev/records-api/.git': null,
@@ -216,33 +216,33 @@ describe('dépôt local', () => {
         '/tmp/wt/demo/.git': 'gitdir: /dev/records-api/.git/worktrees/demo\n',
     });
 
-    it('lit la branche extraite (copie principale et worktree)', () => {
+    it('reads the checked-out branch (main copy and worktree)', () => {
         expect(currentBranch('/dev/records-api', fs)).toBe('main');
         expect(currentBranch('/tmp/wt/demo', fs)).toBe('feature/demo');
     });
 
     const target = { workspace: 'acme', repo: 'records-api' };
 
-    it('préfère un worktree enregistré par git sur la branche de la PR, où qu\'il soit', () => {
+    it('prefers a worktree registered by git on the PR\'s branch, wherever it is', () => {
         expect(findLocalRepo(['/dev'], target, 'feature/demo', fs))
             .toEqual({ dir: '/tmp/wt/demo', branch: 'feature/demo', onPrBranch: true });
     });
 
-    it('espace de travail ouvert sur le worktree lui-même : reconnu par sa copie principale', () => {
+    it('workspace opened on the worktree itself: recognized through its main copy', () => {
         expect(findLocalRepo(['/tmp/wt/demo'], target, 'feature/demo', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: true });
         expect(findLocalRepo(['/tmp/wt/demo'], target, 'feature/autre', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: false });
     });
 
-    it('sinon la copie principale, signalée hors branche', () => {
+    it('otherwise the main copy, flagged as off-branch', () => {
         expect(findLocalRepo(['/dev'], target, 'feature/autre', fs)).toEqual({ dir: '/dev/records-api', branch: 'main', onPrBranch: false });
         expect(findLocalRepo(['/dev/records-api'], target, null, fs)).toMatchObject({ dir: '/dev/records-api' });
     });
 
-    it('null si le dépôt n\'est pas dans l\'espace de travail', () => {
+    it('null if the repository is not in the workspace', () => {
         expect(findLocalRepo(['/dev'], { workspace: 'acme', repo: 'records-import' }, null, fs)).toBeNull();
     });
 
-    /** Copie git (dossier .git) avec sa branche et ses remotes. */
+    /** Git copy (.git folder) with its branch and remotes. */
     const clone = (dir: string, branch: string, urls: string[]): Record<string, string | null> => ({
         [dir]: null,
         [`${dir}/.git`]: null,
@@ -250,7 +250,7 @@ describe('dépôt local', () => {
         [`${dir}/.git/config`]: ['[core]', '\tbare = false', ...urls.flatMap((url, i) => [`[remote "r${i}"]`, `\turl = ${url}`, `\tfetch = +refs/heads/*:refs/remotes/r${i}/*`])].join('\n'),
     });
 
-    it('URL de remote Bitbucket : https (avec ou sans utilisateur), ssh, scp ; .git facultatif', () => {
+    it('Bitbucket remote URL: https (with or without user), ssh, scp; .git optional', () => {
         const repo = { workspace: 'acme', repo: 'records-api' };
         for (const url of [
             'https://bitbucket.org/acme/records-api.git', 'https://camille@bitbucket.org/acme/records-api', 'git@bitbucket.org:acme/records-api.git',
@@ -263,7 +263,7 @@ describe('dépôt local', () => {
         }
     });
 
-    it('copie renommée reconnue par l\'une de ses remotes', () => {
+    it('renamed copy recognized by one of its remotes', () => {
         const renamed = fakeFs({
             '/dev': null,
             ...clone('/dev/api', 'main', ['https://github.com/camille/mirror.git', 'git@bitbucket.org:acme/records-api.git']),
@@ -273,7 +273,7 @@ describe('dépôt local', () => {
         expect(findLocalRepo(['/dev'], { workspace: 'ACME', repo: 'Records-API' }, null, renamed)).toMatchObject({ dir: '/dev/api' });
     });
 
-    it('dépôts homonymes de workspaces différents : la remote <workspace>/<dépôt> exacte l\'emporte sur le nom du dossier', () => {
+    it('same-named repositories in different workspaces: the exact <workspace>/<repo> remote wins over the folder name', () => {
         const homonyms = fakeFs({
             '/work-a': null,
             '/work-b': null,
@@ -282,11 +282,11 @@ describe('dépôt local', () => {
         });
         expect(findLocalRepo(['/work-a', '/work-b'], target, 'feature/demo', homonyms)).toMatchObject({ dir: '/work-b/records-api', onPrBranch: false });
         expect(findLocalRepo(['/work-a', '/work-b'], { workspace: 'other', repo: 'records-api' }, null, homonyms)).toMatchObject({ dir: '/work-a/records-api' });
-        // Aucune remote correspondante : repli sur le nom du dossier.
+        // No matching remote: fall back to the folder name.
         expect(findLocalRepo(['/work-a', '/work-b'], { workspace: 'fork', repo: 'records-api' }, null, homonyms)).toMatchObject({ dir: '/work-a/records-api' });
     });
 
-    // Dépôt bare et ses worktrees (git clone --bare + git worktree add) : commondir mène au dépôt commun.
+    // Bare repository and its worktrees (git clone --bare + git worktree add): commondir leads to the common repository.
     const bare = (config: string): Record<string, string | null> => ({
         '/dev/records-api.git': null,
         '/dev/records-api.git/HEAD': 'ref: refs/heads/main\n',
@@ -307,7 +307,7 @@ describe('dépôt local', () => {
         '/tmp/demo/.git': 'gitdir: /dev/records-api.git/worktrees/demo\n',
     });
 
-    it('worktree d\'un dépôt bare : remonté vers le dépôt commun et ses autres worktrees (remote ou nom du dépôt bare)', () => {
+    it('worktree of a bare repository: traced back to the common repository and its other worktrees (remote or bare repository name)', () => {
         const withRemote = fakeFs(bare('[core]\n\tbare = true\n[remote "origin"]\n\turl = git@bitbucket.org:acme/records-api.git\n'));
         expect(findLocalRepo(['/dev/wt/main'], target, 'feature/demo', withRemote)).toEqual({ dir: '/tmp/demo', branch: 'feature/demo', onPrBranch: true });
         expect(findLocalRepo(['/dev/wt/main'], target, 'feature/autre', withRemote)).toMatchObject({ dir: '/dev/wt/main', onPrBranch: false });
@@ -315,7 +315,7 @@ describe('dépôt local', () => {
         expect(findLocalRepo(['/dev/wt/main'], target, 'feature/demo', withoutRemote)).toMatchObject({ dir: '/tmp/demo', onPrBranch: true });
     });
 
-    it('dossier qui pointe vers un dépôt bare (.bare) : ses worktrees, jamais le dossier lui-même', () => {
+    it('folder pointing to a bare repository (.bare): its worktrees, never the folder itself', () => {
         const container = fakeFs({
             '/src': null,
             '/src/records-api': null,
@@ -335,8 +335,8 @@ describe('dépôt local', () => {
     });
 });
 
-describe('documents de diff', () => {
-    it('aller-retour, chemin terminé par le fichier (coloration), titre', () => {
+describe('diff documents', () => {
+    it('round trip, path ending with the file (highlighting), title', () => {
         const doc = { ref: { workspace: 'acme', repo: 'records-api', id: 212 }, from: 9, to: 10, side: 'old' as const, path: 'src/A.ts', oldPath: 'src/Old.ts' };
         const encoded = encodeDiffDocument(doc);
         expect(encoded.path).toBe('/records-api/v9/src/Old.ts');
@@ -347,7 +347,7 @@ describe('documents de diff', () => {
         expect(diffTitle('a.ts', 0, 3)).toBe('a.ts (base → v3)');
     });
 
-    it('nombre absent, vide ou invalide, référence de PR invalide : null (jamais 0 par défaut)', () => {
+    it('missing, empty or invalid number, invalid PR reference: null (never 0 by default)', () => {
         const { query } = encodeDiffDocument({ ref: { workspace: 'acme', repo: 'records-api', id: 212 }, from: 0, to: 3, side: 'new', path: 'src/A.ts', oldPath: null });
         expect(decodeDiffDocument(query)).toMatchObject({ from: 0, to: 3 });
         const variants: [string, string | null][] = [
@@ -366,7 +366,7 @@ describe('documents de diff', () => {
     });
 });
 
-describe('arbre « Mes PR »', () => {
+describe('"My PRs" tree', () => {
     const card = (id: number, extra: Partial<PrCard> = {}): PrCard => ({
         workspace: 'acme', repo: 'records-api', id, title: `PR ${id}`, author: { uuid: '{a}', displayName: 'Camille' }, url: '',
         createdOn: '', updatedOn: '', versionsCount: 3, lastPushAt: '', lastReviewed: 1, newVersions: 2, newCodeVersions: 1,
@@ -383,7 +383,7 @@ describe('arbre « Mes PR »', () => {
         ],
     };
 
-    it('groupes non vides, badges, « Autres » replié quand je suis connu', () => {
+    it('non-empty groups, badges, "Other" collapsed when I am known', () => {
         const tree = buildHomeTree(home, fr);
         expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À relire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
         expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, label: 'records-api #1 · PR 1', description: '+2 versions · dont 1 avec du code · 💬 2' });

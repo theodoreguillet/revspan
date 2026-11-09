@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostToWebview, WebviewToHost } from '../../src/shared/webview-protocol.ts';
 
-// host.ts lit acquireVsCodeApi à l'import : chaque test recharge les modules après avoir posé (ou non) le faux.
+// host.ts reads acquireVsCodeApi on import: each test reloads the modules after setting (or not) the fake.
 const ref = { workspace: 'acme', repo: 'demo-repo', id: 42 };
 const reply = (message: HostToWebview | Record<string, unknown>): void => {
     window.dispatchEvent(new MessageEvent('message', { data: message }));
 };
 
-describe('dans un panneau VS Code', () => {
+describe('in a VS Code panel', () => {
     let posted: WebviewToHost[];
     let states: unknown[];
     let acquire: ReturnType<typeof vi.fn>;
@@ -25,14 +25,14 @@ describe('dans un panneau VS Code', () => {
         vi.useRealTimers();
     });
 
-    it('détecte VS Code et n\'appelle acquireVsCodeApi qu\'une fois', async () => {
+    it('detects VS Code and calls acquireVsCodeApi only once', async () => {
         const host = await import('../../src/web/services/host.ts');
         await import('../../src/web/services/api.ts');
         expect(host.isVsCode).toBe(true);
         expect(acquire).toHaveBeenCalledTimes(1);
     });
 
-    it('lecture : message « request » posté, résolue par la réponse de même id', async () => {
+    it('read: "request" message posted, resolved by the response with the same id', async () => {
         const { api } = await import('../../src/web/services/api.ts');
         const home = api.home();
         expect(posted).toEqual([{ type: 'request', id: 1, method: 'GET', path: '/api/home' }]);
@@ -41,7 +41,7 @@ describe('dans un panneau VS Code', () => {
         await expect(home).resolves.toEqual(body);
     });
 
-    it('écritures : corps JSON (copie clonable), {} quand il n\'y en a pas', async () => {
+    it('writes: JSON body (cloneable copy), {} when there is none', async () => {
         const { api } = await import('../../src/web/services/api.ts');
         void api.comment(ref, { raw: 'Merci', parentId: 7 });
         void api.approve(ref, true);
@@ -53,7 +53,7 @@ describe('dans un panneau VS Code', () => {
         ]);
     });
 
-    it('réponses dans le désordre : chaque requête reçoit la sienne', async () => {
+    it('out-of-order responses: each request gets its own', async () => {
         const { api } = await import('../../src/web/services/api.ts');
         const settings = api.settings();
         const home = api.home();
@@ -63,7 +63,7 @@ describe('dans un panneau VS Code', () => {
         await expect(home).resolves.toBe('home');
     });
 
-    it('réponse d\'erreur : ApiError avec le code et le message du serveur', async () => {
+    it('error response: ApiError with the server\'s code and message', async () => {
         const { api, ApiError } = await import('../../src/web/services/api.ts');
         const home = api.home();
         reply({ type: 'response', id: 1, status: 409, body: { error: { code: 'NO_TOKEN', message: 'Aucun jeton.' } } });
@@ -74,7 +74,7 @@ describe('dans un panneau VS Code', () => {
         await expect(pr).rejects.toMatchObject({ status: 502, code: 'HTTP_502' });
     });
 
-    it('pas de réponse de l\'extension : ApiError NETWORK après le délai', async () => {
+    it('no response from the extension: ApiError NETWORK after the timeout', async () => {
         vi.useFakeTimers();
         const { api } = await import('../../src/web/services/api.ts');
         const home = api.home();
@@ -83,7 +83,7 @@ describe('dans un panneau VS Code', () => {
         await settled;
     });
 
-    it('messages de l\'extension : navigate transmis, messages inconnus ignorés, désabonnement', async () => {
+    it('extension messages: navigate forwarded, unknown messages ignored, unsubscribe', async () => {
         const { onHostMessage } = await import('../../src/web/services/host.ts');
         const handler = vi.fn();
         const stop = onHostMessage(handler);
@@ -97,14 +97,14 @@ describe('dans un panneau VS Code', () => {
         expect(handler).toHaveBeenCalledTimes(1);
     });
 
-    it('route affichée enregistrée dans l\'état du panneau (rouvert sur elle après « Recharger la fenêtre »)', async () => {
+    it('displayed route saved in the panel state (reopened on it after "Reload Window")', async () => {
         const { rememberRoute } = await import('../../src/web/services/host.ts');
         rememberRoute('/pr/acme/demo-repo/42?from=2&to=6');
         rememberRoute('/settings');
         expect(states).toEqual([{ route: '/pr/acme/demo-repo/42?from=2&to=6' }, { route: '/settings' }]);
     });
 
-    it('ouvrir un fichier local ou le diff natif', async () => {
+    it('open a local file or the native diff', async () => {
         const { openLocalFile, openNativeDiff } = await import('../../src/web/services/host.ts');
         openLocalFile(ref, 'src/Action.ts', 7);
         openNativeDiff(ref, 2, 6, 'src/Action.ts', null);
@@ -115,7 +115,7 @@ describe('dans un panneau VS Code', () => {
     });
 });
 
-describe('hors VS Code', () => {
+describe('outside VS Code', () => {
     beforeEach(() => {
         vi.resetModules();
     });
@@ -124,7 +124,7 @@ describe('hors VS Code', () => {
         vi.unstubAllGlobals();
     });
 
-    it('requêtes HTTP, en-tête X-Revspan sur les écritures seulement', async () => {
+    it('HTTP requests, X-Revspan header on writes only', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
         const { isVsCode } = await import('../../src/web/services/host.ts');
@@ -140,7 +140,7 @@ describe('hors VS Code', () => {
         expect(homeInit.body).toBeUndefined();
     });
 
-    it('serveur injoignable : ApiError NETWORK', async () => {
+    it('server unreachable: ApiError NETWORK', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => {
             throw new TypeError('Failed to fetch');
         }));
@@ -148,12 +148,12 @@ describe('hors VS Code', () => {
         await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Revspan server') });
     });
 
-    it('état du panneau : rien à enregistrer', async () => {
+    it('panel state: nothing to save', async () => {
         const { rememberRoute } = await import('../../src/web/services/host.ts');
         expect(() => rememberRoute('/settings')).not.toThrow();
     });
 
-    it('le relais par l\'extension refuse de partir', async () => {
+    it('relaying through the extension refuses to start', async () => {
         const { hostRequest } = await import('../../src/web/services/host.ts');
         await expect(hostRequest('GET', '/api/home')).rejects.toThrow('Not in VS Code');
     });
@@ -162,13 +162,13 @@ describe('hors VS Code', () => {
 describe('readInitialRoute', () => {
     const doc = (head: string): Document => new DOMParser().parseFromString(`<html><head>${head}</head><body></body></html>`, 'text/html');
 
-    it('route de la balise <meta name="revspan-route">', async () => {
+    it('route from the <meta name="revspan-route"> tag', async () => {
         const { readInitialRoute } = await import('../../src/web/services/host.ts');
         expect(readInitialRoute(doc('<meta name="revspan-route" content="/pr/acme/demo-repo/42">'))).toBe('/pr/acme/demo-repo/42');
         expect(readInitialRoute(doc('<meta name="revspan-route" content="  /settings ">'))).toBe('/settings');
     });
 
-    it('absente, vide ou qui n\'est pas un chemin de la page : null', async () => {
+    it('missing, empty or not a page path: null', async () => {
         const { readInitialRoute } = await import('../../src/web/services/host.ts');
         expect(readInitialRoute(doc(''))).toBeNull();
         expect(readInitialRoute(doc('<meta name="revspan-route" content="">'))).toBeNull();
