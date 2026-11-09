@@ -4,6 +4,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-09
+
 ### Added
 
 - VS Code extension: tracked repositories in the `revspan.repositories` setting (VS Code Settings, Settings Sync, per

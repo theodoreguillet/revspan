@@ -1,6 +1,6 @@
 {
     "name": "revspan",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "private": true,
     "description": "Review Bitbucket PRs version by version, despite amend, rebase and force-push — local tool and VS Code extension",
     "license": "MIT",
@@ -55,7 +55,7 @@
         "@types/node": "22.20.4",
         "@types/vscode": "1.95.0",
         "@vitejs/plugin-vue": "6.0.9",
-        "@vscode/vsce": "3.9.2",
+        "@vscode/vsce": "4.1.0",
         "@vue/tsconfig": "0.9.1",
         "eslint": "^9.0.0",
         "eslint-plugin-vue": "^10.12.0",

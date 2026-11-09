@@ -19,6 +19,8 @@ interface Env {
 
 let env: Env | null = null;
 
+const PACKAGE_VERSION = (JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
 const startRevspan = (dir: string, fake: FakeBitbucket, fetchImpl: typeof fetch = fetch): Promise<RunningApp> =>
     startApp({ port: 0, fetchImpl, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
 
@@ -94,7 +96,7 @@ describe('settings and security', () => {
         });
         expect(foreign.status).toBe(403);
         const health = await fetch(`${app.url}/api/health`);
-        expect(await health.json()).toEqual({ app: 'revspan', version: '2.0.0' });
+        expect(await health.json()).toEqual({ app: 'revspan', version: PACKAGE_VERSION });
         expect(health.headers.get('content-security-policy')).toContain("script-src 'self'");
         expect(health.headers.get('cache-control')).toBe('no-store');
     });
