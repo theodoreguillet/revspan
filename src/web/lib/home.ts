@@ -35,7 +35,6 @@ export function cardBadges(card: PrCard, groupKey: HomeGroupKey, me: User | null
 export function cardSubtitle(card: PrCard, me: User | null): string {
     const mine = !!me && card.author?.uuid === me.uuid;
     const parts = [
-        `${card.repo} #${card.id}`,
         mine ? 'toi' : displayName(card.author),
         openedSince(card.createdOn),
         `push ${ago(card.lastPushAt)}`,

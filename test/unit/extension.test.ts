@@ -134,8 +134,8 @@ describe('arbre « Mes PR »', () => {
         };
         const tree = buildHomeTree(home);
         expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À relire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
-        expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, description: 'records-api #1 · +2 versions · dont 1 avec du code · 💬 2' });
-        expect(tree[1]?.prs[0]?.description).toBe('records-api #2 · pas encore relue · 💬 2');
+        expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, label: 'records-api #1 · PR 1', description: '+2 versions · dont 1 avec du code · 💬 2' });
+        expect(tree[1]?.prs[0]).toMatchObject({ label: 'records-api #2 · PR 2', description: 'pas encore relue · 💬 2' });
         expect(buildHomeTree({ ...home, me: null }).find((g) => g.key === 'others')?.collapsed).toBe(false);
     });
 });

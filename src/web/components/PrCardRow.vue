@@ -14,7 +14,7 @@ const subtitle = computed(() => cardSubtitle(props.card, props.me));
 <template>
     <RouterLink class="rv-row" :to="prRoute(card)" :data-pr="`${card.workspace}/${card.repo}/${card.id}`">
         <div class="t">
-            <div class="ti" :title="card.title">{{ card.title }}</div>
+            <div class="ti" :title="`${card.repo} #${card.id} · ${card.title}`"><span class="ref">{{ card.repo }} #{{ card.id }}</span>{{ card.title }}</div>
             <div class="su">{{ subtitle }}</div>
         </div>
         <div class="badges">

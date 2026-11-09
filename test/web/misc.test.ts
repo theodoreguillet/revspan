@@ -74,9 +74,9 @@ describe('cartes de l\'accueil', () => {
     });
 
     it('sous-titre ; ma PR : « toi », pas de badge de versions', () => {
-        expect(cardSubtitle(card({}), me)).toBe('records-api #1 · Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
+        expect(cardSubtitle(card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
-        expect(cardSubtitle(mine, me)).toContain(' · toi · ');
+        expect(cardSubtitle(mine, me)).toMatch(/^toi · /);
         expect(badges(mine, 'mine')).toEqual(['💬 1 nouveau']);
     });
 });

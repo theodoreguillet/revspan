@@ -50,8 +50,9 @@ function prNode(card: PrCard, key: HomeGroupKey): PrNode {
     const extra = badges(card, key);
     return {
         ref: { workspace: card.workspace, repo: card.repo, id: card.id },
-        label: card.title,
-        description: [`${card.repo} #${card.id}`, ...extra].join(' · '),
+        // Dépôt et numéro devant le titre : repérables d'un coup d'œil dans la liste.
+        label: `${card.repo} #${card.id} · ${card.title}`,
+        description: extra.join(' · '),
         tooltip: [
             card.title,
             `${card.workspace}/${card.repo} #${card.id} · ${card.author?.displayName ?? '?'}`,
