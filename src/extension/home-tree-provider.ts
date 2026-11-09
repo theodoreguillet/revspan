@@ -10,7 +10,7 @@ type Node = { kind: 'group'; group: GroupNode } | { kind: 'pr'; pr: PrNode } | {
 export const NEEDS_TOKEN_CONTEXT = 'revspan.needsToken';
 export const NO_REPOS_CONTEXT = 'revspan.noRepos';
 
-export class HomeTreeProvider implements vscode.TreeDataProvider<Node> {
+export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.Disposable {
     private readonly home: HomeService;
     private readonly changed = new vscode.EventEmitter<void>();
     private fresh = false;
@@ -24,6 +24,10 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node> {
     refresh({ fresh = false } = {}): void {
         this.fresh = this.fresh || fresh;
         this.changed.fire();
+    }
+
+    dispose(): void {
+        this.changed.dispose();
     }
 
     getTreeItem(node: Node): vscode.TreeItem {

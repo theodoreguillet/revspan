@@ -51,15 +51,20 @@ export class RevspanPanel {
             cspSource: panel.webview.cspSource,
             initialRoute: route,
         });
+        // Écouteurs propres à ce panneau, libérés à sa fermeture (et non gardés jusqu'à l'arrêt de l'extension).
+        const listeners: vscode.Disposable[] = [];
         panel.webview.onDidReceiveMessage((data: unknown) => {
             const message = parseWebviewMessage(data);
             if (message) {
                 void this.handle(message);
             }
-        }, undefined, this.context.subscriptions);
+        }, undefined, listeners);
         panel.onDidDispose(() => {
-            this.panel = null;
-        }, undefined, this.context.subscriptions);
+            if (this.panel === panel) {
+                this.panel = null;
+            }
+            listeners.forEach((listener) => listener.dispose());
+        }, undefined, listeners);
         this.panel = panel;
     }
 

@@ -14,6 +14,7 @@ import { createSecretStore } from '../../src/server/infra/secrets.ts';
 import { createServices, type Services } from '../../src/server/services/index.ts';
 import { IN_MEMORY_HOST, callApi, isSuccessfulWrite } from '../../src/extension/lib/bridge.ts';
 import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
+import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
 import { Uri, recorded, resetFakeVscode, workspace, type FakeWebviewPanel } from '../support/fake-vscode.ts';
@@ -126,5 +127,26 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         expect(recorded.opened).toEqual([]);
         panel.receive({ type: 'openFile', ref, path: 'README.md', line: null });
         await vi.waitFor(() => expect(recorded.opened).toEqual([path.join(root, REPO, 'README.md')]));
+    });
+
+    it('écouteurs propres au panneau, libérés à sa fermeture ; un nouveau panneau ensuite', () => {
+        const { revspan, panel } = open('/');
+        expect(subscriptions).toEqual([]);
+        expect(panel.listenerCount).toBeGreaterThan(0);
+        panel.dispose();
+        expect(panel.listenerCount).toBe(0);
+        revspan.show('/settings');
+        expect(recorded.panels).toHaveLength(2);
+        expect(subscriptions).toEqual([]);
+    });
+
+    it('vue « Mes PR » : émetteur libéré avec l\'extension', () => {
+        const tree = new HomeTreeProvider(services.home);
+        const listener = vi.fn();
+        tree.onDidChangeTreeData(listener);
+        tree.refresh();
+        tree.dispose();
+        tree.refresh();
+        expect(listener).toHaveBeenCalledTimes(1);
     });
 });

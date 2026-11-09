@@ -27,6 +27,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const panel = new RevspanPanel({ context, app, diffs, onWrite: () => tree.refresh() });
 
     context.subscriptions.push(
+        tree,
         vscode.window.registerTreeDataProvider('revspan.home', tree),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
         vscode.commands.registerCommand('revspan.openHome', () => panel.show('/')),

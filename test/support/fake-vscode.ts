@@ -8,9 +8,13 @@ export class EventEmitter<T> {
     private readonly listeners = new Set<Listener<T>>();
     disposed = false;
 
-    readonly event = (listener: Listener<T>): { dispose(): void } => {
-        this.listeners.add(listener);
-        return { dispose: () => void this.listeners.delete(listener) };
+    /** Comme vscode.Event : l'abonnement est aussi ajouté à `disposables` s'il est fourni. */
+    readonly event = (listener: Listener<T>, thisArgs?: unknown, disposables?: { dispose(): unknown }[]): { dispose(): void } => {
+        const bound: Listener<T> = (value) => listener.call(thisArgs, value);
+        this.listeners.add(bound);
+        const subscription = { dispose: () => void this.listeners.delete(bound) };
+        disposables?.push(subscription);
+        return subscription;
     };
 
     get listenerCount(): number {
