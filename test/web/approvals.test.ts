@@ -130,8 +130,17 @@ describe('approvals in English', () => {
         const { data, sums } = prLong();
         expect(approvalItems(createTranslator('en'), data, sums, true).map((item) => [item.name, item.title])).toEqual([
             ['Yann Bernard', 'Yann Bernard approved v10'],
-            ['William Etienne', 'William Etienne approved v7; code changed in v10 since'],
+            ['William Etienne', 'William Etienne approved v7, but code changed in v10'],
             ['you', 'You haven’t approved yet'],
         ]);
+    });
+
+    it('my stale approval, in the first person', () => {
+        const { data, sums } = prLong();
+        const approvedV7 = {
+            ...data,
+            participants: data.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approved: true, state: 'approved' as const, approvedVersion: 7 } : p)),
+        };
+        expect(approvalItems(createTranslator('en'), approvedV7, sums, true).at(-1)?.title).toBe('You approved v7, but code changed in v10');
     });
 });
