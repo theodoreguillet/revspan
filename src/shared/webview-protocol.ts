@@ -20,3 +20,12 @@ export type HostToWebview =
 
 /** Balise <meta> par laquelle l'extension donne la route initiale à la page. */
 export const INITIAL_ROUTE_META = 'revspan-route';
+
+/** État du panneau enregistré par la page (vscode.setState), rendu par VS Code quand il rouvre le panneau. */
+export interface PanelState {
+    /** Route affichée (ex. « /pr/ws/repo/42?from=2&to=6 »). */
+    route: string;
+}
+
+/** Chemin de la page (« /… »), jamais une adresse d'une autre origine (« //hôte/… », « https:… »). */
+export const isPageRoute = (value: unknown): value is string => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//');

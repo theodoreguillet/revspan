@@ -36,6 +36,7 @@
             "description": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne."
         }
     },
+    "activationEvents": ["onWebviewPanel:revspan"],
     "main": "./dist/extension.cjs",
     "contributes": {
         "commands": [

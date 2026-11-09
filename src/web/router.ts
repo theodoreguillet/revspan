@@ -2,7 +2,7 @@
 // Le hash est gardé aussi dans VS Code : les liens « #/… » y restent internes (sinon le panneau les ouvre dans le navigateur).
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { clearErrors } from './composables/useErrors.ts';
-import { isVsCode, onHostMessage, readInitialRoute } from './services/host.ts';
+import { isVsCode, onHostMessage, readInitialRoute, rememberRoute } from './services/host.ts';
 import HomeView from './views/HomeView.vue';
 import PrView from './views/PrView.vue';
 import SettingsView from './views/SettingsView.vue';
@@ -26,7 +26,11 @@ export const router = createRouter({
 });
 
 // Changer d'écran efface les erreurs de l'écran précédent (pas un simple changement de plage).
-router.afterEach((to, from) => {
+// Dans VS Code, la route affichée est gardée dans l'état du panneau (rouvert sur elle après rechargement).
+router.afterEach((to, from, failure) => {
+    if (!failure) {
+        rememberRoute(to.fullPath);
+    }
     if (to.path !== from.path) {
         clearErrors();
         window.scrollTo(0, 0);

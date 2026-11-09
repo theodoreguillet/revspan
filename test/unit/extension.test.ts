@@ -8,7 +8,7 @@ import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/ext
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { settingTarget } from '../../src/extension/lib/setting-target.ts';
-import { panelTitle, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
+import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
 
 describe('manifeste de l\'extension', () => {
     const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -23,6 +23,14 @@ describe('manifeste de l\'extension', () => {
         const registered = (pattern: RegExp): string[] => [...source.matchAll(pattern)].map((m) => m[1] ?? '').sort();
         expect(registered(/registerCommand\('([^']+)'/g)).toEqual(manifest.contributes.commands.map((c) => c.command).sort());
         expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
+    });
+
+    it('panneau rouvert après « Recharger la fenêtre » : événement d\'activation et sérialiseur du même type', () => {
+        const manifest = readJson('extension/package.json') as { activationEvents?: string[] };
+        expect(manifest.activationEvents).toContain(`onWebviewPanel:${PANEL_VIEW_TYPE}`);
+        const source = (file: string): string => fs.readFileSync(new URL(`../../src/extension/${file}`, import.meta.url), 'utf8');
+        expect(source('extension.ts')).toContain('registerWebviewPanelSerializer(PANEL_VIEW_TYPE,');
+        expect(source('panel.ts')).toContain('createWebviewPanel(PANEL_VIEW_TYPE,');
     });
 
     it('un espace de travail non approuvé ne peut pas imposer sa liste de dépôts', () => {
@@ -93,6 +101,17 @@ describe('titre du panneau', () => {
         expect(routeOfApiRead('POST', '/api/pr/acme/records-api/212/approve')).toBeNull();
         expect(routeOfApiRead('GET', '/api/health')).toBeNull();
         expect(routeOfApiRead('GET', '/api/homepage')).toBeNull();
+    });
+});
+
+describe('panneau restauré', () => {
+    it('route enregistrée par la page ; accueil si l\'état est absent ou invalide', () => {
+        expect(restoredRoute({ route: '/pr/acme/records-api/212?from=2&to=6' })).toBe('/pr/acme/records-api/212?from=2&to=6');
+        expect(restoredRoute({ route: '/settings' })).toBe('/settings');
+        const invalid: unknown[] = [undefined, null, 'x', 42, {}, { route: 42 }, { route: '' }, { route: 'settings' }, { route: '//evil.example/x' }, { route: 'https://evil.example/' }];
+        for (const state of invalid) {
+            expect(restoredRoute(state), JSON.stringify(state)).toBe('/');
+        }
     });
 });
 

@@ -6,6 +6,7 @@ import { createExtensionApp, REPOS_SETTING } from './app-context.ts';
 import { DiffDocuments } from './diff-documents.ts';
 import { HomeTreeProvider } from './home-tree-provider.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
+import { PANEL_VIEW_TYPE, restoredRoute } from './lib/panel-route.ts';
 import { RevspanPanel } from './panel.ts';
 
 const prRoute = (ref: PrRef): string => `/pr/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(ref.repo)}/${ref.id}`;
@@ -30,6 +31,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         tree,
         vscode.window.registerTreeDataProvider('revspan.home', tree),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
+        // Après « Recharger la fenêtre », VS Code rouvre le panneau avec l'état enregistré par la page (sa route).
+        vscode.window.registerWebviewPanelSerializer(PANEL_VIEW_TYPE, {
+            deserializeWebviewPanel: async (webviewPanel, state: unknown) => panel.restore(webviewPanel, restoredRoute(state)),
+        }),
         vscode.commands.registerCommand('revspan.openHome', () => panel.show('/')),
         vscode.commands.registerCommand('revspan.openSettings', () => panel.show('/settings')),
         vscode.commands.registerCommand('revspan.refresh', () => tree.refresh({ fresh: true })),

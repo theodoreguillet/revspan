@@ -17,7 +17,7 @@ import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
 import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
-import { Uri, recorded, resetFakeVscode, workspace, type FakeWebviewPanel } from '../support/fake-vscode.ts';
+import { FakeWebviewPanel, Uri, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
 
 vi.mock('vscode', () => import('../support/fake-vscode.ts'));
 
@@ -90,10 +90,14 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         fs.writeFileSync(path.join(dir, 'ext', 'dist', 'web', 'index.html'), '<!doctype html><html><head></head><body></body></html>');
     });
 
+    function create(): RevspanPanel {
+        const context = { extensionUri: Uri.file(path.join(dir, 'ext')), subscriptions } as unknown as vscode.ExtensionContext;
+        return new RevspanPanel({ context, app: { services, http }, diffs: { open: vi.fn() } as unknown as DiffDocuments, onWrite: () => undefined });
+    }
+
     /** Ouvre le panneau sur une route ; renvoie le faux panneau VS Code. */
     function open(route: string): { revspan: RevspanPanel; panel: FakeWebviewPanel } {
-        const context = { extensionUri: Uri.file(path.join(dir, 'ext')), subscriptions } as unknown as vscode.ExtensionContext;
-        const revspan = new RevspanPanel({ context, app: { services, http }, diffs: { open: vi.fn() } as unknown as DiffDocuments, onWrite: () => undefined });
+        const revspan = create();
         revspan.show(route);
         const panel = recorded.panels.at(-1);
         if (!panel) {
@@ -140,6 +144,25 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         panel.receive({ type: 'request', id: 3, method: 'GET', path: `/api/pr/${WS}/${REPO}/${FAKE_PRS.main}` });
         await vi.waitFor(() => expect(panel.title).toBe(prTitle));
         await vi.waitFor(() => expect(panel.posted).toHaveLength(3), { timeout: 5000 });
+    });
+
+    it('rouvert par VS Code après rechargement : même construction que show(), sur la route enregistrée', async () => {
+        const route = `/pr/${WS}/${REPO}/${FAKE_PRS.main}?from=2&to=6`;
+        const restored = new FakeWebviewPanel('revspan', 'Revspan');
+        const revspan = create();
+        revspan.restore(restored as unknown as vscode.WebviewPanel, route);
+        expect(restored.title).toBe(`PR #${FAKE_PRS.main} · ${REPO}`);
+        expect(restored.webview.options).toMatchObject({ enableScripts: true });
+        expect(restored.webview.html).toContain(`<meta name="revspan-route" content="/pr/${WS}/${REPO}/${FAKE_PRS.main}?from=2&#38;to=6">`);
+        restored.receive({ type: 'request', id: 1, method: 'GET', path: '/api/health' });
+        await vi.waitFor(() => expect(restored.posted).toEqual([expect.objectContaining({ type: 'response', id: 1, status: 200 })]));
+        revspan.show('/settings');
+        expect(recorded.panels).toEqual([]);
+        expect(restored.posted.at(-1)).toEqual({ type: 'navigate', route: '/settings' });
+        const duplicate = new FakeWebviewPanel('revspan', 'Revspan');
+        revspan.restore(duplicate as unknown as vscode.WebviewPanel, '/');
+        expect(duplicate.disposed).toBe(true);
+        expect(restored.disposed).toBe(false);
     });
 
     it('écouteurs propres au panneau, libérés à sa fermeture ; un nouveau panneau ensuite', () => {

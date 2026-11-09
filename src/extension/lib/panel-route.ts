@@ -1,9 +1,16 @@
-// Route affichée par le panneau : titre de l'onglet, et écran déduit des lectures d'API de la page.
+// Route affichée par le panneau : titre de l'onglet, écran déduit des lectures d'API de la page,
+// route sur laquelle VS Code rouvre le panneau après « Recharger la fenêtre ».
+import { isPageRoute, type PanelState } from '../../shared/webview-protocol.ts';
+
+/** Type du panneau webview (createWebviewPanel, sérialiseur, événement d'activation onWebviewPanel:revspan). */
+export const PANEL_VIEW_TYPE = 'revspan';
+
+const HOME_ROUTE = '/';
 
 const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
 
 /** Lecture d'API propre à un écran (hors PR) → route de cet écran. */
-const SCREENS = new Map([['/home', '/'], ['/settings', '/settings']]);
+const SCREENS = new Map([['/home', HOME_ROUTE], ['/settings', '/settings']]);
 
 /** Titre de l'onglet pour une route de la page (même règle à l'ouverture et pendant la navigation). */
 export function panelTitle(route: string): string {
@@ -28,4 +35,10 @@ export function routeOfApiRead(method: string, apiPath: string): string | null {
         return pr[0];
     }
     return SCREENS.get(pagePath.split('?')[0] ?? '') ?? null;
+}
+
+/** Route enregistrée par la page dans l'état du panneau (PanelState) ; l'accueil si l'état est absent ou invalide. */
+export function restoredRoute(state: unknown): string {
+    const route = typeof state === 'object' && state !== null ? (state as Partial<Record<keyof PanelState, unknown>>).route : undefined;
+    return isPageRoute(route) ? route : HOME_ROUTE;
 }

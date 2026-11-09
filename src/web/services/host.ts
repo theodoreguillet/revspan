@@ -1,10 +1,11 @@
 // Page hébergée dans un panneau VS Code : échanges avec l'extension (src/shared/webview-protocol.ts).
 // Hors de VS Code, isVsCode est faux et rien ici n'est utilisé.
 import type { PrRef } from '../../shared/api.ts';
-import { INITIAL_ROUTE_META, type HostToWebview, type WebviewToHost } from '../../shared/webview-protocol.ts';
+import { INITIAL_ROUTE_META, isPageRoute, type HostToWebview, type PanelState, type WebviewToHost } from '../../shared/webview-protocol.ts';
 
 interface VsCodeApi {
     postMessage(message: WebviewToHost): void;
+    setState(state: PanelState): void;
 }
 
 type HostGlobal = typeof globalThis & { acquireVsCodeApi?: () => VsCodeApi };
@@ -80,6 +81,11 @@ export function hostRequest(method: string, path: string, body?: unknown): Promi
     });
 }
 
+/** Enregistre la route affichée : VS Code la rend à l'extension pour rouvrir le panneau au même endroit (« Recharger la fenêtre »). */
+export function rememberRoute(route: string): void {
+    vscode?.setState({ route });
+}
+
 /** Ouvre le fichier du dépôt cloné localement, à la ligne donnée (1-based) ou au début. */
 export function openLocalFile(ref: PrRef, path: string, line: number | null): void {
     postToHost({ type: 'openFile', ref: { ...ref }, path, line });
@@ -93,5 +99,5 @@ export function openNativeDiff(ref: PrRef, from: number, to: number, path: strin
 /** Route initiale donnée par l'extension (<meta name="revspan-route" content="/pr/ws/repo/42">), ou null. */
 export function readInitialRoute(doc: Document): string | null {
     const content = doc.querySelector(`meta[name="${INITIAL_ROUTE_META}"]`)?.getAttribute('content')?.trim();
-    return content && content.startsWith('/') && !content.startsWith('//') ? content : null;
+    return isPageRoute(content) ? content : null;
 }

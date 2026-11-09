@@ -9,12 +9,14 @@ const reply = (message: HostToWebview | Record<string, unknown>): void => {
 
 describe('dans un panneau VS Code', () => {
     let posted: WebviewToHost[];
+    let states: unknown[];
     let acquire: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         vi.resetModules();
         posted = [];
-        acquire = vi.fn(() => ({ postMessage: (message: WebviewToHost) => posted.push(message) }));
+        states = [];
+        acquire = vi.fn(() => ({ postMessage: (message: WebviewToHost) => posted.push(message), setState: (state: unknown) => states.push(state) }));
         vi.stubGlobal('acquireVsCodeApi', acquire);
     });
 
@@ -95,6 +97,13 @@ describe('dans un panneau VS Code', () => {
         expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('route affichée enregistrée dans l\'état du panneau (rouvert sur elle après « Recharger la fenêtre »)', async () => {
+        const { rememberRoute } = await import('../../src/web/services/host.ts');
+        rememberRoute('/pr/acme/demo-repo/42?from=2&to=6');
+        rememberRoute('/settings');
+        expect(states).toEqual([{ route: '/pr/acme/demo-repo/42?from=2&to=6' }, { route: '/settings' }]);
+    });
+
     it('ouvrir un fichier local ou le diff natif', async () => {
         const { openLocalFile, openNativeDiff } = await import('../../src/web/services/host.ts');
         openLocalFile(ref, 'src/Action.ts', 7);
@@ -137,6 +146,11 @@ describe('hors VS Code', () => {
         }));
         const { api } = await import('../../src/web/services/api.ts');
         await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Serveur Revspan') });
+    });
+
+    it('état du panneau : rien à enregistrer', async () => {
+        const { rememberRoute } = await import('../../src/web/services/host.ts');
+        expect(() => rememberRoute('/settings')).not.toThrow();
     });
 
     it('le relais par l\'extension refuse de partir', async () => {

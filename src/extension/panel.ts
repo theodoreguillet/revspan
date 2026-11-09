@@ -5,7 +5,7 @@ import type { HostToWebview, WebviewToHost } from '../shared/webview-protocol.ts
 import type { ExtensionApp } from './app-context.ts';
 import type { DiffDocuments } from './diff-documents.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
-import { panelTitle, routeOfApiRead } from './lib/panel-route.ts';
+import { PANEL_VIEW_TYPE, panelTitle, routeOfApiRead } from './lib/panel-route.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
 import { parseWebviewMessage } from './lib/webview-messages.ts';
 import { openLocalFile } from './local-files.ts';
@@ -32,16 +32,39 @@ export class RevspanPanel {
             void this.post({ type: 'navigate', route });
             return;
         }
-        const webDir = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'web');
-        const panel = vscode.window.createWebviewPanel('revspan', panelTitle(route), vscode.ViewColumn.Active, {
-            enableScripts: true,
+        const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, panelTitle(route), vscode.ViewColumn.Active, {
+            ...this.webviewOptions(),
             retainContextWhenHidden: true,
-            localResourceRoots: [webDir],
         });
+        this.attach(panel, route);
+    }
+
+    /** Panneau rouvert par VS Code (« Recharger la fenêtre ») : même construction que show(), sur la route enregistrée. */
+    restore(panel: vscode.WebviewPanel, route: string): void {
+        if (this.panel) {
+            // Un seul panneau : déjà rouvert par une commande, le doublon est fermé.
+            panel.dispose();
+            return;
+        }
+        panel.webview.options = this.webviewOptions();
+        this.attach(panel, route);
+    }
+
+    private get webDir(): vscode.Uri {
+        return vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'web');
+    }
+
+    private webviewOptions(): vscode.WebviewOptions {
+        return { enableScripts: true, localResourceRoots: [this.webDir] };
+    }
+
+    /** Page, titre, icône et écouteurs du panneau. */
+    private attach(panel: vscode.WebviewPanel, route: string): void {
+        panel.title = panelTitle(route);
         panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon.svg');
-        const indexHtml = fs.readFileSync(vscode.Uri.joinPath(webDir, 'index.html').fsPath, 'utf8');
+        const indexHtml = fs.readFileSync(vscode.Uri.joinPath(this.webDir, 'index.html').fsPath, 'utf8');
         panel.webview.html = buildWebviewHtml(indexHtml, {
-            assetsBaseUri: panel.webview.asWebviewUri(webDir).toString(),
+            assetsBaseUri: panel.webview.asWebviewUri(this.webDir).toString(),
             cspSource: panel.webview.cspSource,
             initialRoute: route,
         });
