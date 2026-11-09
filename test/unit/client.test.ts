@@ -89,17 +89,9 @@ describe('BitbucketClient : empreinte des fichiers binaires ou trop gros', () =>
         await expect(makeClient(fetchImpl).fileContent('acme', 'records-api', 'abc123', 'a.txt')).resolves.toEqual({ tooLarge: true, fingerprint: sha1(huge) });
     });
 
-    it('trop gros d\'après content-length : empreinte de l\'ETag (fort) et de la taille, sinon aucune', async () => {
-        const big = String(6 * 1024 * 1024);
-        const fetchImpl = mockFetch(
-            new Response('x', { headers: { 'content-length': big, etag: '"blob-1"' } }),
-            new Response('x', { headers: { 'content-length': big, etag: 'W/"faible"' } }),
-            new Response('x', { headers: { 'content-length': big } }),
-        );
-        const client = makeClient(fetchImpl);
-        await expect(client.fileContent('acme', 'records-api', 'abc123', 'a.bin')).resolves.toEqual({ tooLarge: true, fingerprint: sha1(`etag:"blob-1":${big}`) });
-        await expect(client.fileContent('acme', 'records-api', 'abc124', 'a.bin')).resolves.toEqual({ tooLarge: true });
-        await expect(client.fileContent('acme', 'records-api', 'abc125', 'a.bin')).resolves.toEqual({ tooLarge: true });
+    it('trop gros d\'après content-length (non téléchargé) : aucune empreinte, même avec un ETag', async () => {
+        const fetchImpl = mockFetch(new Response('x', { headers: { 'content-length': String(6 * 1024 * 1024), etag: '"blob-1"' } }));
+        await expect(makeClient(fetchImpl).fileContent('acme', 'records-api', 'abc123', 'a.bin')).resolves.toEqual({ tooLarge: true });
     });
 });
 

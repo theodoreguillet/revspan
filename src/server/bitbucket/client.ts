@@ -351,11 +351,9 @@ export class BitbucketClient {
             if (!response) {
                 return { missing: true };
             }
-            const length = response.headers.get('content-length');
-            if (Number(length) > MAX_FILE_BYTES) {
-                // Contenu non téléchargé : empreinte d'un ETag fort (mêmes octets) et de la taille, sinon aucune.
-                const etag = response.headers.get('etag');
-                return etag && !etag.startsWith('W/') ? { tooLarge: true, fingerprint: sha1(`etag:${etag}:${length}`) } : { tooLarge: true };
+            // Contenu non téléchargé : aucune empreinte (l'ETag de /src n'est pas garanti propre au contenu), jamais jugé égal.
+            if (Number(response.headers.get('content-length')) > MAX_FILE_BYTES) {
+                return { tooLarge: true };
             }
             // Binaire ou trop gros : on garde l'empreinte des octets pour reconnaître le même fichier d'une version à l'autre.
             const buffer = Buffer.from(await response.arrayBuffer());
