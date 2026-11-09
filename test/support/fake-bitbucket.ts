@@ -280,6 +280,29 @@ function simplePr(b: FakeBuilder, id: number, key: string, title: string, author
     b.pr(id, { title, author, participants, plan });
 }
 
+/** Nouveau push sur une PR : commit `commit` (contenu de `from` modifié par `changes`, même message) sur la base `base`. */
+export function pushVersion(data: FakeData, id: number, { commit, from, base, changes, date }: {
+    commit: string;
+    from: string;
+    base: string;
+    changes: Record<string, string | null>;
+    date: string;
+}): void {
+    const fake = data.prs.get(id);
+    if (!fake) {
+        throw new Error(`PR ${id} inconnue`);
+    }
+    const hash = hex(commit);
+    data.repo.derive(hash, hex(from), changes, data.repo.get(hex(from)).message);
+    data.mergeBases.set(`${hash}..${hex(base)}`, hex(base));
+    const source = { commit: { hash: hash.slice(0, 12) } };
+    const destination = { commit: { hash: hex(base).slice(0, 12) } };
+    fake.pr.source = { ...fake.pr.source, ...source };
+    fake.pr.destination = { ...fake.pr.destination, ...destination };
+    fake.pr.updated_on = date;
+    fake.activity.push({ update: { date, author: fake.pr.author, source, destination } });
+}
+
 export function buildFakeData(): FakeData {
     const b = new FakeBuilder();
     mainPr(b);

@@ -3,10 +3,9 @@ import type {
     Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, ViewedRequest,
 } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
-import type { BbActivity, BbPullRequest } from '../bitbucket/types.ts';
-import { compareVersions, fileSides, placeThreads, summarizeVersion } from '../core/compare.ts';
+import { compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource } from '../core/compare.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf,
+    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf, type PushUpdate,
 } from '../core/model.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -18,6 +17,8 @@ const SUMMARY_VERSION = 3;
 
 interface LoadedPr {
     client: BitbucketClient;
+    /** Pushs lus dans l'activité : updates[i] est la version i + 1. */
+    updates: PushUpdate[];
     versions: Version[];
     detail: PrDetail;
 }
@@ -40,12 +41,13 @@ export class PrService {
     }
 
     async summary(ref: PrRef): Promise<Summary> {
-        const { client, versions } = await this.load(ref);
-        const src = client.source(ref.workspace, ref.repo);
-        // Version indisponible : résumé immédiat, jamais mis en cache.
-        const results = await Promise.all(versions.map((v) => (v.available
-            ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
-            : summarizeVersion(src, versions, v.index))));
+        const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => ({
+            versions,
+            // Version indisponible : résumé immédiat, jamais mis en cache.
+            results: await Promise.all(versions.map((v) => (v.available
+                ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
+                : summarizeVersion(src, versions, v.index)))),
+        }));
         // Mémorise le type de chaque version pour l'accueil (pas de recalcul là-bas).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
@@ -59,18 +61,19 @@ export class PrService {
     }
 
     async compare(ref: PrRef, from: number, to: number, context: number): Promise<Comparison> {
-        const { client, versions, detail } = await this.load(ref);
-        assertComparable(versions, from, to);
-        const src = client.source(ref.workspace, ref.repo);
-        const result = await compareVersions(src, versions, from, to, { context });
-        return placeThreads(src, versions, result, detail.threads);
+        return this.withVersions(ref, async ({ versions, detail }, src) => {
+            assertComparable(versions, from, to);
+            const result = await compareVersions(src, versions, from, to, { context });
+            return placeThreads(src, versions, result, detail.threads);
+        });
     }
 
     /** Contenu des deux côtés d'un fichier, tel que comparé (pour l'éditeur de diff de VS Code). */
     async fileSides(ref: PrRef, from: number, to: number, file: { path: string; oldPath: string | null }): Promise<{ oldText: string; newText: string }> {
-        const { client, versions } = await this.load(ref);
-        assertComparable(versions, from, to);
-        return fileSides(client.source(ref.workspace, ref.repo), versions, from, to, file);
+        return this.withVersions(ref, ({ versions }, src) => {
+            assertComparable(versions, from, to);
+            return fileSides(src, versions, from, to, file);
+        });
     }
 
     // ---------- Actions ----------
@@ -159,7 +162,8 @@ export class PrService {
             client.comments(ref.workspace, ref.repo, ref.id),
             this.session.me(),
         ]);
-        const versions = await loadVersions(client, ref, pr, activity);
+        const updates = extractUpdates(activity, pr);
+        const versions = await loadVersions(client, ref, updates);
         if (versions.length === 0) {
             throw new AppError(404, 'BB_NOT_FOUND', 'Aucune version trouvée pour cette PR.');
         }
@@ -168,9 +172,46 @@ export class PrService {
         const threads: Thread[] = buildThreads(comments, versions, { meUuid, sinceDate: review.lastReviewedAt });
         return {
             client,
+            updates,
             versions,
             detail: { pr: prInfo(ref, pr), me, versions, participants: buildParticipants(pr, activity, versions), review, threads },
         };
+    }
+
+    /**
+     * Calcul sur les versions de la PR. Un commit mis en cache puis effacé par Bitbucket ne se révèle qu'ici (404 sur ses
+     * contenus) : il est oublié avec ce qui en dépend, la PR rechargée (la version devient indisponible) et le calcul repris.
+     */
+    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>): Promise<T> {
+        let loaded = await this.load(ref);
+        for (;;) {
+            try {
+                return await run(loaded, purgeAwareSource(loaded.client, ref, loaded.versions));
+            } catch (error) {
+                if (!(error instanceof VersionPurgedError)) {
+                    throw error;
+                }
+                const readable = loaded.versions.filter(isReadable).length;
+                this.forgetVersion(ref, loaded, error.version);
+                loaded = await this.load(ref);
+                // Garde-fou : si Bitbucket relit quand même le commit, on s'arrête là (410) au lieu de boucler.
+                if (loaded.versions.filter(isReadable).length >= readable) {
+                    throw error;
+                }
+            }
+        }
+    }
+
+    /** Oublie le commit d'une version effacée, sa merge-base et les résumés calculés avec elle (le sien, celui de la suivante). */
+    private forgetVersion(ref: PrRef, { client, updates, versions }: LoadedPr, version: Version): void {
+        // Clés telles qu'au chargement (loadVersions) : commit demandé par le hash de l'activité, merge-base par le hash complet.
+        client.forgetCommit(ref.workspace, ref.repo, updates[version.index - 1]?.hash ?? version.hash);
+        client.forgetMergeBase(ref.workspace, ref.repo, version.hash, version.destHash);
+        this.cache.delete(summaryKey(ref, version, versions[previousAvailable(versions, version.index) - 1]));
+        const next = versions.find((v) => v.index > version.index && isReadable(v));
+        if (next) {
+            this.cache.delete(summaryKey(ref, next, version));
+        }
     }
 
     /** Écriture sur Bitbucket, puis invalidation des données vivantes de la PR et de l'accueil. */
@@ -185,8 +226,7 @@ export class PrService {
 }
 
 /** Versions de la PR : commit de chaque push + base réelle (merge-base avec master au moment du push). */
-async function loadVersions(client: BitbucketClient, ref: PrRef, pr: BbPullRequest, activity: BbActivity[]): Promise<Version[]> {
-    const updates = extractUpdates(activity, pr);
+async function loadVersions(client: BitbucketClient, ref: PrRef, updates: readonly PushUpdate[]): Promise<Version[]> {
     // null : commit effacé par Bitbucket (version écrasée par un force-push), la version est marquée indisponible.
     const commits = await Promise.all(updates.map((u) => client.commit(ref.workspace, ref.repo, u.hash)));
     const bases = await Promise.all(updates.map(async (update, i) => {
@@ -199,6 +239,9 @@ async function loadVersions(client: BitbucketClient, ref: PrRef, pr: BbPullReque
     return buildVersions(updates, commits, bases);
 }
 
+const unavailableMessage = (index: number): string =>
+    `La version v${index} n'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).`;
+
 /** Bornes valides et versions lisibles (une version dont Bitbucket a effacé le commit ne peut pas être comparée). */
 function assertComparable(versions: readonly Version[], from: number, to: number): void {
     if (to > versions.length || from >= to) {
@@ -206,9 +249,54 @@ function assertComparable(versions: readonly Version[], from: number, to: number
     }
     const unreadable = [from, to].find((index) => index > 0 && !isReadable(versions[index - 1]));
     if (unreadable !== undefined) {
-        throw new AppError(410, 'VERSION_UNAVAILABLE',
-            `La version v${unreadable} n'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).`);
+        throw new AppError(410, 'VERSION_UNAVAILABLE', unavailableMessage(unreadable));
     }
+}
+
+/** Commit d'une version lisible effacé par Bitbucket depuis sa mise en cache. */
+class VersionPurgedError extends AppError {
+    readonly version: Version;
+
+    constructor(version: Version) {
+        super(410, 'VERSION_UNAVAILABLE', unavailableMessage(version.index));
+        this.version = version;
+    }
+}
+
+/**
+ * Source de comparaison qui reconnaît une version effacée après sa mise en cache : sur un 404 (diffstat) ou un contenu
+ * absent (src) portant sur le hash d'une version lisible, Bitbucket est interrogé sur le commit lui-même.
+ */
+function purgeAwareSource(client: BitbucketClient, ref: PrRef, versions: readonly Version[]): CompareSource {
+    const src = client.source(ref.workspace, ref.repo);
+    const readable = new Map(versions.filter(isReadable).map((v) => [v.hash, v]));
+    const assertExists = async (hashes: readonly string[]): Promise<void> => {
+        for (const hash of hashes) {
+            const version = readable.get(hash);
+            if (version && !await client.commitExists(ref.workspace, ref.repo, hash)) {
+                throw new VersionPurgedError(version);
+            }
+        }
+    };
+    return {
+        diffstat: async (newHash, oldHash) => {
+            try {
+                return await src.diffstat(newHash, oldHash);
+            } catch (error) {
+                if (error instanceof AppError && error.code === 'BB_NOT_FOUND') {
+                    await assertExists([newHash, oldHash]);
+                }
+                throw error;
+            }
+        },
+        content: async (hash, path) => {
+            const content = await src.content(hash, path);
+            if ('missing' in content) {
+                await assertExists([hash]);
+            }
+            return content;
+        },
+    };
 }
 
 /** Clé de cache d'un résumé : dépend uniquement des commits (immuables) de la version et de sa version de référence. */

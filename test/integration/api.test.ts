@@ -7,7 +7,9 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiErrorBody, Comparison, Home, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
-import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket, type RecordedCall } from '../support/fake-bitbucket.ts';
+import {
+    FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall,
+} from '../support/fake-bitbucket.ts';
 
 interface Env {
     fake: FakeBitbucket;
@@ -17,16 +19,25 @@ interface Env {
 
 let env: Env | null = null;
 
+const startRevspan = (dir: string, fake: FakeBitbucket): Promise<RunningApp> =>
+    startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
+
 /** Environnement neuf ; avec jeton configuré par défaut. */
 async function setup({ withToken = true } = {}): Promise<Env> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-it-'));
     const fake = await startFakeBitbucket();
-    const app = await startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
+    const app = await startRevspan(dir, fake);
     if (withToken) {
         await app.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN, repos: [`${WS}/${REPO}`] });
     }
     env = { fake, app, dir };
     return env;
+}
+
+/** Relance Revspan sur la même configuration : cache mémoire vide, cache disque conservé. */
+async function restart(current: Env): Promise<void> {
+    await current.app.close();
+    current.app = await startRevspan(current.dir, current.fake);
 }
 
 afterEach(async () => {
@@ -199,6 +210,42 @@ describe('lecture d\'une PR', () => {
         expect(full.stats).toEqual({ files: 1, added: 2, removed: 0 });
         const thread = pr.threads.find((t) => t.path === 'src/Purged.ts');
         expect(full.files[0]?.threads.find((p) => p.threadId === thread?.id)).toMatchObject({ line: null, moved: false });
+    });
+
+    it('version effacée après mise en cache, puis nouveau push : résumé 200 sans elle, comparaison 410', async () => {
+        const current = await setup();
+        const route = prPath(FAKE_PRS.mine);
+        expect((await api<Summary>('GET', `${route}/summary`)).body.versions.map((s) => s.kind)).toEqual(['creation', 'code']);
+        const v2 = (await detail(FAKE_PRS.mine)).versions[1]?.hash ?? '';
+        // Plus tard : Bitbucket efface v2 (écrasée par un force-push), l'auteur pousse v3 ; le commit de v2 reste en cache disque.
+        current.fake.data.repo.commits.delete(v2);
+        pushVersion(current.fake.data, FAKE_PRS.mine, {
+            commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
+        });
+        await restart(current);
+
+        const summary = await api<Summary>('GET', `${route}/summary`);
+        expect(summary.status).toBe(200);
+        expect(summary.body.versions.map((s) => [s.kind, s.since ?? null, s.added])).toEqual([['creation', null, 1], ['unavailable', null, 0], ['code', 1, 2]]);
+        const refused = await api<ApiErrorBody>('GET', `${route}/compare?from=2&to=3`);
+        expect(refused.status).toBe(410);
+        expect(refused.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE' });
+        expect((await detail(FAKE_PRS.mine)).versions.map((v) => v.available)).toEqual([true, false, true]);
+    });
+
+    it('version effacée après mise en cache : un contenu en 404 la rend indisponible (410), sans fichier perdu', async () => {
+        const { fake } = await setup();
+        await api('GET', `${prPath()}/summary`);
+        // Diffstat de v2 en cache, mais pas tests/ActionSpec.ts à v2 : son contenu est demandé à Bitbucket.
+        fake.data.repo.commits.delete((await detail()).versions[1]?.hash ?? '');
+
+        const refused = await api<ApiErrorBody>('GET', `${prPath()}/compare?from=0&to=2`);
+        expect(refused.status).toBe(410);
+        expect(refused.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE' });
+        expect((await detail()).versions.map((v) => v.available)).toEqual([true, false, true, true, true, true]);
+        const { body: summary } = await api<Summary>('GET', `${prPath()}/summary`);
+        expect(summary.versions.map((s) => s.kind)).toEqual(['creation', 'unavailable', 'code', 'deps', 'code', 'message-only']);
+        expect(summary.versions[2]?.since).toBe(1);
     });
 });
 

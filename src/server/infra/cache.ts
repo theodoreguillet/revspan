@@ -69,6 +69,14 @@ export class Cache {
         }
     }
 
+    /** Oublie une entrée (mémoire et disque) : donnée « immuable » qui a disparu de Bitbucket. */
+    delete(key: string): void {
+        this.memory.delete(key);
+        if (this.dir) {
+            fs.rmSync(this.fileFor(this.dir, key), { force: true });
+        }
+    }
+
     /**
      * Calcule une seule fois une valeur immuable (requêtes concurrentes dédupliquées).
      * keep(value) = false : résultat non mémorisé (ex. 404 peut-être transitoire).

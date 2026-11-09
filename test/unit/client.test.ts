@@ -114,3 +114,37 @@ describe('BitbucketClient : redirections', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(4);
     });
 });
+
+describe('BitbucketClient : commit effacé après mise en cache', () => {
+    const commit = { hash: 'abc123', message: 'feat: x', parents: [{ hash: 'base1' }] };
+    const gone = (): Response => jsonResponse(404, { error: { message: 'Commit not found' } });
+
+    it('commitExists interroge Bitbucket même si le commit est en cache, puis forgetCommit le fait relire', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, commit), gone(), gone());
+        const client = makeClient(fetchImpl);
+        expect(await client.commit('acme', 'records-api', 'abc123')).toMatchObject({ hash: 'abc123' });
+        expect(await client.commit('acme', 'records-api', 'abc123')).toMatchObject({ hash: 'abc123' });
+        expect(await client.commitExists('acme', 'records-api', 'abc123')).toBe(false);
+        client.forgetCommit('acme', 'records-api', 'abc123');
+        expect(await client.commit('acme', 'records-api', 'abc123')).toBeNull();
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+    });
+
+    it('commitExists : vrai si le commit existe, résultat gardé quelques secondes', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, commit));
+        const client = makeClient(fetchImpl);
+        expect(await client.commitExists('acme', 'records-api', 'abc123')).toBe(true);
+        expect(await client.commitExists('acme', 'records-api', 'abc123')).toBe(true);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgetMergeBase fait relire la merge-base', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { hash: 'base1' }), jsonResponse(200, { hash: 'base1' }));
+        const client = makeClient(fetchImpl);
+        await client.mergeBase('acme', 'records-api', 'abc123', 'dest1');
+        await client.mergeBase('acme', 'records-api', 'abc123', 'dest1');
+        client.forgetMergeBase('acme', 'records-api', 'abc123', 'dest1');
+        await client.mergeBase('acme', 'records-api', 'abc123', 'dest1');
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+});

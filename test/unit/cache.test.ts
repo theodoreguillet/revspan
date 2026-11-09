@@ -23,6 +23,18 @@ describe('Cache disque', () => {
         expect(new Cache(dir).get('k')).toEqual({ a: 1 });
     });
 
+    it('delete oublie une entrée en mémoire et sur disque', () => {
+        const dir = tempDir();
+        const cache = new Cache(dir);
+        cache.set('k', { a: 1 });
+        cache.set('autre', 2);
+        cache.delete('k');
+        expect(cache.get('k')).toBeUndefined();
+        expect(new Cache(dir).get('k')).toBeUndefined();
+        expect(new Cache(dir).get('autre')).toBe(2);
+        expect(() => cache.delete('absente')).not.toThrow();
+    });
+
     it('ignore un fichier de cache corrompu', () => {
         const dir = tempDir();
         new Cache(dir).set('k', 1);

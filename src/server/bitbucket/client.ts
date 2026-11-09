@@ -75,6 +75,9 @@ class Semaphore {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const commitKey = (ws: string, repo: string, hash: string): string => `commit:${ws}/${repo}:${hash}`;
+const mergeBaseKey = (ws: string, repo: string, a: string, b: string): string => `merge-base:${ws}/${repo}:${a}..${b}`;
+
 /** Encode un chemin de fichier ; refuse les segments vides, `.` et `..` (new URL() les normaliserait hors du dépôt). */
 function encodePath(filePath: string): string {
     const segments = filePath.split('/');
@@ -285,14 +288,34 @@ export class BitbucketClient {
      * (anciennes versions d'une PR). L'absence n'est pas mise en cache.
      */
     commit(ws: string, repo: string, hash: string): Promise<CommitSummary | null> {
-        return this.cache.getOrCompute(`commit:${ws}/${repo}:${hash}`, async () => {
-            const raw = await this.json<BbCommit>('GET', `${this.repoPath(ws, repo)}/commit/${hash}`, { allow404: true });
-            return raw ? { hash: raw.hash, message: raw.message ?? '', date: raw.date ?? null, parents: (raw.parents ?? []).map((p) => p.hash) } : null;
-        }, (commit) => commit !== null);
+        return this.cache.getOrCompute(commitKey(ws, repo, hash), () => this.fetchCommit(ws, repo, hash), (commit) => commit !== null);
+    }
+
+    /**
+     * Le commit existe-t-il encore ? Demandé à Bitbucket même s'il est en cache (réponse gardée LIVE_TTL_MS) : un commit
+     * mis en cache peut avoir été effacé depuis.
+     */
+    commitExists(ws: string, repo: string, hash: string): Promise<boolean> {
+        return this.cache.getLive(`live:commit:${ws}/${repo}:${hash}`, LIVE_TTL_MS, async () => (await this.fetchCommit(ws, repo, hash)) !== null);
+    }
+
+    private async fetchCommit(ws: string, repo: string, hash: string): Promise<CommitSummary | null> {
+        const raw = await this.json<BbCommit>('GET', `${this.repoPath(ws, repo)}/commit/${hash}`, { allow404: true });
+        return raw ? { hash: raw.hash, message: raw.message ?? '', date: raw.date ?? null, parents: (raw.parents ?? []).map((p) => p.hash) } : null;
+    }
+
+    /** Oublie un commit effacé par Bitbucket depuis sa mise en cache (hash tel que passé à commit()). */
+    forgetCommit(ws: string, repo: string, hash: string): void {
+        this.cache.delete(commitKey(ws, repo, hash));
+    }
+
+    /** Oublie une merge-base mise en cache (celle d'une version effacée). */
+    forgetMergeBase(ws: string, repo: string, a: string, b: string): void {
+        this.cache.delete(mergeBaseKey(ws, repo, a, b));
     }
 
     mergeBase(ws: string, repo: string, a: string, b: string): Promise<string | null> {
-        return this.cache.getOrCompute(`merge-base:${ws}/${repo}:${a}..${b}`, async () => {
+        return this.cache.getOrCompute(mergeBaseKey(ws, repo, a, b), async () => {
             const raw = await this.json<BbCommit>('GET', `${this.repoPath(ws, repo)}/merge-base/${a}..${b}`, { allow404: true });
             return raw?.hash ?? null;
         }, (hash) => hash !== null);
