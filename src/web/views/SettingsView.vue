@@ -70,10 +70,11 @@ async function save(): Promise<boolean> {
     }
 }
 
-// la confirmation est demandée par le bouton (ConfirmButton)
+// la confirmation est demandée par le bouton (ConfirmButton) ; e-mail et dépôts en cours de saisie sont gardés
 async function deleteToken(): Promise<void> {
     try {
-        fill(await api.saveSettings({ token: '' }));
+        loaded.value = await api.saveSettings({ token: '' });
+        token.value = '';
         setStatus('Jeton supprimé.', 'ok');
     } catch (error) {
         showError(error);
