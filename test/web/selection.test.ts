@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-    clickSelection, defaultSelection, floorAvailable, isValidSelection, parseRangeQuery, presets, readout, singleVersion, unavailableVersions,
+    clickSelection, defaultSelection, floorAvailable, isValidSelection, parseRangeQuery, presets, readout, repairSelection, singleVersion,
+    unavailableVersions,
 } from '../../src/web/lib/selection.ts';
 import { makeVersions, prLong } from './fixtures.ts';
 
@@ -29,6 +30,16 @@ describe('versions indisponibles (commit effacé par Bitbucket)', () => {
         expect(isValidSelection(6, 2, 6, gone)).toBe(false);
         expect(isValidSelection(6, 1, 3, gone)).toBe(false);
         expect(isValidSelection(6, 1, 4, gone)).toBe(true);
+    });
+
+    it('version seule (onglet Versions, [ ]) : PR #48, v1 effacée → v2 seule part de la base', () => {
+        expect(singleVersion(3, 2, new Set([1]))).toEqual({ from: 0, to: 2 });
+    });
+
+    it('version découverte effacée après coup : plage gardée si possible, « de » reculé, sinon plage par défaut', () => {
+        expect(repairSelection(6, { from: 4, to: 6 }, 3, gone)).toEqual({ from: 4, to: 6 });
+        expect(repairSelection(6, { from: 3, to: 6 }, 3, gone)).toEqual({ from: 1, to: 6 });
+        expect(repairSelection(6, { from: 1, to: 3 }, 3, gone)).toEqual({ from: 1, to: 6 });
     });
 });
 

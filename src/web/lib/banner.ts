@@ -39,10 +39,16 @@ function commentsLine(data: PrDetail): Seg[] | null {
     return parts;
 }
 
-/** Une ligne par version : « v10 : CreateRecord.ts et coverage.config.json, +2 −2 ». */
-export function versionLine(v: Version, sum: VersionSummary): Seg[] {
+/**
+ * Une ligne par version : « v10 : CreateRecord.ts et coverage.config.json, +2 −2 ». Version absente du résumé (poussée
+ * pendant la lecture, résumé en cours de rechargement) : « v11 : … », comme dans la frise.
+ */
+export function versionLine(v: Version, sum: VersionSummary | undefined): Seg[] {
     const name = b(`v${v.index}`);
-    const rebase = v.isRebase ? ` · rebase sur master${sum.masterFiles ? ` (${masterMasked(sum.masterFiles)})` : ''}` : '';
+    const rebase = v.isRebase ? ` · rebase sur master${sum?.masterFiles ? ` (${masterMasked(sum.masterFiles)})` : ''}` : '';
+    if (!sum) {
+        return [name, ' : …', rebase];
+    }
     switch (sum.kind) {
         case 'code':
         case 'creation':
@@ -122,20 +128,23 @@ export function bannerModel(data: PrDetail, sums: SummaryMap, summaryLoaded: boo
         };
     }
 
+    // Version absente du résumé (poussée pendant la lecture) : listée seule, sans détail, et rien n'est affirmé sur son code.
     const isCodeV = (v: Version): boolean => CODE_KINDS.has(sumOf(v)?.kind ?? 'none');
+    const isUnknown = (v: Version): boolean => !sumOf(v);
     const code = after.filter(isCodeV);
-    const other = after.filter((v) => !isCodeV(v));
+    const other = after.filter((v) => !isCodeV(v) && !isUnknown(v));
+    const unknown = after.some(isUnknown);
     let head = `${since} : ${plural(after.length, 'version')}`;
-    if (after.length === 1) {
+    if (after.length === 1 && !unknown) {
         head += code.length ? ', qui touche du code' : ', sans code';
-    } else if (code.length === 0) {
-        head += ', aucune ne touche du code';
-    } else {
+    } else if (code.length) {
         head += code.length === 1 ? ', dont 1 touche du code' : `, dont ${code.length} touchent du code`;
+    } else if (!unknown) {
+        head += ', aucune ne touche du code';
     }
     const lines: Seg[][] = [];
-    for (const v of [...code].reverse()) {
-        lines.push(versionLine(v, sumOf(v) as VersionSummary));
+    for (const v of after.filter((x) => isCodeV(x) || isUnknown(x)).reverse()) {
+        lines.push(versionLine(v, sumOf(v)));
     }
     if (other.length > 4) {
         const reb = other.filter((v) => sumOf(v)?.kind === 'rebase-only');
@@ -159,7 +168,7 @@ export function bannerModel(data: PrDetail, sums: SummaryMap, summaryLoaded: boo
             if (k) {
                 segs.push(' · ');
             }
-            segs.push(...versionLine(v, sumOf(v) as VersionSummary));
+            segs.push(...versionLine(v, sumOf(v)));
         });
         lines.push(segs);
     }

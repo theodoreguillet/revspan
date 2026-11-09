@@ -4,7 +4,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { PrDetail, PrRef } from '../../shared/api.ts';
 import {
-    clickSelection, defaultSelection, isValidSelection, parseRangeQuery, singleVersion, unavailableVersions, type Range,
+    clickSelection, defaultSelection, isValidSelection, parseRangeQuery, repairSelection, singleVersion, unavailableVersions, type Range,
 } from '../lib/selection.ts';
 
 export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
@@ -42,6 +42,12 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         select(next.from, next.to);
     }
 
+    /** Ce que la version i a changé, comme un clic dans la frise : depuis la dernière version lisible avant elle (ou la base). */
+    function selectVersion(i: number): void {
+        const r = singleVersion(n.value, i, unavailable.value);
+        select(r.from, r.to);
+    }
+
     /** [ et ] : version seule précédente / suivante (les versions indisponibles sont sautées). */
     function stepVersion(dir: 1 | -1): boolean {
         let target = to.value + dir;
@@ -51,8 +57,7 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         if (target < 1 || target > n.value) {
             return false;
         }
-        const r = singleVersion(n.value, target, unavailable.value);
-        select(r.from, r.to);
+        selectVersion(target);
         return true;
     }
 
@@ -72,5 +77,15 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         }
     });
 
-    return { n, unavailable, from, to, select, clickVersion, stepVersion };
+    // détail rechargé : une version découverte effacée depuis ne reste pas une borne (sans nouvelle entrée d'historique)
+    watch(unavailable, () => {
+        const r = repairSelection(n.value, { from: from.value, to: to.value }, detail.value.review.lastReviewed, unavailable.value);
+        if (r.from !== from.value || r.to !== to.value) {
+            from.value = r.from;
+            to.value = r.to;
+            void router.replace({ query: rangeQuery(r) });
+        }
+    });
+
+    return { n, unavailable, from, to, select, selectVersion, clickVersion, stepVersion };
 }

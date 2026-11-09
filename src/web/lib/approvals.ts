@@ -34,7 +34,8 @@ export function staleness(approvedVersion: number | null, sums: SummaryMap, n: n
 /**
  * Mon approbation vaut pour la dernière version : toujours active sur Bitbucket (qui ne la retire pas forcément à chaque
  * push) et rien de l'auteur depuis (seulement des rebases ou le message). Tant que le résumé n'est pas chargé,
- * l'état de Bitbucket fait foi.
+ * l'état de Bitbucket fait foi ; une fois chargé, une version arrivée depuis et absente du résumé (poussée pendant la
+ * lecture) n'est pas neutre : inconnu = pas valable, comme approvalHoldsSince côté serveur.
  */
 export function approvalHolds(part: Participant | null | undefined, sums: SummaryMap, n: number, summaryLoaded: boolean): boolean {
     if (!part?.approved) {
@@ -42,6 +43,11 @@ export function approvalHolds(part: Participant | null | undefined, sums: Summar
     }
     if (part.approvedVersion == null || part.approvedVersion >= n || !summaryLoaded) {
         return true;
+    }
+    for (let i = part.approvedVersion + 1; i <= n; i++) {
+        if (!sums.has(i)) {
+            return false;
+        }
     }
     return staleness(part.approvedVersion, sums, n) === null;
 }

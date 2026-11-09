@@ -2,7 +2,7 @@
 // et écritures suivies d'un rechargement.
 import { computed, ref, shallowRef } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
-import { summaryMap } from '../lib/kinds.ts';
+import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import type { Range } from '../lib/selection.ts';
 import { api } from '../services/api.ts';
 import { showError } from './useErrors.ts';
@@ -20,6 +20,9 @@ export interface ActOptions {
     key?: string;
 }
 
+/** Retour d'une écriture lancée (⌘/Ctrl+Entrée…) pendant qu'une autre se termine. */
+export const BUSY_MESSAGE = 'Une autre action est en cours, réessaie dans un instant.';
+
 export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const detail = shallowRef<PrDetail>(initial);
     const summary = shallowRef<Summary | null>(null);
@@ -29,12 +32,44 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const compareError = shallowRef<unknown>(null);
     const cache = new Map<string, Comparison>();
     let current: CompareParams | null = null;
+    /** Dernière demande de résumé : seule sa réponse est gardée. */
+    let summaryRequest = 0;
+    /** Incrémenté par chaque rechargement forcé du diff : une réponse d'avant n'écrit ni le cache ni le diff. */
+    let generation = 0;
 
     async function loadSummary(): Promise<void> {
+        const request = ++summaryRequest;
+        let result: Summary;
         try {
-            summary.value = await api.summary(prRef);
+            result = await api.summary(prRef);
+        } catch (error) {
+            if (request === summaryRequest) {
+                showError(error);
+            }
+            return;
+        }
+        if (request !== summaryRequest) {
+            return;
+        }
+        summary.value = result;
+        // Un commit effacé par Bitbucket après sa mise en cache ne se révèle qu'au calcul du résumé : le détail, chargé
+        // avant, croit encore la version lisible (et la plage peut partir d'elle). Il est rechargé une fois.
+        if (purgedSinceDetail(detail.value.versions, result)) {
+            await reloadDetail();
+        }
+    }
+
+    /** Recharge le détail, et le résumé si la liste des versions a changé (version poussée pendant la lecture). */
+    async function reloadDetail(): Promise<void> {
+        const before = detail.value.versions;
+        try {
+            detail.value = await api.pr(prRef);
         } catch (error) {
             showError(error);
+            return;
+        }
+        if (versionsChanged(before, detail.value.versions)) {
+            void loadSummary();
         }
     }
 
@@ -50,15 +85,22 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             compareLoading.value = false;
             return;
         }
+        const requested = generation;
         compareLoading.value = true;
         try {
             const result = await api.compare(prRef, params.from, params.to, params.context);
+            if (requested !== generation) {
+                return;
+            }
             cache.set(key, result);
             if (current && keyOf(current) === key) {
                 compare.value = result;
                 compareError.value = null;
             }
         } catch (error) {
+            if (requested !== generation) {
+                return;
+            }
             if (current && keyOf(current) === key) {
                 compare.value = null;
                 compareError.value = error;
@@ -71,12 +113,9 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     }
 
     async function reload({ reloadCompare = false } = {}): Promise<void> {
-        try {
-            detail.value = await api.pr(prRef);
-        } catch (error) {
-            showError(error);
-        }
+        await reloadDetail();
         if (reloadCompare && current) {
+            generation++;
             cache.clear();
             await loadCompare(current, { force: true });
         }
@@ -87,9 +126,13 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const acting = computed(() => pendingAction.value !== null);
     const busy = (key: string): boolean => pendingAction.value === key;
 
-    /** Exécute une écriture puis recharge la PR. Renvoie true si l'écriture a réussi (false si une autre est en cours). */
+    /**
+     * Exécute une écriture puis recharge la PR. Renvoie true si l'écriture a réussi ; false si elle a échoué, ou si une autre
+     * est en cours (message affiché, rien n'est envoyé ni oublié : le brouillon reste).
+     */
     async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false, key = 'action' }: ActOptions = {}): Promise<boolean> {
         if (pendingAction.value !== null) {
+            showError(new Error(BUSY_MESSAGE));
             return false;
         }
         pendingAction.value = key;

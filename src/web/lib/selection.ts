@@ -64,6 +64,18 @@ export function isValidSelection(n: number, from: number | null, to: number | nu
         && !unavailable.has(from) && !unavailable.has(to);
 }
 
+/**
+ * Plage après un rechargement du détail (version découverte effacée par Bitbucket) : gardée si elle reste valide ;
+ * sinon « de » recule jusqu'à la dernière version lisible ; si « à » est touchée, plage par défaut.
+ */
+export function repairSelection(n: number, range: Range, lastReviewed: number | null, unavailable: Unavailable = NONE): Range {
+    if (isValidSelection(n, range.from, range.to, unavailable)) {
+        return range;
+    }
+    const from = floorAvailable(range.from, unavailable);
+    return isValidSelection(n, from, range.to, unavailable) ? { from, to: range.to } : defaultSelection(n, lastReviewed, unavailable);
+}
+
 /** Sélection d'une seule version i : (dernière lisible avant i → i), bornée à 1..n. */
 export function singleVersion(n: number, i: number, unavailable: Unavailable = NONE): Range {
     const v = Math.min(Math.max(i, 1), n);

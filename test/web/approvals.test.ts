@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Participant } from '../../src/shared/api.ts';
 import { approvalHolds, approvalItems, myActions, staleness } from '../../src/web/lib/approvals.ts';
-import { makeSums, prLong } from './fixtures.ts';
+import { makeSums, makeVersions, prLong } from './fixtures.ts';
 
 describe('staleness', () => {
     const { sums } = prLong();
@@ -50,6 +50,11 @@ describe('approvalHolds : mon approbation vaut-elle pour la dernière version ?'
     it('résumé pas encore chargé : l\'état de Bitbucket fait foi', () => {
         expect(approvalHolds(part(true, 1), sums, 4, false)).toBe(true);
     });
+
+    it('version poussée depuis, absente du résumé chargé : non (inconnu = pas valable, comme sur le serveur)', () => {
+        expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'rebase-only']), 4, true)).toBe(false);
+        expect(approvalHolds(part(true, 4), makeSums(['creation', 'code', 'rebase-only']), 5, true)).toBe(false);
+    });
 });
 
 describe('approvalItems / myActions', () => {
@@ -88,6 +93,16 @@ describe('approvalItems / myActions', () => {
         expect(myActions(approved, sums, true)).toMatchObject({ approvalHolds: false, reapprove: true });
         const latest = { ...approved, participants: approved.participants.map((p) => (p.user?.uuid === meUuid ? { ...p, approvedVersion: 10 } : p)) };
         expect(myActions(latest, sums, true)).toMatchObject({ approvalHolds: true, reapprove: false });
+    });
+
+    it('nouvelle version pas encore dans le résumé : « Réapprouver », pas « Retirer l\'approbation »', () => {
+        const meUuid = data.me?.uuid;
+        const pushed = {
+            ...data,
+            versions: makeVersions(11),
+            participants: data.participants.map((p) => (p.user?.uuid === meUuid ? { ...p, approved: true, state: 'approved' as const, approvedVersion: 10 } : p)),
+        };
+        expect(myActions(pushed, sums, true)).toMatchObject({ approvalHolds: false, reapprove: true });
     });
 
     it('ma PR : pas d\'entrée « toi » ni de bouton', () => {

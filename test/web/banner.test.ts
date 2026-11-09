@@ -91,4 +91,34 @@ describe('bannerModel', () => {
         expect(model.head).toBe('Depuis ta relecture de v2 : 1 version, sans code');
         expect(lines(model)).toEqual(['v3 : package-lock.json seulement', 'message du commit modifié']);
     });
+
+    describe('nouvelle version poussée pendant la lecture, absente du résumé chargé : affichée sans détail', () => {
+        const { data } = prLong();
+        const reviewedAt = (lastReviewed: number) => ({ ...data.review, lastReviewed, lastReviewedAt: null });
+
+        it('avec d\'autres versions : ligne « … », le compte de code ne dit que ce qu\'on sait', () => {
+            const versions = makeVersions(4, { rebases: [4] });
+            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(1) }, makeSums(['creation', 'code', 'deps']), true);
+            expect(model).toMatchObject({ variant: 'since', head: 'Depuis ta relecture de v1 : 3 versions, dont 1 touche du code', action: 'mark' });
+            expect(lines(model)).toEqual(['v4 : … · rebase sur master', 'v2 : F2.ts, +10 −2', 'v3 : package-lock.json seulement']);
+        });
+
+        it('seule : ni « sans code » ni « rien à relire »', () => {
+            const versions = makeVersions(3);
+            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(2) }, makeSums(['creation', 'rebase-only']), true);
+            expect(model).toMatchObject({ variant: 'since', head: 'Depuis ta relecture de v2 : 1 version' });
+            expect(lines(model)).toEqual(['v3 : …']);
+        });
+
+        it('après beaucoup de versions sans code : pas comptée « sans changement de l\'auteur »', () => {
+            const versions = makeVersions(8);
+            const sums = makeSums(['creation', 'rebase-only', 'rebase-only', 'deps', 'rebase-only', 'none', 'deps']);
+            const model = bannerModel({ ...data, versions, threads: [], review: reviewedAt(1) }, sums, true);
+            expect(model.head).toBe('Depuis ta relecture de v1 : 7 versions');
+            expect(lines(model)).toEqual([
+                'v8 : …',
+                '6 versions sans code : 3 rebases seuls (15 fichiers de master masqués), 2 versions de dépendances, 1 autre sans changement de l\'auteur',
+            ]);
+        });
+    });
 });

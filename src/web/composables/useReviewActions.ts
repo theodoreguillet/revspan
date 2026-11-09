@@ -14,23 +14,32 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
     const toggleRequestChanges = (on: boolean): Promise<boolean> => load.act(() => api.requestChanges(prRef, on), { key: ACTION_KEYS.requestChanges });
     const markReviewed = (version: number): Promise<boolean> => load.act(() => api.reviewed(prRef, version), { key: ACTION_KEYS.markReviewed });
 
-    /** Coche « Vu » : mise à jour immédiate (le fichier se replie), annulée si le serveur refuse. */
-    async function setViewed(file: FileDiff, viewed: boolean): Promise<void> {
-        const previous = load.detail.value.review;
-        const next = { ...previous.viewed };
-        if (viewed) {
-            next[file.path] = file.contentHash;
+    /** Coche « Vu » d'un fichier dans l'état local (empreinte, ou undefined = pas vu), sans toucher aux autres fichiers. */
+    function patchViewed(path: string, contentHash: string | undefined): void {
+        const review = load.detail.value.review;
+        const viewed = { ...review.viewed };
+        if (contentHash === undefined) {
+            delete viewed[path];
         } else {
-            delete next[file.path];
+            viewed[path] = contentHash;
         }
-        load.patchReview({ ...previous, viewed: next });
+        load.patchReview({ ...review, viewed });
+    }
+
+    /**
+     * Coche « Vu » : mise à jour immédiate (le fichier se replie), annulée si le serveur refuse. Seul ce fichier est
+     * annulé : les coches posées entre-temps sur d'autres fichiers restent.
+     */
+    async function setViewed(file: FileDiff, viewed: boolean): Promise<void> {
+        const previous = load.detail.value.review.viewed[file.path];
+        patchViewed(file.path, viewed ? file.contentHash : undefined);
         options.collapsed.delete(file.path);
         await nextTick();
         keepFileInView(file.path);
         try {
             await api.viewed(prRef, { path: file.path, contentHash: file.contentHash, viewed });
         } catch (error) {
-            load.patchReview({ ...load.detail.value.review, viewed: previous.viewed });
+            patchViewed(file.path, previous);
             showError(error);
         }
     }

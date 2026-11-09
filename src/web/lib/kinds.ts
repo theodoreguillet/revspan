@@ -1,5 +1,5 @@
-// Types de versions (résumé) et table d'accès par index.
-import type { Summary, VersionKind, VersionSummary } from '../../shared/api.ts';
+// Types de versions (résumé), table d'accès par index et cohérence entre le résumé et le détail de la PR.
+import type { Summary, Version, VersionKind, VersionSummary } from '../../shared/api.ts';
 
 export type SummaryMap = Map<number, VersionSummary>;
 
@@ -32,4 +32,15 @@ export function isMuted(sum: VersionSummary | undefined): boolean {
 
 export function isCode(sum: VersionSummary | undefined): boolean {
     return !!sum && CODE_KINDS.has(sum.kind);
+}
+
+/** La liste des versions a changé (version poussée pendant la lecture, version remplacée) : résumé à recharger. */
+export function versionsChanged(before: readonly Pick<Version, 'hash'>[], after: readonly Pick<Version, 'hash'>[]): boolean {
+    return before.length !== after.length || before.some((v, i) => v.hash !== after[i]?.hash);
+}
+
+/** Le résumé a trouvé effacée par Bitbucket une version que le détail croit encore lisible : détail à recharger. */
+export function purgedSinceDetail(versions: readonly Pick<Version, 'index' | 'available'>[], summary: Summary): boolean {
+    const readable = new Set(versions.filter((v) => v.available).map((v) => v.index));
+    return summary.versions.some((s) => s.kind === 'unavailable' && readable.has(s.index));
 }

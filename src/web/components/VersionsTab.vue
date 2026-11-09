@@ -28,10 +28,12 @@ const summaryNote = computed(() => {
                     :key="v.index"
                     :class="{ dim: isMuted(page.sums.get(v.index)), sel: v.index > page.from && v.index <= page.to }"
                     :data-v="v.index"
+                    role="button"
                     tabindex="0"
+                    :aria-disabled="!v.available"
                     :title="`Voir ce que v${v.index} a changé`"
-                    @click="page.select(v.index - 1, v.index)"
-                    @keydown.enter="page.select(v.index - 1, v.index)"
+                    @click="page.selectVersion(v.index)"
+                    @keydown.enter.space.prevent="page.selectVersion(v.index)"
                 >
                     <td><b>v{{ v.index }}</b><span v-if="v.index === lastReviewed" class="relu">✓ relu</span></td>
                     <td>{{ fmtDateTime(v.pushedAt) }}</td>
