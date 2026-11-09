@@ -745,6 +745,89 @@ def run_checks(page):
         no_token(page)
 
 
+# ---------------------------------------------------------------------------
+# Languages: the journey above runs in French (fr-FR browser); this one checks English and the host-imposed language.
+# ---------------------------------------------------------------------------
+
+def run_language_checks(page, fr_page):
+    ws, repo, _ = MAIN_PR.split('/')
+    missing_pr = f'{ws}/{repo}/9999'
+
+    @check('English (en-US browser): home page')
+    def en_home(page):
+        page.goto(url(''))
+        expect(page.locator('html')).to_have_attribute('lang', 'en')
+        expect(page.locator('.rv-home h1')).to_have_text('My PRs')
+        expect(page.locator('.rv-home-top .rv-btn')).to_have_text('↻ Refresh', timeout=20000)
+        expect(page.locator(f'.rv-row[data-pr="{MAIN_PR}"]')).to_be_visible(timeout=20000)
+        titles = {'To review', 'Quick re-approval · rebases only', 'Up to date', 'My PRs', 'Other open PRs'}
+        for title in page.locator('.rv-lgrp').evaluate_all('els => els.map((el) => el.textContent.trim())'):
+            assert title.split(' · ')[0] in titles or title.rsplit(' · ', 1)[0] in titles, f'untranslated group title: {title}'
+        expect(page.locator('.rv-nav .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')
+    en_home(page)
+
+    @check('English (en-US browser): a PR, its tabs and the Versions table')
+    def en_pr(page):
+        open_pr(page, MAIN_PR, '?from=0&to=2')
+        expect(readout(page)).to_contain_text('Full v2 · against its base on master ·')
+        expect(page.locator('.rv-preset[data-preset="all"]')).to_have_text('All vs master')
+        expect(page.locator('.rv-tab[data-tab="diff"]')).to_contain_text('Diff')
+        expect(page.locator('.rv-tab[data-tab="discussions"]')).to_contain_text('open')
+        expect(page.locator('.rv-dtb')).to_contain_text('Show resolved threads')
+        expect(page.locator('.rv-banner .h')).not_to_have_text(re.compile('[àéèù]|relu'))
+        page.click('.rv-tab[data-tab="versions"]')
+        expect(page.locator('.rv-tbl thead')).to_contain_text('Changed by the author')
+        expect(page.locator('.rv-tbl tbody tr[data-v="1"]')).to_contain_text('creation')
+        page.click('.rv-tab[data-tab="discussions"]')
+        expect(page.locator('.rv-disc .rv-comp textarea')).to_have_attribute('placeholder', 'New general comment…')
+    en_pr(page)
+
+    @check('English (en-US browser): settings')
+    def en_settings(page):
+        page.goto(url('settings'))
+        expect(page.locator('label[for="set-email"]')).to_have_text('Atlassian email')
+        expect(page.locator('.rv-helpbox')).to_contain_text('Create an Atlassian API token at id.atlassian.com')
+        assert (page.locator('#set-token').get_attribute('placeholder') or '').startswith('Token saved'), 'token placeholder'
+        page.click('.rv-settings button[type="submit"]')
+        expect(page.locator('.rv-status')).to_have_text('Settings saved.')
+        page.click('text=Test connection')
+        expect(page.locator('.rv-status')).to_contain_text('Connected as ', timeout=15000)
+    en_settings(page)
+
+    @check('English (en-US browser): server error translated from its code')
+    def en_error(page):
+        page.goto(url(f'pr/{missing_pr}'))
+        panel = page.locator('.rv-panel-msg')
+        expect(panel).to_contain_text('Couldn’t load this page', timeout=20000)
+        expect(panel).to_contain_text('Not found on Bitbucket: ')
+        expect(panel).to_contain_text('Back to home')
+    en_error(page)
+
+    @check('French (fr-FR browser): server error translated from its code')
+    def fr_error(page):
+        page.goto(url(f'pr/{missing_pr}'))
+        expect(page.locator('html')).to_have_attribute('lang', 'fr')
+        expect(page.locator('.rv-panel-msg')).to_contain_text('Introuvable sur Bitbucket : ', timeout=20000)
+    fr_error(fr_page)
+
+    @check('language imposed by the host (<meta name="revspan-locale">) wins over the browser')
+    def host_locale(page):
+        def with_meta(route):
+            response = route.fetch()
+            html = response.text().replace('<head>', '<head><meta name="revspan-locale" content="fr">', 1)
+            route.fulfill(response=response, body=html)
+        # a query string forces a real page load (a hash change alone keeps the current document)
+        is_page = lambda u: u.startswith(f'{BASE}/?host-locale')  # noqa: E731
+        page.route(is_page, with_meta)
+        try:
+            page.goto(f'{BASE}/?host-locale#/')
+            expect(page.locator('html')).to_have_attribute('lang', 'fr')
+            expect(page.locator('.rv-home h1')).to_have_text('Mes PR')
+        finally:
+            page.unroute(is_page)
+    host_locale(page)
+
+
 def main():
     if not BASE:
         log('REVSPAN_BASE_URL manquant : lancer « node test/e2e/run-against-fake.ts » (après « npx --no-install vite build »).')
@@ -767,6 +850,13 @@ def main():
         errors = []
         page.on('pageerror', lambda e: errors.append(str(e)))
         run_checks(page)
+        en_context = browser.new_context(viewport={'width': 1440, 'height': 900}, locale='en-US', timezone_id='Europe/Paris')
+        en_context.set_default_timeout(10000)
+        en_page = en_context.new_page()
+        if fixed_time:
+            en_page.clock.set_fixed_time(fixed_time)
+        en_page.on('pageerror', lambda e: errors.append(str(e)))
+        run_language_checks(en_page, page)
         results.append(('aucune erreur JavaScript', not errors))
         log('PASS  aucune erreur JavaScript' if not errors else f'FAIL  aucune erreur JavaScript\n      {errors}')
         browser.close()
