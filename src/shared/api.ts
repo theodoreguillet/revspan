@@ -101,7 +101,7 @@ export interface PrCard extends PrRef {
 
 export interface HomeGroup {
     key: HomeGroupKey;
-    /** English title (the page and the extension show their own translation of the key). */
+    /** Title shown by the VS Code tree; the page shows its own translation of the key. */
     title: string;
     prs: PrCard[];
 }

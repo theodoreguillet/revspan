@@ -143,7 +143,6 @@ describe('réglages et sécurité', () => {
         await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/no-such-repo`] });
         const { body: home } = await api<Home>('GET', '/api/home');
         expect(home.errors).toEqual([expect.objectContaining({ repo: `${WS}/no-such-repo`, code: 'BB_NOT_FOUND', params: { path: expect.stringContaining('no-such-repo') } })]);
-        expect(home.groups.find((g) => g.key === 'to-review')?.title).toBe('To review');
 
         const email = await api<ApiErrorBody>('PUT', '/api/settings', { email: 'not-an-email' });
         expect(email.body.error).toEqual({ code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } });

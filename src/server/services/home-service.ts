@@ -10,13 +10,13 @@ import type { BitbucketSession } from './session.ts';
 
 const HOME_TTL_MS = 60000;
 
-// English titles: the page and the extension translate the group key themselves.
+// Titles shown by the VS Code tree; the page translates the group key itself.
 const GROUP_TITLES: Record<HomeGroupKey, string> = {
-    'to-review': 'To review',
-    'rebase-only': 'Quick re-approval · rebases only',
-    'up-to-date': 'Up to date',
-    'mine': 'My PRs',
-    'others': 'Other open PRs',
+    'to-review': 'À relire',
+    'rebase-only': 'Réapprobation rapide · seulement des rebases',
+    'up-to-date': 'À jour',
+    'mine': 'Mes PR',
+    'others': 'Autres PR ouvertes',
 };
 
 interface Card {
