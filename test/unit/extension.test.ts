@@ -171,6 +171,24 @@ describe('documents de diff', () => {
         expect(diffTitle('src/records/CreateRecord.ts', 9, 10)).toBe('CreateRecord.ts (v9 → v10)');
         expect(diffTitle('a.ts', 0, 3)).toBe('a.ts (base → v3)');
     });
+
+    it('nombre absent, vide ou invalide, référence de PR invalide : null (jamais 0 par défaut)', () => {
+        const { query } = encodeDiffDocument({ ref: { workspace: 'acme', repo: 'records-api', id: 212 }, from: 0, to: 3, side: 'new', path: 'src/A.ts', oldPath: null });
+        expect(decodeDiffDocument(query)).toMatchObject({ from: 0, to: 3 });
+        const variants: [string, string | null][] = [
+            ['id', null], ['from', null], ['to', null], ['id', ''], ['from', ''], ['id', '0'], ['from', '-1'], ['to', '0'],
+            ['to', '1.5'], ['from', ' 2'], ['id', '1e3'], ['to', '0x10'], ['ws', '..'], ['repo', 'records-api/x'],
+        ];
+        for (const [key, value] of variants) {
+            const params = new URLSearchParams(query);
+            if (value === null) {
+                params.delete(key);
+            } else {
+                params.set(key, value);
+            }
+            expect(decodeDiffDocument(params.toString()), `${key}=${value}`).toBeNull();
+        }
+    });
 });
 
 describe('arbre « Mes PR »', () => {
