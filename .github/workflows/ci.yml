@@ -16,7 +16,7 @@ concurrency:
 jobs:
   check:
     name: Lint, types, tests, package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: The tag matches the versions
@@ -42,7 +42,7 @@ jobs:
 
   e2e:
     name: UI tests (Playwright, fake Bitbucket)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -63,7 +63,7 @@ jobs:
     name: Release GitHub (tag v*)
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [check, e2e]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       # Marketplace Trusted Publishing: GitHub's OIDC token, no stored secret.
