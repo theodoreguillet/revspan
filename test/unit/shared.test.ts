@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { approvalHoldsSince } from '../../src/shared/approval.ts';
 import { parsePrUrl } from '../../src/shared/pr-url.ts';
 import { normalizeRepo, parseRepoList } from '../../src/shared/repos.ts';
 
@@ -28,5 +29,28 @@ describe('repositories', () => {
     it('parseRepoList: valid without duplicates, invalid apart, empty lines ignored', () => {
         expect(parseRepoList(['acme/records-api', '', 'not a repo', 'https://bitbucket.org/acme/records-api/', 'ws/r']))
             .toEqual({ repos: ['acme/records-api', 'ws/r'], bad: ['not a repo'] });
+    });
+});
+
+describe('approvalHoldsSince: the approval rule shared by the server (home) and the page', () => {
+    it('holds for the latest version if everything after the approved version is known and neutral', () => {
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'message-only', 'none'])).toBe(true);
+        expect(approvalHoldsSince(5, ['creation', 'code', 'code', 'code', 'code'])).toBe(true);
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'rebase-only', 'code'])).toBe(false);
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', 'deps'])).toBe(false);
+    });
+
+    it('a version unknown since the approval (summary not computed yet): does not hold', () => {
+        expect(approvalHoldsSince(3, ['creation', 'deps', 'deps', undefined])).toBe(false);
+    });
+
+    it('a version Bitbucket erased since the approval (unavailable) is neutral', () => {
+        expect(approvalHoldsSince(2, ['creation', 'code', 'unavailable', 'rebase-only'])).toBe(true);
+        expect(approvalHoldsSince(2, ['creation', 'code', 'unavailable', 'code'])).toBe(false);
+    });
+
+    it('approved version unknown: Bitbucket\'s state is authoritative, the approval holds', () => {
+        expect(approvalHoldsSince(null, ['creation'])).toBe(true);
+        expect(approvalHoldsSince(null, ['creation', 'code', undefined])).toBe(true);
     });
 });

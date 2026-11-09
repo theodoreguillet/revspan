@@ -1,7 +1,7 @@
 // PR model built from raw Bitbucket data: versions, participants, threads, last review.
 // Pure functions (network loading lives in services/).
 import type {
-    Comment, Participant, PrInfo, PrRef, Review, ReviewSource, Thread, User, Version, VersionKind,
+    Comment, Participant, PrInfo, PrRef, Review, ReviewSource, Thread, User, Version,
 } from '../../shared/api.ts';
 import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
@@ -135,17 +135,6 @@ export function versionAt(versions: readonly DatedVersion[], isoDate: string): n
 
 export function versionByHash<V extends DatedVersion>(versions: readonly V[], hash: string): V | null {
     return versions.find((v) => sameHash(v.hash, hash)) ?? null;
-}
-
-/** Versions with no author change: an approval given before remains valid. */
-const NEUTRAL_KINDS: ReadonlySet<VersionKind> = new Set(['rebase-only', 'message-only', 'none']);
-
-/**
- * An approval still active on Bitbucket counts for the latest version if all versions that arrived since the
- * approved version are known and neutral. kinds[i] = type of version i + 1 (undefined if not yet computed).
- */
-export function approvalHoldsSince(approvedVersion: number | null, kinds: readonly (VersionKind | undefined)[]): boolean {
-    return approvedVersion !== null && kinds.slice(approvedVersion).every((kind) => kind !== undefined && NEUTRAL_KINDS.has(kind));
 }
 
 /** A reply (discussion) does not count as a review. */

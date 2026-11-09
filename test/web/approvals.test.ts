@@ -55,6 +55,15 @@ describe('approvalHolds: does my approval hold for the latest version?', () => {
         expect(approvalHolds(part(true, 1), sums, 4, false)).toBe(true);
     });
 
+    it('version erased by Bitbucket since (unavailable): neutral, like on the server', () => {
+        expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'unavailable', 'rebase-only']), 4, true)).toBe(true);
+        expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'unavailable', 'code']), 4, true)).toBe(false);
+    });
+
+    it('approved version unknown: Bitbucket\'s state is authoritative', () => {
+        expect(approvalHolds(part(true, null), makeSums(['creation', 'code', 'code']), 3, true)).toBe(true);
+    });
+
     it('version pushed since, absent from the loaded summary: no (unknown = not valid, like on the server)', () => {
         expect(approvalHolds(part(true, 2), makeSums(['creation', 'code', 'rebase-only']), 4, true)).toBe(false);
         expect(approvalHolds(part(true, 4), makeSums(['creation', 'code', 'rebase-only']), 5, true)).toBe(false);

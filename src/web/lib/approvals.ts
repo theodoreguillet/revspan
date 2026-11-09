@@ -1,5 +1,6 @@
 // Approvals: approved version, stale approvals, state of my buttons.
 import type { Participant, PrDetail } from '../../shared/api.ts';
+import { approvalHoldsSince } from '../../shared/approval.ts';
 import type { Translator } from '../i18n/index.ts';
 import { displayName, vname } from './format.ts';
 import { CODE_KINDS, type SummaryMap } from './kinds.ts';
@@ -47,23 +48,19 @@ export function staleness(tr: Translator, approvedVersion: number | null, sums: 
 
 /**
  * My approval holds for the latest version: still active on Bitbucket (which does not necessarily remove it on every
- * push) and nothing from the author since (only rebases or the message). Until the summary is loaded,
- * Bitbucket's state is authoritative; once loaded, a version that arrived since and is absent from the summary (pushed
- * while reading) is not neutral: unknown = not valid, like approvalHoldsSince on the server side.
+ * push) and nothing from the author since (only rebases or the message), by the rule the server's home page uses
+ * (approvalHoldsSince). Until the summary is loaded, Bitbucket's state is authoritative; once loaded, a version that
+ * arrived since and is absent from the summary (pushed while reading) is unknown, so the approval does not hold.
  */
 export function approvalHolds(part: Participant | null | undefined, sums: SummaryMap, n: number, summaryLoaded: boolean): boolean {
     if (!part?.approved) {
         return false;
     }
-    if (part.approvedVersion == null || part.approvedVersion >= n || !summaryLoaded) {
+    if (!summaryLoaded) {
         return true;
     }
-    for (let i = part.approvedVersion + 1; i <= n; i++) {
-        if (!sums.has(i)) {
-            return false;
-        }
-    }
-    return staleVersions(part.approvedVersion, sums, n) === null;
+    const kinds = Array.from({ length: n }, (_, i) => sums.get(i + 1)?.kind);
+    return approvalHoldsSince(part.approvedVersion, kinds);
 }
 
 export type ApprovalItem =

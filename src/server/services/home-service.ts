@@ -1,8 +1,9 @@
 // "My PRs" home: open PRs of the configured repositories, grouped by what moved since my review.
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
+import { approvalHoldsSince } from '../../shared/approval.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
-import { approvalHoldsSince, buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
+import { buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
 import { errorPayload } from '../errors.ts';
@@ -103,7 +104,8 @@ export class HomeService {
         const myApprovedVersion = base.myApproval
             ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
             : null;
-        const approvalHolds = approvalHoldsSince(myApprovedVersion, versions.map((v) => local.kinds[v.hash.slice(0, 12)]));
+        const approvalHolds = base.myApproval
+            && approvalHoldsSince(myApprovedVersion, versions.map((v) => local.kinds[v.hash.slice(0, 12)]));
         const since = review.lastReviewedAt;
         const newComments = since
             ? activity.filter((e) => e.comment && e.comment.user?.uuid !== meUuid && !e.comment.deleted
