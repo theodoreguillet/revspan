@@ -72,8 +72,13 @@ export class Cache {
     /** Oublie une entrée (mémoire et disque) : donnée « immuable » qui a disparu de Bitbucket. */
     delete(key: string): void {
         this.memory.delete(key);
-        if (this.dir) {
+        if (!this.dir) {
+            return;
+        }
+        try {
             fs.rmSync(this.fileFor(this.dir, key), { force: true });
+        } catch (error) {
+            console.warn(`revspan: suppression dans le cache impossible (${(error as Error).message})`);
         }
     }
 

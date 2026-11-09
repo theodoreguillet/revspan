@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,25 @@ describe('Cache disque', () => {
         expect(new Cache(dir).get('k')).toBeUndefined();
         expect(new Cache(dir).get('autre')).toBe(2);
         expect(() => cache.delete('absente')).not.toThrow();
+    });
+
+    it('delete ne lève jamais : suppression impossible = simple avertissement', () => {
+        const dir = tempDir();
+        const cache = new Cache(dir);
+        cache.set('k', 1);
+        // Un dossier à la place du fichier de l'entrée : rmSync échoue.
+        const hash = createHash('sha1').update('k').digest('hex');
+        const file = path.join(dir, hash.slice(0, 2), `${hash}.json`);
+        fs.rmSync(file);
+        fs.mkdirSync(file);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            expect(() => cache.delete('k')).not.toThrow();
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(cache.get('k')).toBeUndefined();
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     it('ignore un fichier de cache corrompu', () => {
