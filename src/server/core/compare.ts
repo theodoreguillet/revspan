@@ -25,11 +25,12 @@ export interface DiffstatEntry {
 /** Chemin d'une entrée (le nouveau, ou l'ancien pour un fichier supprimé). */
 export const pathOf = (entry: DiffstatEntry): string => entry.newPath ?? entry.oldPath ?? '';
 
+/** fingerprint : empreinte du contenu, absente des entrées de cache antérieures (deux côtés sans empreinte ne sont jamais égaux). */
 export type FileContent =
     | { text: string; submodule?: boolean }
     | { missing: true }
-    | { binary: true }
-    | { tooLarge: true }
+    | { binary: true; fingerprint?: string }
+    | { tooLarge: true; fingerprint?: string }
     | { special: true };
 
 /** Accès aux données d'un dépôt (Bitbucket en vrai, mémoire en test). */
@@ -53,6 +54,8 @@ interface Side {
     lines: string[];
     text: string | null;
     flag: Flag | null;
+    /** Empreinte d'un côté binaire ou trop gros (null si inconnue). */
+    fingerprint: string | null;
     submodule: boolean;
 }
 
@@ -65,13 +68,14 @@ const sha1 = (text: string): string => createHash('sha1').update(text).digest('h
 
 function sideOf(content: FileContent): Side {
     if ('missing' in content) {
-        return { exists: false, lines: [], text: null, flag: null, submodule: false };
+        return { exists: false, lines: [], text: null, flag: null, fingerprint: null, submodule: false };
     }
     if ('text' in content) {
-        return { exists: true, lines: splitDiffLines(content.text), text: content.text, flag: null, submodule: Boolean(content.submodule) };
+        return { exists: true, lines: splitDiffLines(content.text), text: content.text, flag: null, fingerprint: null, submodule: Boolean(content.submodule) };
     }
     const flag: Flag = 'binary' in content ? 'binary' : 'tooLarge' in content ? 'tooLarge' : 'special';
-    return { exists: true, lines: [], text: null, flag, submodule: false };
+    const fingerprint = 'fingerprint' in content ? content.fingerprint ?? null : null;
+    return { exists: true, lines: [], text: null, flag, fingerprint, submodule: false };
 }
 
 function sameSide(a: Side, b: Side): boolean {
@@ -81,7 +85,11 @@ function sameSide(a: Side, b: Side): boolean {
     if (!a.exists) {
         return true;
     }
-    return !a.flag && !b.flag && a.text === b.text;
+    if (a.flag || b.flag) {
+        // Binaire ou trop gros : égaux seulement si les deux empreintes sont connues et identiques.
+        return a.flag === b.flag && a.fingerprint !== null && a.fingerprint === b.fingerprint;
+    }
+    return a.text === b.text;
 }
 
 function statusOf(entry: DiffstatEntry, oldSide: Side, newSide: Side): FileStatus {
@@ -161,14 +169,15 @@ async function rebasedSides(src: CompareSource, entry: DiffstatEntry, va: Compar
         src.content(vb.hash, path),
     ])).map(sideOf) as [Side, Side, Side, Side];
 
-    const tooBig = [anc, mine, newBase, target].some((s) => s.lines.length > MAX_LINES);
-    if (anc.flag || mine.flag || newBase.flag || target.flag || tooBig) {
-        return { oldSide: mine, newSide: target, conflict: false };
-    }
+    // Fichier non touché par l'auteur en A (A rejouée = nouvelle base) ou par master (A inchangée) : vaut aussi pour un binaire.
     if (sameSide(mine, anc)) {
         return { oldSide: newBase, newSide: target, conflict: false };
     }
     if (sameSide(newBase, anc)) {
+        return { oldSide: mine, newSide: target, conflict: false };
+    }
+    const tooBig = [anc, mine, newBase, target].some((s) => s.lines.length > MAX_LINES);
+    if (anc.flag || mine.flag || newBase.flag || target.flag || tooBig) {
         return { oldSide: mine, newSide: target, conflict: false };
     }
     if (!mine.exists || !newBase.exists || !anc.exists) {
@@ -176,7 +185,7 @@ async function rebasedSides(src: CompareSource, entry: DiffstatEntry, va: Compar
     }
     const merged = merge3(anc.lines, newBase.lines, mine.lines);
     return {
-        oldSide: { exists: true, lines: merged.lines, text: merged.lines.join('\n'), flag: null, submodule: mine.submodule },
+        oldSide: { exists: true, lines: merged.lines, text: merged.lines.join('\n'), flag: null, fingerprint: null, submodule: mine.submodule },
         newSide: target,
         conflict: merged.conflicts > 0,
     };

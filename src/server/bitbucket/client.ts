@@ -1,5 +1,6 @@
 // Client REST Bitbucket Cloud (API 2.0) : authentification Basic e-mail + jeton API Atlassian, pagination,
 // limite de concurrence, reprises (429/5xx pour les lectures, 429 seul pour les écritures), cache disque des données immuables.
+import { createHash } from 'node:crypto';
 import type { NewComment, User } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -74,6 +75,7 @@ class Semaphore {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).digest('hex');
 
 const commitKey = (ws: string, repo: string, hash: string): string => `commit:${ws}/${repo}:${hash}`;
 const mergeBaseKey = (ws: string, repo: string, a: string, b: string): string => `merge-base:${ws}/${repo}:${a}..${b}`;
@@ -349,15 +351,19 @@ export class BitbucketClient {
             if (!response) {
                 return { missing: true };
             }
-            if (Number(response.headers.get('content-length')) > MAX_FILE_BYTES) {
-                return { tooLarge: true };
+            const length = response.headers.get('content-length');
+            if (Number(length) > MAX_FILE_BYTES) {
+                // Contenu non téléchargé : empreinte d'un ETag fort (mêmes octets) et de la taille, sinon aucune.
+                const etag = response.headers.get('etag');
+                return etag && !etag.startsWith('W/') ? { tooLarge: true, fingerprint: sha1(`etag:${etag}:${length}`) } : { tooLarge: true };
             }
+            // Binaire ou trop gros : on garde l'empreinte des octets pour reconnaître le même fichier d'une version à l'autre.
             const buffer = Buffer.from(await response.arrayBuffer());
             if (buffer.length > MAX_FILE_BYTES) {
-                return { tooLarge: true };
+                return { tooLarge: true, fingerprint: sha1(buffer) };
             }
             if (buffer.subarray(0, 8000).includes(0)) {
-                return { binary: true };
+                return { binary: true, fingerprint: sha1(buffer) };
             }
             const text = buffer.toString('utf8');
             // Un sous-module renvoie le hash du commit pointé (40 caractères) : on le présente comme git.

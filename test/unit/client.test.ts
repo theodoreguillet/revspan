@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { BitbucketClient } from '../../src/server/bitbucket/client.ts';
 import { AppError } from '../../src/server/errors.ts';
@@ -70,6 +71,35 @@ describe('BitbucketClient : chemins de fichier', () => {
     it('accepte un chemin normal', async () => {
         const fetchImpl = mockFetch(new Response('contenu', { headers: { 'content-type': 'text/plain' } }));
         await expect(makeClient(fetchImpl).fileContent('acme', 'records-api', 'abc123', 'src/a b.ts')).resolves.toEqual({ text: 'contenu' });
+    });
+});
+
+describe('BitbucketClient : empreinte des fichiers binaires ou trop gros', () => {
+    const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).digest('hex');
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]);
+
+    it('binaire : sha1 des octets', async () => {
+        const fetchImpl = mockFetch(new Response(png, { headers: { 'content-type': 'image/png' } }));
+        await expect(makeClient(fetchImpl).fileContent('acme', 'records-api', 'abc123', 'logo.png')).resolves.toEqual({ binary: true, fingerprint: sha1(png) });
+    });
+
+    it('trop gros une fois lu (sans content-length) : sha1 des octets', async () => {
+        const huge = Buffer.alloc(5 * 1024 * 1024 + 1, 0x61);
+        const fetchImpl = mockFetch(new Response(huge));
+        await expect(makeClient(fetchImpl).fileContent('acme', 'records-api', 'abc123', 'a.txt')).resolves.toEqual({ tooLarge: true, fingerprint: sha1(huge) });
+    });
+
+    it('trop gros d\'après content-length : empreinte de l\'ETag (fort) et de la taille, sinon aucune', async () => {
+        const big = String(6 * 1024 * 1024);
+        const fetchImpl = mockFetch(
+            new Response('x', { headers: { 'content-length': big, etag: '"blob-1"' } }),
+            new Response('x', { headers: { 'content-length': big, etag: 'W/"faible"' } }),
+            new Response('x', { headers: { 'content-length': big } }),
+        );
+        const client = makeClient(fetchImpl);
+        await expect(client.fileContent('acme', 'records-api', 'abc123', 'a.bin')).resolves.toEqual({ tooLarge: true, fingerprint: sha1(`etag:"blob-1":${big}`) });
+        await expect(client.fileContent('acme', 'records-api', 'abc124', 'a.bin')).resolves.toEqual({ tooLarge: true });
+        await expect(client.fileContent('acme', 'records-api', 'abc125', 'a.bin')).resolves.toEqual({ tooLarge: true });
     });
 });
 

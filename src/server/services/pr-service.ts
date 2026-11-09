@@ -13,7 +13,7 @@ import { prKeyOf, type Store } from '../infra/config.ts';
 import type { BitbucketSession } from './session.ts';
 
 /** À incrémenter si le calcul des résumés change (invalide le cache disque). */
-const SUMMARY_VERSION = 3;
+const SUMMARY_VERSION = 4;
 
 interface LoadedPr {
     client: BitbucketClient;

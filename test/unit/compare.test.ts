@@ -101,6 +101,42 @@ describe('compareVersions', () => {
         expect(result.files[0]!.tooLarge).toBe(true);
     });
 
+    describe('binaire ou trop gros à travers un rebase (empreinte)', () => {
+        const image = (flag: 'binary' | 'tooLarge', fingerprint?: string): FileContent =>
+            (flag === 'binary' ? { binary: true, fingerprint } : { tooLarge: true, fingerprint });
+        const rebased: CompareVersion[] = [
+            { index: 1, hash: 'v1', base: 'b1', message: '', isRebase: false, messageChanged: false },
+            { index: 2, hash: 'v2', base: 'b2', message: '', isRebase: true, messageChanged: false },
+        ];
+
+        it.each(['binary', 'tooLarge'] as const)('%s identique de part et d\'autre du rebase : aucun changement de l\'auteur', async (flag) => {
+            // L'auteur a modifié l'image en v1 ; master l'a changée entre b1 et b2 ; v2 garde l'image de l'auteur.
+            const src = singleFile('logo.png', { b1: image(flag, 'master-1'), v1: image(flag, 'auteur'), b2: image(flag, 'master-2'), v2: image(flag, 'auteur') });
+            const result = await compareVersions(src, rebased, 1, 2);
+            expect(result.files).toEqual([]);
+            expect(result.masterOnly).toEqual(['logo.png']);
+            expect((await summarizeVersion(src, rebased, 2)).kind).toBe('rebase-only');
+        });
+
+        it('image changée seulement par master entre les deux bases : rejouée, aucun changement de l\'auteur', async () => {
+            const src = singleFile('logo.png', { b1: image('binary', 'master-1'), v1: image('binary', 'master-1'), b2: image('binary', 'master-2'), v2: image('binary', 'master-2') });
+            expect((await compareVersions(src, rebased, 1, 2)).files).toEqual([]);
+        });
+
+        it('binaire réellement modifié par l\'auteur : changement', async () => {
+            const src = singleFile('logo.png', { b1: image('binary', 'master-1'), v1: image('binary', 'auteur-1'), b2: image('binary', 'master-2'), v2: image('binary', 'auteur-2') });
+            const result = await compareVersions(src, rebased, 1, 2);
+            expect(result.files).toHaveLength(1);
+            expect(result.files[0]).toMatchObject({ path: 'logo.png', binary: true, tooLarge: false });
+            expect((await summarizeVersion(src, rebased, 2)).kind).toBe('code');
+        });
+
+        it('entrées de cache sans empreinte (anciennes) : jamais jugées égales, comme avant', async () => {
+            const src = singleFile('logo.png', { b1: image('binary'), v1: image('binary'), b2: image('binary'), v2: image('binary') });
+            expect(paths((await compareVersions(src, rebased, 1, 2)).files)).toEqual(['logo.png']);
+        });
+    });
+
     it('comparaison invalide refusée', async () => {
         const { repo, versions } = scenario();
         await expect(compareVersions(repo.source(), versions, 3, 2)).rejects.toThrow('Comparaison invalide');
