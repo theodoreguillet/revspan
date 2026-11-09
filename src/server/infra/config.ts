@@ -52,6 +52,46 @@ function readJson<T>(file: string, fallback: T): T {
     }
 }
 
+/** Signature d'un fichier (inode, date, taille) : l'écriture atomique change l'inode, donc toute réécriture est détectée. */
+function signatureOf(file: string): string {
+    try {
+        const { ino, mtimeMs, size } = fs.statSync(file);
+        return `${ino}:${mtimeMs}:${size}`;
+    } catch {
+        return 'absent';
+    }
+}
+
+/** Fichier JSON relu seulement quand il a changé sur le disque (plusieurs fenêtres partagent le même dossier). */
+class JsonFile<T> {
+    private signature: string | null = null;
+    private cached: T;
+    private readonly file: string;
+    private readonly load: (raw: unknown) => T;
+
+    constructor(file: string, load: (raw: unknown) => T) {
+        this.file = file;
+        this.load = load;
+        this.cached = load({});
+    }
+
+    /** Valeur à jour : relue si le fichier a changé depuis la dernière lecture, valeurs par défaut s'il est absent ou corrompu. */
+    read(): T {
+        const signature = signatureOf(this.file);
+        if (signature !== this.signature) {
+            this.cached = this.load(readJson<unknown>(this.file, {}));
+            this.signature = signature;
+        }
+        return this.cached;
+    }
+
+    write(value: T): void {
+        writeJsonAtomic(this.file, value);
+        this.cached = value;
+        this.signature = signatureOf(this.file);
+    }
+}
+
 const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: state.viewed ?? {}, kinds: state.kinds ?? {} });
 
 /** Liste des dépôts tenue ailleurs que dans config.json (extension VS Code : réglage revspan.repositories). */
@@ -62,47 +102,44 @@ export interface RepoSource {
 
 export class Store {
     readonly dir: string;
-    private readonly configPath: string;
-    private readonly statePath: string;
     private readonly repoSource: RepoSource | null;
-    private configValue: AppConfig;
-    private readonly state: StateFile;
+    private readonly configFile: JsonFile<AppConfig>;
+    private readonly stateFile: JsonFile<StateFile>;
 
     constructor(dir: string, { repoSource = null }: { repoSource?: RepoSource | null } = {}) {
         this.dir = dir;
         this.repoSource = repoSource;
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-        this.configPath = path.join(dir, 'config.json');
-        this.statePath = path.join(dir, 'state.json');
-        this.configValue = { email: '', repos: [], ...readJson<Partial<AppConfig>>(this.configPath, {}) };
-        this.state = { prs: {}, ...readJson<Partial<StateFile>>(this.statePath, {}) };
+        this.configFile = new JsonFile(path.join(dir, 'config.json'), (raw) => ({ email: '', repos: [], ...(raw as Partial<AppConfig>) }));
+        this.stateFile = new JsonFile(path.join(dir, 'state.json'), (raw) => ({ prs: {}, ...(raw as Partial<StateFile>) }));
     }
 
     get config(): Readonly<AppConfig> {
-        return this.repoSource ? { ...this.configValue, repos: normalizeRepos(this.repoSource.get()) } : this.configValue;
+        const value = this.configFile.read();
+        return this.repoSource ? { ...value, repos: normalizeRepos(this.repoSource.get()) } : value;
     }
 
     async saveConfig({ repos, ...rest }: Partial<AppConfig>): Promise<AppConfig> {
         if (repos !== undefined && this.repoSource) {
             await this.repoSource.set(repos);
         }
-        this.configValue = { ...this.configValue, ...rest };
+        const next = { ...this.configFile.read(), ...rest };
         if (repos !== undefined && !this.repoSource) {
-            this.configValue.repos = repos;
+            next.repos = repos;
         }
-        writeJsonAtomic(this.configPath, this.configValue);
+        this.configFile.write(next);
         return { ...this.config };
     }
 
     /** État local d'une PR (vide si elle n'a jamais été ouverte). */
     prState(prKey: string): LocalPrState {
-        return completeState(this.state.prs[prKey]);
+        return completeState(this.stateFile.read().prs[prKey]);
     }
 
     updatePrState(prKey: string, mutate: (state: LocalPrState) => void): void {
-        const state = this.prState(prKey);
+        const file = this.stateFile.read();
+        const state = completeState(file.prs[prKey]);
         mutate(state);
-        this.state.prs[prKey] = state;
-        writeJsonAtomic(this.statePath, this.state);
+        this.stateFile.write({ ...file, prs: { ...file.prs, [prKey]: state } });
     }
 }
