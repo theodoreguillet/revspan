@@ -29,21 +29,28 @@ export async function openLocalFile(prs: PrService, ref: PrRef, filePath: string
     const branch = await prs.detail(ref).then((d) => d.pr.sourceBranch, () => null);
     const repo = findLocalRepo(roots, ref, branch, nodeFs);
     if (!repo) {
-        void vscode.window.showWarningMessage(`Dépôt « ${ref.workspace}/${ref.repo} » introuvable dans l'espace de travail (ni remote Bitbucket, ni dossier ${ref.repo}, ni worktree).`);
+        void vscode.window.showWarningMessage(vscode.l10n.t(
+            'Repository “{repo}” not found in the workspace (no Bitbucket remote, no {folder} folder, no worktree).',
+            { repo: `${ref.workspace}/${ref.repo}`, folder: ref.repo },
+        ));
         return;
     }
     const file = fileInRepo(repo.dir, filePath);
     if (!file) {
-        void vscode.window.showWarningMessage(`Chemin refusé : « ${filePath} » sort du dépôt ${repo.dir}.`);
+        void vscode.window.showWarningMessage(vscode.l10n.t('Path refused: “{path}” is outside the repository {dir}.', { path: filePath, dir: repo.dir }));
         return;
     }
     if (!fs.existsSync(file)) {
-        void vscode.window.showWarningMessage(`« ${filePath} » n'existe pas dans ${repo.dir} (branche ${repo.branch ?? 'inconnue'}).`);
+        void vscode.window.showWarningMessage(repo.branch === null
+            ? vscode.l10n.t('“{path}” doesn’t exist in {dir} (unknown branch).', { path: filePath, dir: repo.dir })
+            : vscode.l10n.t('“{path}” doesn’t exist in {dir} (branch {branch}).', { path: filePath, dir: repo.dir, branch: repo.branch }));
         return;
     }
     const position = new vscode.Position(Math.max(0, (line ?? 1) - 1), 0);
     await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true, selection: new vscode.Range(position, position) });
     if (!repo.onPrBranch) {
-        void vscode.window.showInformationMessage(`Copie locale sur ${repo.branch ?? 'une autre branche'} : les lignes peuvent différer de la version de la PR.`);
+        void vscode.window.showInformationMessage(repo.branch === null
+            ? vscode.l10n.t('The local copy is on another branch: lines may differ from the PR version.')
+            : vscode.l10n.t('The local copy is on {branch}: lines may differ from the PR version.', { branch: repo.branch }));
     }
 }

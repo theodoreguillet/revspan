@@ -13,10 +13,10 @@ const prRoute = (ref: PrRef): string => `/pr/${encodeURIComponent(ref.workspace)
 
 async function askPrRef(): Promise<PrRef | null> {
     const url = await vscode.window.showInputBox({
-        title: 'Ouvrir une PR Bitbucket',
-        prompt: 'URL de la PR',
-        placeHolder: 'https://bitbucket.org/<workspace>/<dépôt>/pull-requests/<numéro>',
-        validateInput: (value) => (parsePrUrl(value) ? null : 'URL de PR Bitbucket attendue'),
+        title: vscode.l10n.t('Open a Bitbucket PR'),
+        prompt: vscode.l10n.t('PR URL'),
+        placeHolder: vscode.l10n.t('https://bitbucket.org/<workspace>/<repository>/pull-requests/<number>'),
+        validateInput: (value) => (parsePrUrl(value) ? null : vscode.l10n.t('Bitbucket PR URL expected')),
     });
     return url ? parsePrUrl(url) : null;
 }

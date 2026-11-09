@@ -5,14 +5,29 @@ import type { Home, PrCard } from '../../src/shared/api.ts';
 import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib/webview-html.ts';
 import { bitbucketRepoOfRemote, currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
-import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
+import { buildHomeTree, repoErrorLabel } from '../../src/extension/lib/home-tree.ts';
+import { createL10n, pageLocale, type L10n, type Translate } from '../../src/extension/lib/l10n.ts';
+import { errorText as extensionErrorText } from '../../src/extension/lib/error-text.ts';
+import type { ErrorLike } from '../../src/shared/error-text.ts';
+import { createTranslator } from '../../src/web/i18n/translator.ts';
+import { errorText as pageErrorText } from '../../src/web/lib/errors.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { settingTarget } from '../../src/extension/lib/setting-target.ts';
 import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
 
-describe('manifeste de l\'extension', () => {
-    const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
+const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
 
+/** vscode.l10n.t's formatting: `{name}` placeholders filled from the arguments, unknown ones left as is. */
+const format = (message: string, args: Record<string, string | number> = {}): string =>
+    message.replace(/\{(\w+)\}/g, (match, name: string) => (name in args ? String(args[name]) : match));
+const frenchBundle = readJson('extension/l10n/bundle.l10n.fr.json') as Record<string, string>;
+/** vscode.l10n.t with VS Code in English (no bundle) and in French (the extension's bundle). */
+const enT: Translate = (message, args) => format(message, args);
+const frT: Translate = (message, args) => format(frenchBundle[message] ?? message, args);
+const en: L10n = createL10n(enT, 'en');
+const fr: L10n = createL10n(frT, 'fr');
+
+describe('manifeste de l\'extension', () => {
     it('même version que le projet (la release vérifie le tag contre package.json)', () => {
         expect(readJson('extension/package.json').version).toBe(readJson('package.json').version);
     });
@@ -61,17 +76,18 @@ describe('HTML du panneau', () => {
     const index = '<!doctype html><html><head>\n<title>Revspan</title><script type="module" src="./assets/a.js"></script></head><body></body></html>';
 
     it('ajoute la politique de sécurité et la route initiale, réécrit les fichiers en adresses du panneau (sans <base>)', () => {
-        const html = buildWebviewHtml(index, { assetsBaseUri: 'https://file.vscode-cdn.net/ext/dist/web/', cspSource: 'https://*.vscode-cdn.net', initialRoute: '/pr/ws/repo/42' });
+        const html = buildWebviewHtml(index, { assetsBaseUri: 'https://file.vscode-cdn.net/ext/dist/web/', cspSource: 'https://*.vscode-cdn.net', initialRoute: '/pr/ws/repo/42', locale: 'fr' });
         expect(html).toMatch(/<head>\n {4}<meta http-equiv="Content-Security-Policy"/);
         expect(html).toContain('<meta name="revspan-route" content="/pr/ws/repo/42">');
+        expect(html).toContain('<meta name="revspan-locale" content="fr">');
         expect(html).toContain('src="https://file.vscode-cdn.net/ext/dist/web/assets/a.js"');
         expect(html).not.toContain('<base');
     });
 
     it('échappe la route et refuse une page sans <head>', () => {
-        const html = buildWebviewHtml(index, { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/"><script>' });
+        const html = buildWebviewHtml(index, { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/"><script>', locale: 'en' });
         expect(html).toContain('content="/&#34;&#62;&#60;script&#62;"');
-        expect(() => buildWebviewHtml('<html></html>', { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/' })).toThrow('<head>');
+        expect(() => buildWebviewHtml('<html></html>', { assetsBaseUri: 'x', cspSource: 'y', initialRoute: '/', locale: 'en' })).toThrow('<head>');
     });
 
     it('politique stricte : aucun script en ligne, aucun accès réseau', () => {
@@ -86,9 +102,10 @@ describe('HTML du panneau', () => {
 
 describe('titre du panneau', () => {
     it('d\'après la route affichée', () => {
-        expect(panelTitle('/pr/acme/records-api/212?from=2&to=6')).toBe('PR #212 · records-api');
-        expect(panelTitle('/')).toBe('Revspan');
-        expect(panelTitle('/settings')).toBe('Revspan · Réglages');
+        expect(panelTitle(enT, '/pr/acme/records-api/212?from=2&to=6')).toBe('PR #212 · records-api');
+        expect(panelTitle(enT, '/')).toBe('Revspan');
+        expect(panelTitle(enT, '/settings')).toBe('Revspan · Settings');
+        expect(panelTitle(frT, '/settings')).toBe('Revspan · Réglages');
     });
 
     it('lecture d\'API de la page : route de l\'écran qui la fait (accueil, réglages, PR), sinon null', () => {
@@ -355,22 +372,163 @@ describe('arbre « Mes PR »', () => {
         createdOn: '', updatedOn: '', versionsCount: 3, lastPushAt: '', lastReviewed: 1, newVersions: 2, newCodeVersions: 1,
         approvals: 1, myApproval: false, newComments: 2, ...extra,
     });
+    const home: Home = {
+        me: { uuid: '{me}', displayName: 'Moi' },
+        repos: ['acme/records-api'],
+        errors: [],
+        groups: [
+            { key: 'to-review', title: 'À relire', prs: [card(1)] },
+            { key: 'up-to-date', title: 'À jour', prs: [] },
+            { key: 'others', title: 'Autres PR ouvertes', prs: [card(2, { lastReviewed: null, versionsCount: null })] },
+        ],
+    };
 
     it('groupes non vides, badges, « Autres » replié quand je suis connu', () => {
-        const home: Home = {
-            me: { uuid: '{me}', displayName: 'Moi' },
-            repos: ['acme/records-api'],
-            errors: [],
-            groups: [
-                { key: 'to-review', title: 'À relire', prs: [card(1)] },
-                { key: 'up-to-date', title: 'À jour', prs: [] },
-                { key: 'others', title: 'Autres PR ouvertes', prs: [card(2, { lastReviewed: null, versionsCount: null })] },
-            ],
-        };
-        const tree = buildHomeTree(home);
+        const tree = buildHomeTree(home, fr);
         expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À relire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
         expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, label: 'records-api #1 · PR 1', description: '+2 versions · dont 1 avec du code · 💬 2' });
         expect(tree[1]?.prs[0]).toMatchObject({ label: 'records-api #2 · PR 2', description: 'pas encore relue · 💬 2' });
-        expect(buildHomeTree({ ...home, me: null }).find((g) => g.key === 'others')?.collapsed).toBe(false);
+        expect(buildHomeTree({ ...home, me: null }, fr).find((g) => g.key === 'others')?.collapsed).toBe(false);
+    });
+
+    it('in English: group titles from the key, badges and tooltip', () => {
+        const tree = buildHomeTree(home, en);
+        expect(tree.map((g) => g.label)).toEqual(['To review (1)', 'Other open PRs (1)']);
+        expect(tree[0]?.prs[0]).toMatchObject({ description: '+2 versions · 1 with code · 💬 2' });
+        expect(tree[0]?.prs[0]?.tooltip).toBe('PR 1\nacme/records-api #1 · Camille\n3 versions\n1 approval\n+2 versions\n1 with code\n💬 2');
+        expect(tree[1]?.prs[0]).toMatchObject({ description: 'not reviewed yet · 💬 2' });
+        const approved = buildHomeTree({ ...home, groups: [{ key: 'mine', title: 'Mes PR', prs: [card(3, { myApproval: true, approvals: 2, newVersions: 1 })] }] }, en);
+        expect(approved.map((g) => g.label)).toEqual(['My PRs (1)']);
+        expect(approved[0]?.prs[0]?.description).toBe('💬 2 · ✓ approved');
+        expect(approved[0]?.prs[0]?.tooltip).toContain('2 approvals');
+    });
+
+    it('plurals follow the display language: 0 and 1 are singular in French, only 1 in English', () => {
+        const zero = { ...home, groups: [{ key: 'others' as const, title: '', prs: [card(4, { versionsCount: 0, approvals: 0 })] }] };
+        expect(buildHomeTree(zero, fr)[0]?.prs[0]?.tooltip).toContain('\n0 version\n');
+        expect(buildHomeTree(zero, en)[0]?.prs[0]?.tooltip).toContain('\n0 versions\n');
+        const one = { ...home, groups: [{ key: 'to-review' as const, title: '', prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
+        expect(buildHomeTree(one, en)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
+        expect(buildHomeTree(one, fr)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
+    });
+
+    it('repository errors translated from their code and parameters', () => {
+        const error = { repo: 'acme/no-such-repo', code: 'BB_NOT_FOUND' as const, message: 'Not found on Bitbucket: /repositories/acme/no-such-repo', params: { path: '/repositories/acme/no-such-repo' } };
+        expect(repoErrorLabel(enT, error)).toBe('acme/no-such-repo: Not found on Bitbucket: /repositories/acme/no-such-repo');
+        expect(repoErrorLabel(frT, error)).toBe('acme/no-such-repo : Introuvable sur Bitbucket : /repositories/acme/no-such-repo');
+        expect(repoErrorLabel(frT, { repo: 'acme/x', code: 'BB_ERROR', message: 'Bitbucket redirect refused on /x' })).toBe('acme/x : Bitbucket redirect refused on /x');
+    });
+});
+
+describe('VS Code display language', () => {
+    it('page language: French for fr*, English otherwise', () => {
+        for (const language of ['fr', 'fr-ca', 'FR', 'fr_FR']) {
+            expect(pageLocale(language), language).toBe('fr');
+        }
+        for (const language of ['en', 'en-us', 'de', 'fy', 'qps-ploc', '']) {
+            expect(pageLocale(language), language).toBe('en');
+        }
+    });
+
+    it('plural rules of the language the texts are shown in (English rules for an untranslated language)', () => {
+        expect([0, 1, 2].map((n) => createL10n(enT, 'fr-ca').isSingular(n))).toEqual([true, true, false]);
+        expect([0, 1, 2].map((n) => createL10n(enT, 'en').isSingular(n))).toEqual([false, true, false]);
+        expect([0, 1, 2].map((n) => createL10n(enT, 'ja').isSingular(n))).toEqual([false, true, false]);
+    });
+});
+
+describe('error messages of the extension', () => {
+    // Every message the shared choice can make (src/shared/error-text.ts), plus fallbacks to the server's message.
+    const errors: ErrorLike[] = [
+        { code: 'NO_TOKEN', message: 'x' },
+        { code: 'BB_UNAUTHORIZED', message: 'x' },
+        { code: 'BB_FORBIDDEN', message: 'x' },
+        { code: 'BB_FORBIDDEN', message: 'x', params: { detail: 'Your credentials lack one or more required privilege scopes.' } },
+        { code: 'BB_FORBIDDEN', message: 'x', params: { reason: 'profile-unreadable' } },
+        { code: 'BB_NOT_FOUND', message: 'x', params: { path: '/repositories/acme/x' } },
+        { code: 'BB_NOT_FOUND', message: 'x', params: { reason: 'no-versions' } },
+        { code: 'BB_UNREACHABLE', message: 'x', params: { detail: 'fetch failed' } },
+        { code: 'BB_ERROR', message: 'x', params: { status: 500, path: '/p' } },
+        { code: 'BB_ERROR', message: 'x', params: { status: 500, path: '/p', detail: 'Something broke' } },
+        { code: 'VERSION_UNAVAILABLE', message: 'x', params: { version: 3 } },
+        { code: 'BAD_REQUEST', message: 'x', params: { reason: 'invalid-email' } },
+        { code: 'BAD_REQUEST', message: 'x', params: { reason: 'email-required' } },
+        { code: 'FORBIDDEN', message: 'x' },
+        { code: 'INTERNAL', message: 'x', params: { detail: 'boom' } },
+        { code: 'BAD_REQUEST', message: 'Invalid comparison: from 3 to 2.' },
+        { code: 'BB_ERROR', message: 'Bitbucket redirect refused on /x' },
+        { code: 'NOT_FOUND', message: 'Unknown route: GET /api/x' },
+    ];
+
+    it('same text as the page, in English and in French', () => {
+        for (const error of errors) {
+            expect(extensionErrorText(enT, error), JSON.stringify(error)).toBe(pageErrorText(createTranslator('en'), error));
+            expect(extensionErrorText(frT, error), JSON.stringify(error)).toBe(pageErrorText(createTranslator('fr'), error));
+        }
+    });
+
+    it('errors that only the page can see keep the raw message', () => {
+        expect(extensionErrorText(frT, { code: 'NETWORK', message: 'Raw' })).toBe('Raw');
+        expect(extensionErrorText(frT, { code: 'HTTP_502', message: 'Raw' })).toBe('Raw');
+    });
+});
+
+describe('extension localization files', () => {
+    const manifestText = fs.readFileSync(new URL('../../extension/package.json', import.meta.url), 'utf8');
+    const nls = readJson('extension/package.nls.json') as Record<string, string>;
+    const nlsFr = readJson('extension/package.nls.fr.json') as Record<string, string>;
+    const placeholders = (text: string): string[] => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? '').sort();
+
+    it('package.nls.json (English) and package.nls.fr.json have the same keys, none empty', () => {
+        expect(Object.keys(nlsFr).sort()).toEqual(Object.keys(nls).sort());
+        for (const [key, value] of [...Object.entries(nls), ...Object.entries(nlsFr)]) {
+            expect(value.trim(), key).not.toBe('');
+        }
+    });
+
+    it('every %key% of the manifest is defined, every key is used, and no French text is left in the manifest', () => {
+        const used = [...manifestText.matchAll(/"%([\w.-]+)%"/g)].map((m) => m[1] ?? '');
+        expect(used.length).toBeGreaterThan(10);
+        expect([...new Set(used)].sort()).toEqual(Object.keys(nls).sort());
+        expect(manifestText).not.toMatch(/[àâçéèêëîïôûùüœ«»]/i);
+        const manifest = JSON.parse(manifestText) as { displayName: string; description: string; l10n?: string };
+        expect(manifest.displayName).toBe('%displayName%');
+        expect(manifest.description).toBe('%description%');
+    });
+
+    it('the l10n folder of the manifest holds the French bundle', () => {
+        const manifest = JSON.parse(manifestText) as { l10n?: string };
+        expect(manifest.l10n).toBe('./l10n');
+        expect(fs.existsSync(new URL('../../extension/l10n/bundle.l10n.fr.json', import.meta.url))).toBe(true);
+    });
+
+    /** English messages passed to vscode.l10n.t (or to the `t` the host gives to lib/) in src/extension. */
+    function messagesInCode(): Set<string> {
+        const dir = new URL('../../src/extension/', import.meta.url);
+        const files = fs.readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((file) => file.endsWith('.ts'));
+        const messages = new Set<string>();
+        for (const file of files) {
+            const source = fs.readFileSync(new URL(file, dir), 'utf8');
+            for (const match of source.matchAll(/\bt\(\s*'((?:[^'\\]|\\.)*)'/g)) {
+                messages.add((match[1] ?? '').replace(/\\(.)/g, '$1'));
+            }
+        }
+        return messages;
+    }
+
+    it('every message of the code is translated in the French bundle, with the same placeholders, and nothing else is', () => {
+        const messages = messagesInCode();
+        expect(messages.size).toBeGreaterThan(20);
+        expect(Object.keys(frenchBundle).sort()).toEqual([...messages].sort());
+        for (const [message, french] of Object.entries(frenchBundle)) {
+            expect(french.trim(), message).not.toBe('');
+            expect(placeholders(french), message).toEqual(placeholders(message));
+        }
+    });
+
+    it('placeholders of the manifest texts are kept in French', () => {
+        for (const [key, value] of Object.entries(nls)) {
+            expect(placeholders(nlsFr[key] ?? ''), key).toEqual(placeholders(value));
+        }
     });
 });

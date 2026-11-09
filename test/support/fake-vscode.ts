@@ -1,5 +1,6 @@
 // Faux module « vscode » (vi.mock('vscode', …)) : juste ce qu'utilisent le panneau, « Ouvrir le fichier »
 // et la vue « Mes PR », avec l'enregistrement de ce que l'extension a montré à l'utilisateur.
+import fs from 'node:fs';
 import path from 'node:path';
 
 type Listener<T> = (value: T) => unknown;
@@ -160,9 +161,23 @@ export const window = {
     },
 };
 
+/** VS Code's display language (vscode.env.language). */
+export const env = { language: 'en' };
+
+const frenchBundle = JSON.parse(fs.readFileSync(new URL('../../extension/l10n/bundle.l10n.fr.json', import.meta.url), 'utf8')) as Record<string, string>;
+
+/** vscode.l10n.t: the extension's French bundle when VS Code is in French, `{name}` placeholders filled from args. */
+export const l10n = {
+    t(message: string, args: Record<string, string | number> = {}): string {
+        const text = env.language === 'fr' ? frenchBundle[message] ?? message : message;
+        return text.replace(/\{(\w+)\}/g, (match, name: string) => (name in args ? String(args[name]) : match));
+    },
+};
+
 export function resetFakeVscode(): void {
     for (const list of Object.values(recorded)) {
         list.length = 0;
     }
     workspace.workspaceFolders = [];
+    env.language = 'en';
 }

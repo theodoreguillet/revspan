@@ -1,6 +1,7 @@
 // Route affichée par le panneau : titre de l'onglet, écran déduit des lectures d'API de la page,
 // route sur laquelle VS Code rouvre le panneau après « Recharger la fenêtre ».
 import { isPageRoute, type PanelState } from '../../shared/webview-protocol.ts';
+import type { Translate } from './l10n.ts';
 
 /** Type du panneau webview (createWebviewPanel, sérialiseur, événement d'activation onWebviewPanel:revspan). */
 export const PANEL_VIEW_TYPE = 'revspan';
@@ -13,12 +14,12 @@ const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
 const SCREENS = new Map([['/home', HOME_ROUTE], ['/settings', '/settings']]);
 
 /** Titre de l'onglet pour une route de la page (même règle à l'ouverture et pendant la navigation). */
-export function panelTitle(route: string): string {
+export function panelTitle(t: Translate, route: string): string {
     const match = PR_ROUTE.exec(route);
     if (match) {
         return `PR #${match[3]} · ${match[2]}`;
     }
-    return route.startsWith('/settings') ? 'Revspan · Réglages' : 'Revspan';
+    return route.startsWith('/settings') ? t('Revspan · Settings') : 'Revspan';
 }
 
 /**

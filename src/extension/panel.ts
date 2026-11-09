@@ -2,13 +2,19 @@
 import fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { HostToWebview, WebviewToHost } from '../shared/webview-protocol.ts';
+import { errorPayload } from '../server/errors.ts';
 import type { ExtensionApp } from './app-context.ts';
 import type { DiffDocuments } from './diff-documents.ts';
+import { hostL10n, hostPageLocale } from './host-l10n.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
+import { errorText } from './lib/error-text.ts';
 import { PANEL_VIEW_TYPE, panelTitle, routeOfApiRead } from './lib/panel-route.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
 import { parseWebviewMessage } from './lib/webview-messages.ts';
 import { openLocalFile } from './local-files.ts';
+
+/** Tab title of a page route, in VS Code's display language. */
+const titleOf = (route: string): string => panelTitle(hostL10n().t, route);
 
 export class RevspanPanel {
     private readonly context: vscode.ExtensionContext;
@@ -27,12 +33,12 @@ export class RevspanPanel {
     /** Affiche une route de la page (un seul panneau, réutilisé). */
     show(route: string): void {
         if (this.panel) {
-            this.panel.title = panelTitle(route);
+            this.panel.title = titleOf(route);
             this.panel.reveal();
             void this.post({ type: 'navigate', route });
             return;
         }
-        const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, panelTitle(route), vscode.ViewColumn.Active, {
+        const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, titleOf(route), vscode.ViewColumn.Active, {
             ...this.webviewOptions(),
             retainContextWhenHidden: true,
         });
@@ -60,13 +66,14 @@ export class RevspanPanel {
 
     /** Page, titre, icône et écouteurs du panneau. */
     private attach(panel: vscode.WebviewPanel, route: string): void {
-        panel.title = panelTitle(route);
+        panel.title = titleOf(route);
         panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon.svg');
         const indexHtml = fs.readFileSync(vscode.Uri.joinPath(this.webDir, 'index.html').fsPath, 'utf8');
         panel.webview.html = buildWebviewHtml(indexHtml, {
             assetsBaseUri: panel.webview.asWebviewUri(this.webDir).toString(),
             cspSource: panel.webview.cspSource,
             initialRoute: route,
+            locale: hostPageLocale(),
         });
         // Écouteurs propres à ce panneau, libérés à sa fermeture (et non gardés jusqu'à l'arrêt de l'extension).
         const listeners: vscode.Disposable[] = [];
@@ -96,7 +103,7 @@ export class RevspanPanel {
                     // Titre mis à jour dès la demande : les lectures suivent l'ordre de navigation dans la page.
                     const route = routeOfApiRead(message.method, message.path);
                     if (this.panel && route) {
-                        this.panel.title = panelTitle(route);
+                        this.panel.title = titleOf(route);
                     }
                     const result = await callApi(this.app.http, message);
                     await this.post({ type: 'response', id: message.id, ...result });
@@ -112,9 +119,9 @@ export class RevspanPanel {
             }
         } catch (error) {
             if (message.type === 'request') {
-                await this.post({ type: 'response', id: message.id, status: 500, body: { error: { code: 'INTERNAL', message: (error as Error).message } } });
+                await this.post({ type: 'response', id: message.id, status: 500, body: { error: errorPayload(error) } });
             } else {
-                void vscode.window.showErrorMessage(`Revspan : ${(error as Error).message}`);
+                void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: errorText(hostL10n().t, errorPayload(error)) }));
             }
         }
     }

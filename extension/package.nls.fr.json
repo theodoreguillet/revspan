@@ -1,0 +1,15 @@
+{
+    "displayName": "Revspan for Bitbucket",
+    "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push, dans VS Code",
+    "capabilities.untrustedWorkspaces": "Dans un espace de travail non approuvé, la liste des dépôts suivis définie par l'espace de travail est ignorée.",
+    "capabilities.virtualWorkspaces": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne.",
+    "command.openHome": "Ouvrir l'accueil",
+    "command.category": "Revspan",
+    "command.openPr": "Ouvrir une PR (URL)",
+    "command.openSettings": "Réglages (jeton, dépôts)",
+    "command.refresh": "Actualiser",
+    "configuration.repositories": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Revspan.",
+    "view.home": "Mes PR",
+    "welcome.noToken": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:revspan.openSettings)",
+    "welcome.noRepos": "Aucun dépôt suivi.\n[Choisir les dépôts](command:revspan.openSettings)"
+}

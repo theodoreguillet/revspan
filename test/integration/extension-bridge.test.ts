@@ -17,7 +17,7 @@ import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
 import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
-import { FakeWebviewPanel, Uri, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
+import { FakeWebviewPanel, Uri, env, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
 
 vi.mock('vscode', () => import('../support/fake-vscode.ts'));
 
@@ -138,12 +138,26 @@ describe('panneau de l\'extension (VS Code simulé)', () => {
         const { panel } = open(`/pr/${WS}/${REPO}/${FAKE_PRS.main}`);
         expect(panel.title).toBe(prTitle);
         panel.receive({ type: 'request', id: 1, method: 'GET', path: '/api/settings' });
-        await vi.waitFor(() => expect(panel.title).toBe('Revspan · Réglages'));
+        await vi.waitFor(() => expect(panel.title).toBe('Revspan · Settings'));
         panel.receive({ type: 'request', id: 2, method: 'GET', path: '/api/home' });
         await vi.waitFor(() => expect(panel.title).toBe('Revspan'));
         panel.receive({ type: 'request', id: 3, method: 'GET', path: `/api/pr/${WS}/${REPO}/${FAKE_PRS.main}` });
         await vi.waitFor(() => expect(panel.title).toBe(prTitle));
         await vi.waitFor(() => expect(panel.posted).toHaveLength(3), { timeout: 5000 });
+    });
+
+    it('follows VS Code\'s display language: page language passed to the page, tab title and warnings', async () => {
+        const english = open('/settings').panel;
+        expect(english.webview.html).toContain('<meta name="revspan-locale" content="en">');
+        expect(english.title).toBe('Revspan · Settings');
+        english.dispose();
+
+        env.language = 'fr';
+        const { panel } = open('/settings');
+        expect(panel.webview.html).toContain('<meta name="revspan-locale" content="fr">');
+        expect(panel.title).toBe('Revspan · Réglages');
+        panel.receive({ type: 'openFile', ref, path: 'README.md', line: null });
+        await vi.waitFor(() => expect(recorded.warnings).toEqual([`Dépôt « ${WS}/${REPO} » introuvable dans l'espace de travail (ni remote Bitbucket, ni dossier ${REPO}, ni worktree).`]));
     });
 
     it('rouvert par VS Code après rechargement : même construction que show(), sur la route enregistrée', async () => {

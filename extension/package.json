@@ -1,7 +1,7 @@
 {
     "name": "revspan",
-    "displayName": "Revspan for Bitbucket",
-    "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push, dans VS Code",
+    "displayName": "%displayName%",
+    "description": "%description%",
     "version": "2.0.0",
     "publisher": "theodoreguillet",
     "license": "MIT",
@@ -28,22 +28,23 @@
     "capabilities": {
         "untrustedWorkspaces": {
             "supported": "limited",
-            "description": "Dans un espace de travail non approuvé, la liste des dépôts suivis définie par l'espace de travail est ignorée.",
+            "description": "%capabilities.untrustedWorkspaces%",
             "restrictedConfigurations": ["revspan.repositories"]
         },
         "virtualWorkspaces": {
             "supported": "limited",
-            "description": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne."
+            "description": "%capabilities.virtualWorkspaces%"
         }
     },
     "activationEvents": ["onWebviewPanel:revspan"],
     "main": "./dist/extension.cjs",
+    "l10n": "./l10n",
     "contributes": {
         "commands": [
-            { "command": "revspan.openHome", "title": "Ouvrir l'accueil", "category": "Revspan", "icon": "$(home)" },
-            { "command": "revspan.openPr", "title": "Ouvrir une PR (URL)", "category": "Revspan", "icon": "$(link-external)" },
-            { "command": "revspan.openSettings", "title": "Réglages (jeton, dépôts)", "category": "Revspan", "icon": "$(gear)" },
-            { "command": "revspan.refresh", "title": "Actualiser", "category": "Revspan", "icon": "$(refresh)" }
+            { "command": "revspan.openHome", "title": "%command.openHome%", "category": "%command.category%", "icon": "$(home)" },
+            { "command": "revspan.openPr", "title": "%command.openPr%", "category": "%command.category%", "icon": "$(link-external)" },
+            { "command": "revspan.openSettings", "title": "%command.openSettings%", "category": "%command.category%", "icon": "$(gear)" },
+            { "command": "revspan.refresh", "title": "%command.refresh%", "category": "%command.category%", "icon": "$(refresh)" }
         ],
         "configuration": {
             "title": "Revspan",
@@ -52,7 +53,7 @@
                     "type": "array",
                     "items": { "type": "string" },
                     "default": [],
-                    "markdownDescription": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Revspan."
+                    "markdownDescription": "%configuration.repositories%"
                 }
             }
         },
@@ -63,18 +64,18 @@
         },
         "views": {
             "revspan": [
-                { "id": "revspan.home", "name": "Mes PR" }
+                { "id": "revspan.home", "name": "%view.home%" }
             ]
         },
         "viewsWelcome": [
             {
                 "view": "revspan.home",
-                "contents": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:revspan.openSettings)",
+                "contents": "%welcome.noToken%",
                 "when": "revspan.needsToken"
             },
             {
                 "view": "revspan.home",
-                "contents": "Aucun dépôt suivi.\n[Choisir les dépôts](command:revspan.openSettings)",
+                "contents": "%welcome.noRepos%",
                 "when": "revspan.noRepos && !revspan.needsToken"
             }
         ],

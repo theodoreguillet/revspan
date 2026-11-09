@@ -25,7 +25,7 @@ const METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE']);
 
 export async function callApi(app: InMemoryApp, { method, path, body }: ApiCall): Promise<ApiResult> {
     if (!METHODS.has(method) || !path.startsWith('/api/')) {
-        return { status: 400, body: { error: { code: 'BAD_REQUEST', message: `Requête refusée : ${method} ${path}` } } };
+        return { status: 400, body: { error: { code: 'BAD_REQUEST', message: `Request refused: ${method} ${path}` } } };
     }
     const init: RequestInit = { method, headers: { 'Content-Type': 'application/json', [MUTATION_HEADER]: '1' } };
     if (method !== 'GET') {
