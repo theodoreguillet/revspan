@@ -184,18 +184,21 @@ export class PrService {
      */
     private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>): Promise<T> {
         let loaded = await this.load(ref);
+        const purged = new Set<string>();
         for (;;) {
             try {
                 return await run(loaded, purgeAwareSource(loaded.client, ref, loaded.versions));
             } catch (error) {
-                if (!(error instanceof VersionPurgedError)) {
+                // Garde-fou : une version déjà oubliée qui revient (Bitbucket se contredit) arrête la reprise (410).
+                if (!(error instanceof VersionPurgedError) || purged.has(error.version.hash)) {
                     throw error;
                 }
-                const readable = loaded.versions.filter(isReadable).length;
+                const { hash } = error.version;
+                purged.add(hash);
                 this.forgetVersion(ref, loaded, error.version);
                 loaded = await this.load(ref);
-                // Garde-fou : si Bitbucket relit quand même le commit, on s'arrête là (410) au lieu de boucler.
-                if (loaded.versions.filter(isReadable).length >= readable) {
+                // Si Bitbucket relit quand même ce commit (contenus en 404), on s'arrête là (410) au lieu de boucler.
+                if (loaded.versions.some((v) => v.hash === hash && isReadable(v))) {
                     throw error;
                 }
             }

@@ -19,8 +19,8 @@ interface Env {
 
 let env: Env | null = null;
 
-const startRevspan = (dir: string, fake: FakeBitbucket): Promise<RunningApp> =>
-    startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
+const startRevspan = (dir: string, fake: FakeBitbucket, fetchImpl: typeof fetch = fetch): Promise<RunningApp> =>
+    startApp({ port: 0, fetchImpl, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
 
 /** Environnement neuf ; avec jeton configuré par défaut. */
 async function setup({ withToken = true } = {}): Promise<Env> {
@@ -35,9 +35,9 @@ async function setup({ withToken = true } = {}): Promise<Env> {
 }
 
 /** Relance Revspan sur la même configuration : cache mémoire vide, cache disque conservé. */
-async function restart(current: Env): Promise<void> {
+async function restart(current: Env, fetchImpl?: typeof fetch): Promise<void> {
     await current.app.close();
-    current.app = await startRevspan(current.dir, current.fake);
+    current.app = await startRevspan(current.dir, current.fake, fetchImpl);
 }
 
 afterEach(async () => {
@@ -231,6 +231,34 @@ describe('lecture d\'une PR', () => {
         expect(refused.status).toBe(410);
         expect(refused.body.error).toMatchObject({ code: 'VERSION_UNAVAILABLE' });
         expect((await detail(FAKE_PRS.mine)).versions.map((v) => v.available)).toEqual([true, false, true]);
+    });
+
+    it('version effacée détectée alors qu\'une autre devient lisible au rechargement : pas de 410 à tort', async () => {
+        const current = await setup();
+        const route = prPath(FAKE_PRS.mine);
+        await api('GET', `${route}/summary`);
+        current.fake.data.repo.commits.delete((await detail(FAKE_PRS.mine)).versions[1]?.hash ?? '');
+        pushVersion(current.fake.data, FAKE_PRS.mine, {
+            commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
+        });
+        pushVersion(current.fake.data, FAKE_PRS.mine, {
+            commit: 'mine:v4', from: 'mine:v3', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\ny4\n' }, date: '2026-10-21T09:00:00Z',
+        });
+        // Le commit de v4 répond 404 au premier chargement seulement : comme un push arrivé entre les deux chargements,
+        // le rechargement compte une version lisible de plus en même temps que v2 devient indisponible.
+        const v4 = current.fake.data.prs.get(FAKE_PRS.mine)?.pr.source?.commit?.hash ?? '';
+        let pending = true;
+        await restart(current, async (input, init) => {
+            if (pending && String(input).endsWith(`/commit/${v4}`)) {
+                pending = false;
+                return new Response(JSON.stringify({ error: { message: 'pas encore' } }), { status: 404, headers: { 'content-type': 'application/json' } });
+            }
+            return fetch(input, init);
+        });
+
+        const summary = await api<Summary>('GET', `${route}/summary`);
+        expect(summary.status).toBe(200);
+        expect(summary.body.versions.map((s) => [s.kind, s.since ?? null])).toEqual([['creation', null], ['unavailable', null], ['code', 1], ['code', null]]);
     });
 
     it('fichier absent d\'une version encore lisible (ajouté à travers un rebase) : comparaison normale', async () => {
