@@ -5,7 +5,7 @@ import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import type { Range } from '../lib/selection.ts';
 import { t } from '../i18n/index.ts';
-import { api } from '../services/api.ts';
+import { api, ApiError } from '../services/api.ts';
 import { showError } from './useErrors.ts';
 
 export interface CompareParams extends Range {
@@ -34,6 +34,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     let summaryRequest = 0;
     /** Incremented by each forced diff reload: an earlier response writes neither the cache nor the diff. */
     let generation = 0;
+    /** Versions a comparison found erased (410) that already triggered a detail reload: at most once each, no loop. */
+    const reloadedForPurge = new Set<number>();
 
     async function loadSummary(): Promise<void> {
         const request = ++summaryRequest;
@@ -103,6 +105,13 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 compare.value = null;
                 compareError.value = error;
                 showError(error);
+            }
+            // A bound erased by Bitbucket since the detail was loaded: the reloaded detail marks it unavailable, the
+            // range moves to a readable version and the diff of the new range is loaded.
+            const purged = error instanceof ApiError && error.code === 'VERSION_UNAVAILABLE' ? error.params.version : undefined;
+            if (purged !== undefined && !reloadedForPurge.has(purged)) {
+                reloadedForPurge.add(purged);
+                await reloadDetail();
             }
         }
         if (current && keyOf(current) === key) {

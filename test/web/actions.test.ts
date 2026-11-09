@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, defineComponent, effectScope, nextTick } from 'vue';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import type { Comparison, FileDiff, PrDetail, Summary, Version } from '../../src/shared/api.ts';
 import { useDiffOptions } from '../../src/web/composables/useDiffOptions.ts';
 import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
+import { useRangeSelection } from '../../src/web/composables/useRangeSelection.ts';
 import { useReviewActions } from '../../src/web/composables/useReviewActions.ts';
 import { setLocale } from '../../src/web/i18n/index.ts';
+import { ApiError } from '../../src/web/services/api.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
     api: { pr: vi.fn(), approve: vi.fn(), summary: vi.fn(), compare: vi.fn(), viewed: vi.fn(), comment: vi.fn() },
     showError: vi.fn(),
 }));
-vi.mock('../../src/web/services/api.ts', () => ({ api }));
+vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
 vi.mock('../../src/web/composables/useErrors.ts', () => ({ showError }));
 
 const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
@@ -226,6 +230,59 @@ describe('comparison in flight and forced reload', () => {
         await load.loadCompare(params);
         expect(load.compare.value).toBe(fresher);
         expect(api.compare).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('comparison refused because a bound was erased by Bitbucket (410 VERSION_UNAVAILABLE)', () => {
+    let detail: PrDetail;
+    const Blank = defineComponent({ render: () => null });
+    const gone = (version: number): ApiError => new ApiError(410, 'VERSION_UNAVAILABLE', `Version v${version} is no longer available.`, { version });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        detail = prLong().data;
+    });
+
+    /** PR data and range on a real router (in-memory history), as under PrLoaded. */
+    async function setup(query: string) {
+        const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/pr/:ws/:repo/:id', name: 'pr', component: Blank }] });
+        await router.push(`/pr/${ref.workspace}/${ref.repo}/${ref.id}${query}`);
+        const app = createApp(Blank).use(router);
+        const scope = effectScope();
+        const load = usePrLoad(ref, detail);
+        const range = app.runWithContext(() => scope.run(() => useRangeSelection(ref, load.detail)));
+        if (!range) {
+            throw new Error('range not created');
+        }
+        return { load, range, current: (): [number, number] => [range.from.value, range.to.value], stop: () => scope.stop() };
+    }
+
+    it('detail reloaded once: the erased bound is repaired, and a second refusal for it does not reload again', async () => {
+        const purged = { ...detail, versions: detail.versions.map((v) => (v.index === 7 ? { ...v, available: false } : v)) };
+        api.pr.mockResolvedValue(purged);
+        api.compare.mockRejectedValue(gone(7));
+        const { load, current, stop } = await setup('?from=7&to=10');
+        expect(current()).toEqual([7, 10]);
+
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        expect(api.pr).toHaveBeenCalledTimes(1);
+        expect(load.detail.value).toBe(purged);
+        await nextTick();
+        expect(current()).toEqual([6, 10]);
+
+        // The server still refuses a range on v7 (stale cache): no reload loop.
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        expect(api.pr).toHaveBeenCalledTimes(1);
+        stop();
+    });
+
+    it('other errors: no detail reload', async () => {
+        api.compare.mockRejectedValue(new ApiError(502, 'BB_ERROR', 'Bitbucket error.'));
+        const { load, stop } = await setup('?from=7&to=10');
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        expect(api.pr).not.toHaveBeenCalled();
+        expect(showError).toHaveBeenCalledTimes(1);
+        stop();
     });
 });
 
