@@ -233,6 +233,17 @@ describe('lecture d\'une PR', () => {
         expect((await detail(FAKE_PRS.mine)).versions.map((v) => v.available)).toEqual([true, false, true]);
     });
 
+    it('fichier absent d\'une version encore lisible (ajouté à travers un rebase) : comparaison normale', async () => {
+        const { fake } = await setup();
+        pushVersion(fake.data, FAKE_PRS.rebaseOnly, {
+            commit: 'rebase:v3', from: 'rebase:v2', base: 'rebase:m1', changes: { 'src/Extra.ts': 'e\n' }, date: '2026-10-06T09:00:00Z',
+        });
+        const { status, body } = await api<Comparison>('GET', `${prPath(FAKE_PRS.rebaseOnly)}/compare?from=1&to=3`);
+        expect(status).toBe(200);
+        expect(body.files.map((f) => `${f.status}:${f.path}`)).toEqual(['added:src/Extra.ts']);
+        expect((await detail(FAKE_PRS.rebaseOnly)).versions.every((v) => v.available)).toBe(true);
+    });
+
     it('version effacée après mise en cache : un contenu en 404 la rend indisponible (410), sans fichier perdu', async () => {
         const { fake } = await setup();
         await api('GET', `${prPath()}/summary`);
