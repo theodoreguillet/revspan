@@ -121,15 +121,17 @@ function finishFile(entry: DiffstatEntry, oldSide: Side, newSide: Side, options:
         hunks: [],
         threads: [],
     };
+    // Contenu identique : rien à montrer, sauf un renommage (gardé, comme pour un fichier texte).
+    const unchanged = status === 'modified' && sameSide(oldSide, newSide);
     if (oldSide.flag || newSide.flag) {
-        if (sameSide(oldSide, newSide)) {
+        if (unchanged) {
             return null;
         }
         const flag = oldSide.flag ?? newSide.flag;
         return { ...base, binary: flag !== 'tooLarge', tooLarge: flag === 'tooLarge', added: entry.added, removed: entry.removed };
     }
     if (oldSide.lines.length > MAX_LINES || newSide.lines.length > MAX_LINES) {
-        return sameSide(oldSide, newSide) ? null : { ...base, tooLarge: true, added: entry.added, removed: entry.removed };
+        return unchanged ? null : { ...base, tooLarge: true, added: entry.added, removed: entry.removed };
     }
     const ops = diffLines(oldSide.lines, newSide.lines);
     const { added, removed } = diffStats(ops);

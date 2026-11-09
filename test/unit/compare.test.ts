@@ -131,6 +131,24 @@ describe('compareVersions', () => {
             expect((await summarizeVersion(src, rebased, 2)).kind).toBe('code');
         });
 
+        it.each([
+            ['binaire', { binary: true, fingerprint: 'même' }],
+            ['trop gros', { tooLarge: true, fingerprint: 'même' }],
+            ['texte énorme', { text: `${Array.from({ length: 70000 }, (_, i) => `l${i}`).join('\n')}\n` }],
+        ] as [string, FileContent][])('%s renommé sans changement de contenu : reste listé comme renommé', async (_, content) => {
+            const src: CompareSource = {
+                diffstat: async (n, o) => (n === o ? [] : [{ status: 'renamed', oldPath: 'logo.png', newPath: 'assets/logo.png', added: 0, removed: 0 }]),
+                content: async (hash, path) => ((hash === 'v1' && path === 'logo.png') || (hash === 'v2' && path === 'assets/logo.png') ? content : { missing: true }),
+            };
+            const sameBase: CompareVersion[] = [
+                { index: 1, hash: 'v1', base: 'b', message: '', isRebase: false, messageChanged: false },
+                { index: 2, hash: 'v2', base: 'b', message: '', isRebase: false, messageChanged: false },
+            ];
+            const result = await compareVersions(src, sameBase, 1, 2);
+            expect(result.files.map((f) => [f.status, f.oldPath, f.path])).toEqual([['renamed', 'logo.png', 'assets/logo.png']]);
+            expect((await summarizeVersion(src, sameBase, 2)).kind).toBe('code');
+        });
+
         it('entrées de cache sans empreinte (anciennes) : jamais jugées égales, comme avant', async () => {
             const src = singleFile('logo.png', { b1: image('binary'), v1: image('binary'), b2: image('binary'), v2: image('binary') });
             expect(paths((await compareVersions(src, rebased, 1, 2)).files)).toEqual(['logo.png']);
