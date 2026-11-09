@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Home, PrCard } from '../../src/shared/api.ts';
 import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib/webview-html.ts';
-import { currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
+import { bitbucketRepoOfRemote, currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
@@ -204,23 +204,117 @@ describe('dépôt local', () => {
         expect(currentBranch('/tmp/wt/demo', fs)).toBe('feature/demo');
     });
 
+    const target = { workspace: 'acme', repo: 'records-api' };
+
     it('préfère un worktree enregistré par git sur la branche de la PR, où qu\'il soit', () => {
-        expect(findLocalRepo(['/dev'], 'records-api', 'feature/demo', fs))
+        expect(findLocalRepo(['/dev'], target, 'feature/demo', fs))
             .toEqual({ dir: '/tmp/wt/demo', branch: 'feature/demo', onPrBranch: true });
     });
 
     it('espace de travail ouvert sur le worktree lui-même : reconnu par sa copie principale', () => {
-        expect(findLocalRepo(['/tmp/wt/demo'], 'records-api', 'feature/demo', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: true });
-        expect(findLocalRepo(['/tmp/wt/demo'], 'records-api', 'feature/autre', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: false });
+        expect(findLocalRepo(['/tmp/wt/demo'], target, 'feature/demo', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: true });
+        expect(findLocalRepo(['/tmp/wt/demo'], target, 'feature/autre', fs)).toMatchObject({ dir: '/tmp/wt/demo', onPrBranch: false });
     });
 
     it('sinon la copie principale, signalée hors branche', () => {
-        expect(findLocalRepo(['/dev'], 'records-api', 'feature/autre', fs)).toEqual({ dir: '/dev/records-api', branch: 'main', onPrBranch: false });
-        expect(findLocalRepo(['/dev/records-api'], 'records-api', null, fs)).toMatchObject({ dir: '/dev/records-api' });
+        expect(findLocalRepo(['/dev'], target, 'feature/autre', fs)).toEqual({ dir: '/dev/records-api', branch: 'main', onPrBranch: false });
+        expect(findLocalRepo(['/dev/records-api'], target, null, fs)).toMatchObject({ dir: '/dev/records-api' });
     });
 
     it('null si le dépôt n\'est pas dans l\'espace de travail', () => {
-        expect(findLocalRepo(['/dev'], 'records-import', null, fs)).toBeNull();
+        expect(findLocalRepo(['/dev'], { workspace: 'acme', repo: 'records-import' }, null, fs)).toBeNull();
+    });
+
+    /** Copie git (dossier .git) avec sa branche et ses remotes. */
+    const clone = (dir: string, branch: string, urls: string[]): Record<string, string | null> => ({
+        [dir]: null,
+        [`${dir}/.git`]: null,
+        [`${dir}/.git/HEAD`]: `ref: refs/heads/${branch}\n`,
+        [`${dir}/.git/config`]: ['[core]', '\tbare = false', ...urls.flatMap((url, i) => [`[remote "r${i}"]`, `\turl = ${url}`, `\tfetch = +refs/heads/*:refs/remotes/r${i}/*`])].join('\n'),
+    });
+
+    it('URL de remote Bitbucket : https (avec ou sans utilisateur), ssh, scp ; .git facultatif', () => {
+        const repo = { workspace: 'acme', repo: 'records-api' };
+        for (const url of [
+            'https://bitbucket.org/acme/records-api.git', 'https://camille@bitbucket.org/acme/records-api', 'git@bitbucket.org:acme/records-api.git',
+            'ssh://git@bitbucket.org/acme/records-api.git', 'https://bitbucket.org/acme/records-api/', ' git@bitbucket.org:acme/records-api ',
+        ]) {
+            expect(bitbucketRepoOfRemote(url), url).toEqual(repo);
+        }
+        for (const url of ['https://github.com/acme/records-api.git', 'https://bitbucket.org.evil.example/acme/records-api', 'git@bitbucket.org:acme/records-api/x.git', 'https://bitbucket.org/acme', '/srv/git/records-api.git']) {
+            expect(bitbucketRepoOfRemote(url), url).toBeNull();
+        }
+    });
+
+    it('copie renommée reconnue par l\'une de ses remotes', () => {
+        const renamed = fakeFs({
+            '/dev': null,
+            ...clone('/dev/api', 'main', ['https://github.com/camille/mirror.git', 'git@bitbucket.org:acme/records-api.git']),
+            ...clone('/dev/other', 'main', ['git@bitbucket.org:acme/records-import.git']),
+        });
+        expect(findLocalRepo(['/dev'], target, null, renamed)).toEqual({ dir: '/dev/api', branch: 'main', onPrBranch: false });
+        expect(findLocalRepo(['/dev'], { workspace: 'ACME', repo: 'Records-API' }, null, renamed)).toMatchObject({ dir: '/dev/api' });
+    });
+
+    it('dépôts homonymes de workspaces différents : la remote <workspace>/<dépôt> exacte l\'emporte sur le nom du dossier', () => {
+        const homonyms = fakeFs({
+            '/work-a': null,
+            '/work-b': null,
+            ...clone('/work-a/records-api', 'feature/demo', ['https://bitbucket.org/other/records-api.git']),
+            ...clone('/work-b/records-api', 'main', ['https://bitbucket.org/acme/records-api.git']),
+        });
+        expect(findLocalRepo(['/work-a', '/work-b'], target, 'feature/demo', homonyms)).toMatchObject({ dir: '/work-b/records-api', onPrBranch: false });
+        expect(findLocalRepo(['/work-a', '/work-b'], { workspace: 'other', repo: 'records-api' }, null, homonyms)).toMatchObject({ dir: '/work-a/records-api' });
+        // Aucune remote correspondante : repli sur le nom du dossier.
+        expect(findLocalRepo(['/work-a', '/work-b'], { workspace: 'fork', repo: 'records-api' }, null, homonyms)).toMatchObject({ dir: '/work-a/records-api' });
+    });
+
+    // Dépôt bare et ses worktrees (git clone --bare + git worktree add) : commondir mène au dépôt commun.
+    const bare = (config: string): Record<string, string | null> => ({
+        '/dev/records-api.git': null,
+        '/dev/records-api.git/HEAD': 'ref: refs/heads/main\n',
+        '/dev/records-api.git/config': config,
+        '/dev/records-api.git/worktrees': null,
+        '/dev/records-api.git/worktrees/main': null,
+        '/dev/records-api.git/worktrees/main/gitdir': '/dev/wt/main/.git\n',
+        '/dev/records-api.git/worktrees/main/commondir': '../..\n',
+        '/dev/records-api.git/worktrees/main/HEAD': 'ref: refs/heads/main\n',
+        '/dev/records-api.git/worktrees/demo': null,
+        '/dev/records-api.git/worktrees/demo/gitdir': '/tmp/demo/.git\n',
+        '/dev/records-api.git/worktrees/demo/commondir': '../..\n',
+        '/dev/records-api.git/worktrees/demo/HEAD': 'ref: refs/heads/feature/demo\n',
+        '/dev/wt': null,
+        '/dev/wt/main': null,
+        '/dev/wt/main/.git': 'gitdir: /dev/records-api.git/worktrees/main\n',
+        '/tmp/demo': null,
+        '/tmp/demo/.git': 'gitdir: /dev/records-api.git/worktrees/demo\n',
+    });
+
+    it('worktree d\'un dépôt bare : remonté vers le dépôt commun et ses autres worktrees (remote ou nom du dépôt bare)', () => {
+        const withRemote = fakeFs(bare('[core]\n\tbare = true\n[remote "origin"]\n\turl = git@bitbucket.org:acme/records-api.git\n'));
+        expect(findLocalRepo(['/dev/wt/main'], target, 'feature/demo', withRemote)).toEqual({ dir: '/tmp/demo', branch: 'feature/demo', onPrBranch: true });
+        expect(findLocalRepo(['/dev/wt/main'], target, 'feature/autre', withRemote)).toMatchObject({ dir: '/dev/wt/main', onPrBranch: false });
+        const withoutRemote = fakeFs(bare('[core]\n\tbare = true\n'));
+        expect(findLocalRepo(['/dev/wt/main'], target, 'feature/demo', withoutRemote)).toMatchObject({ dir: '/tmp/demo', onPrBranch: true });
+    });
+
+    it('dossier qui pointe vers un dépôt bare (.bare) : ses worktrees, jamais le dossier lui-même', () => {
+        const container = fakeFs({
+            '/src': null,
+            '/src/records-api': null,
+            '/src/records-api/.git': 'gitdir: ./.bare\n',
+            '/src/records-api/.bare': null,
+            '/src/records-api/.bare/HEAD': 'ref: refs/heads/main\n',
+            '/src/records-api/.bare/config': '[core]\n\tbare = true\n[remote "origin"]\n\turl = https://bitbucket.org/acme/records-api.git\n',
+            '/src/records-api/.bare/worktrees': null,
+            '/src/records-api/.bare/worktrees/main': null,
+            '/src/records-api/.bare/worktrees/main/gitdir': '/src/records-api/main/.git\n',
+            '/src/records-api/.bare/worktrees/main/commondir': '../..\n',
+            '/src/records-api/.bare/worktrees/main/HEAD': 'ref: refs/heads/main\n',
+            '/src/records-api/main': null,
+            '/src/records-api/main/.git': 'gitdir: /src/records-api/.bare/worktrees/main\n',
+        });
+        expect(findLocalRepo(['/src'], target, 'feature/autre', container)).toEqual({ dir: '/src/records-api/main', branch: 'main', onPrBranch: false });
     });
 });
 

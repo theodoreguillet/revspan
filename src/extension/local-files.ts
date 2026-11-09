@@ -27,9 +27,9 @@ const nodeFs: RepoFs = {
 export async function openLocalFile(prs: PrService, ref: PrRef, filePath: string, line: number | null): Promise<void> {
     const roots = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
     const branch = await prs.detail(ref).then((d) => d.pr.sourceBranch, () => null);
-    const repo = findLocalRepo(roots, ref.repo, branch, nodeFs);
+    const repo = findLocalRepo(roots, ref, branch, nodeFs);
     if (!repo) {
-        void vscode.window.showWarningMessage(`Dépôt « ${ref.repo} » introuvable dans l'espace de travail (ni dossier ${ref.repo}, ni worktree).`);
+        void vscode.window.showWarningMessage(`Dépôt « ${ref.workspace}/${ref.repo} » introuvable dans l'espace de travail (ni remote Bitbucket, ni dossier ${ref.repo}, ni worktree).`);
         return;
     }
     const file = fileInRepo(repo.dir, filePath);
