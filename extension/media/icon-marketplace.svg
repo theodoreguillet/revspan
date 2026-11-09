@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Source de icon.png (Marketplace) : frise de quatre versions, un arc relie les deux versions comparées. -->
+  <!-- Source of icon.png (Marketplace): a strip of four versions, an arc links the two compared versions. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1f2b46"/>
