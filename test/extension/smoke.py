@@ -3,6 +3,9 @@
 Pilote VS Code par son port de débogage (Playwright connect_over_cdp) : vue « Mes PR », panneau de la PR,
 « Diff VS Code » (éditeur de diff natif), « Ouvrir le fichier » (dépôt local), titre de l'onglet pendant la
 navigation et panneau rouvert après « Recharger la fenêtre ».
+
+Runs in English: the isolated profile has no language pack, so VS Code's display language is English. The page
+must follow it (meta set by the host), even when the webview's own browser language is another one.
 """
 import json
 import os
@@ -86,7 +89,9 @@ def run() -> None:
         page.screenshot(path=f'{SHOTS}/02-mes-pr.png')
         tree_text = ' | '.join(page.locator('.pane-body .monaco-list-row').all_inner_texts())
         check('arbre « Mes PR » : PR principale listée', row.count() > 0, tree_text[:400])
-        check('arbre « Mes PR » : groupes', 'À relire' in tree_text and 'Mes PR' in tree_text, tree_text[:400])
+        check('arbre « Mes PR » : groupes', 'To review' in tree_text and 'My PRs' in tree_text, tree_text[:400])
+        view_title = ' '.join(page.locator('.pane-header .title').all_text_contents())
+        check('view title localized from package.nls.json', 'my prs' in view_title.lower(), view_title)
 
         # Panneau de la PR.
         row.click()
@@ -97,7 +102,19 @@ def run() -> None:
         frame.wait_for_selector('.rv-v', timeout=60000)
         readout = frame.locator('.rv-readout').first.inner_text()
         check('panneau : frise des 6 versions + master', frame.locator('.rv-v').count() == 7, f'{frame.locator(".rv-v").count()} nœuds')
-        check('panneau : comparaison depuis ma relecture (v2)', 'par rapport à v2' in readout, readout)
+        check('panneau : comparaison depuis ma relecture (v2)', 'against v2' in readout, readout)
+        language = frame.evaluate("""() => ({
+            page: document.documentElement.lang,
+            host: document.querySelector('meta[name="revspan-locale"]')?.content ?? null,
+            browser: navigator.language,
+        })""")
+        workbench_lang = page.evaluate('document.documentElement.lang')
+        check('page language = VS Code display language passed by the host',
+              language['page'] == language['host'] == 'en' and workbench_lang.startswith('en'),
+              f'{language}, workbench {workbench_lang}')
+        check('page follows the host, not the webview browser language',
+              language['browser'].lower().startswith('fr') and language['page'] == 'en',
+              f'{language}')
         frame.wait_for_selector('.rv-file', timeout=30000)
         tabs = [t for t in tab_titles(page) if t]
         check('panneau : onglet titré « PR #42 »', any('PR #42' in t for t in tabs), str(tabs))
@@ -108,8 +125,8 @@ def run() -> None:
         # Diff natif de VS Code sur le premier fichier.
         file_block = frame.locator('.rv-file').first
         file_path = file_block.locator('.rv-fh').first.inner_text()
-        diff_button = file_block.get_by_role('button', name='Diff VS Code')
-        check('panneau : bouton « Diff VS Code » présent', diff_button.count() > 0, file_path)
+        diff_button = file_block.get_by_role('button', name='VS Code diff')
+        check('panneau : bouton « VS Code diff » présent', diff_button.count() > 0, file_path)
         if diff_button.count():
             diff_button.first.click()
             opened = wait_until(lambda: [t for t in tab_titles(page) if '→' in t], 30)
@@ -120,8 +137,8 @@ def run() -> None:
         # Retour au panneau puis « Ouvrir le fichier » (dépôt local simulé sur la branche de la PR).
         page.locator('.tabs-container .tab', has_text='PR #42').first.click()
         frame = wait_until(lambda: app_frame(page), 30)
-        open_button = frame.locator('.rv-file').first.get_by_role('button', name='Ouvrir le fichier') if frame else None
-        check('panneau : bouton « Ouvrir le fichier » présent', bool(open_button and open_button.count()))
+        open_button = frame.locator('.rv-file').first.get_by_role('button', name='Open file') if frame else None
+        check('panneau : bouton « Open file » présent', bool(open_button and open_button.count()))
         if open_button and open_button.count():
             open_button.first.click()
             name = file_path.strip().split('/')[-1].split()[0] if file_path else 'Action.ts'

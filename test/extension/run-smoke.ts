@@ -62,6 +62,8 @@ Object.assign(env, {
 });
 
 const port = 9300 + Math.floor(Math.random() * 600);
+// VS Code stays in English (no language pack in this profile) while Chromium's --lang switch gives the webview
+// a French browser language: the page must follow VS Code's language passed by the host, not the browser's.
 const code = spawn(vscodeBinary, [
     '--user-data-dir', userData,
     '--extensions-dir', path.join(tmp, 'extensions'),
@@ -72,6 +74,7 @@ const code = spawn(vscodeBinary, [
     '--disable-telemetry',
     '--new-window',
     `--remote-debugging-port=${port}`,
+    '--lang=fr-FR',
     workspace,
 ], { env, stdio: ['ignore', 'ignore', 'pipe'] });
 let stderr = '';
