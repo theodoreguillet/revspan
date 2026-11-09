@@ -1,4 +1,4 @@
-// Bandeau de reprise : ce qui a changé depuis ma dernière relecture.
+// Resume banner: what changed since my last review.
 import type { PrDetail, Version, VersionSummary } from '../../shared/api.ts';
 import { approvalHolds } from './approvals.ts';
 import type { Translator } from '../i18n/index.ts';
@@ -14,9 +14,9 @@ export interface BannerModel {
     variant: BannerVariant;
     head: string;
     lines: Seg[][];
-    /** mark : « Marquer vN comme relue » ; reapprove : « ✓ Réapprouver vN » ; none : aucun bouton. */
+    /** mark: "Mark vN as reviewed"; reapprove: "Re-approve vN"; none: no button. */
     action: 'mark' | 'reapprove' | 'none';
-    /** Afficher la règle « Approuver ou commenter marque la version comme relue… ». */
+    /** Show the rule "Approving or commenting marks the version as reviewed...". */
     rule: boolean;
     latest: number;
 }
@@ -36,8 +36,8 @@ function commentsLine(tr: Translator, data: PrDetail): Seg[] | null {
 }
 
 /**
- * Une ligne par version : « v10 : CreateRecord.ts et coverage.config.json, +2 −2 ». Version absente du résumé (poussée
- * pendant la lecture, résumé en cours de rechargement) : « v11 : … », comme dans la frise.
+ * One line per version: "v10: CreateRecord.ts and coverage.config.json, +2 -2". Version absent from the summary (pushed
+ * while reading, summary being reloaded): "v11: ...", as in the timeline.
  */
 export function versionLine(tr: Translator, v: Version, sum: VersionSummary | undefined): Seg[] {
     const masked = sum?.masterFiles ? ` (${masterMasked(tr, sum.masterFiles)})` : '';
@@ -137,7 +137,7 @@ export function bannerModel(tr: Translator, data: PrDetail, sums: SummaryMap, su
         };
     }
 
-    // Version absente du résumé (poussée pendant la lecture) : listée seule, sans détail, et rien n'est affirmé sur son code.
+    // Version absent from the summary (pushed while reading): listed alone, without detail, and nothing is claimed about its code.
     const isCodeV = (v: Version): boolean => CODE_KINDS.has(sumOf(v)?.kind ?? 'none');
     const isUnknown = (v: Version): boolean => !sumOf(v);
     const code = after.filter(isCodeV);

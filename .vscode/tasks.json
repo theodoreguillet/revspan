@@ -3,7 +3,7 @@
     "tasks": [
         {
             "label": "npm: build:extension",
-            "detail": "Construit l'extension (page + hôte) avant F5",
+            "detail": "Builds the extension (page + host) before F5",
             "type": "npm",
             "script": "build:extension",
             "group": { "kind": "build", "isDefault": true },

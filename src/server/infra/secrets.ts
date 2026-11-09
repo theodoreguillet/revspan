@@ -1,7 +1,7 @@
-// Stockage du jeton Bitbucket.
-// macOS : trousseau (commande `security`, jeton transmis par stdin, jamais en argument).
-// Linux : `secret-tool` (libsecret) s'il est installé.
-// Sinon (ou REVSPAN_TOKEN_STORE=file) : fichier token.json en 0600 dans le dossier de config.
+// Bitbucket token storage.
+// macOS: keychain (`security` command, token passed through stdin, never as an argument).
+// Linux: `secret-tool` (libsecret) if installed.
+// Otherwise (or REVSPAN_TOKEN_STORE=file): token.json file with mode 0600 in the config folder.
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +34,7 @@ function run(cmd: string, args: readonly string[], input: string | null = null):
         child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
         child.on('error', (error) => resolve({ code: -1, stdout, stderr: error.message }));
         child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
-        // Un outil qui se termine avant d'avoir lu stdin (EPIPE) ne doit pas faire tomber le serveur.
+        // A tool that exits before reading stdin (EPIPE) must not bring the server down.
         child.stdin.on('error', () => undefined);
         if (input !== null) {
             child.stdin.write(input);
@@ -68,7 +68,7 @@ function keychainStore(service: string): SecretStore {
         async set(account, token) {
             assertSafe(account, 'email');
             assertSafe(token, 'token');
-            // Mode interactif : la commande (donc le jeton) passe par stdin, pas par la liste des processus.
+            // Interactive mode: the command (hence the token) goes through stdin, not the process list.
             const { code, stderr } = await run('security', ['-i'],
                 `add-generic-password -U -a "${account}" -s "${service}" -l "${LABEL}" -w "${token}"\n`);
             if (code !== 0 || /error/i.test(stderr)) {

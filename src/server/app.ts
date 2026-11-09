@@ -1,4 +1,4 @@
-// Assemblage : configuration, jeton, cache, services, application HTTP et serveur Node (127.0.0.1 uniquement).
+// Assembly: configuration, token, cache, services, HTTP application and Node server (127.0.0.1 only).
 import type { Server } from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -15,13 +15,13 @@ import type { PrService } from './services/pr-service.ts';
 import type { SettingsService } from './services/settings-service.ts';
 
 const HOST = '127.0.0.1';
-// Même chemin relatif depuis src/server (dev) et dist/server (construit) : <racine>/dist/web.
+// Same relative path from src/server (dev) and dist/server (built): <root>/dist/web.
 const DEFAULT_WEB_DIR = fileURLToPath(new URL('../../dist/web', import.meta.url));
 const { version: APP_VERSION } = createRequire(import.meta.url)('../../package.json') as { version: string };
 
 export interface StartOptions {
     env?: NodeJS.ProcessEnv;
-    /** 0 = port libre au hasard. */
+    /** 0 = random free port. */
     port?: number;
     maxPortTries?: number;
     webDir?: string;

@@ -28,7 +28,7 @@ const groups = computed(() => {
 const status = (file: FileDiff) => STATUS_ICONS[viewedStatus(file, page.detail.review.viewed)];
 const threads = (file: FileDiff): number => fileThreadCount(file, page.threadsById, page.showResolved);
 
-// garde la ligne du fichier courant visible dans la liste
+// keeps the current file's row visible in the list
 const rows = new Map<number, HTMLElement>();
 function setRow(idx: number, el: unknown): void {
     if (el instanceof HTMLElement) {

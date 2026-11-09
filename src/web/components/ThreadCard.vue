@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Fil de discussion : en-tête (version, ligne, état), commentaires, réponse, résolution.
-// Dans le diff, un fil résolu est replié en une barre cliquable.
+// Discussion thread: header (version, line, state), comments, reply, resolution.
+// In the diff, a resolved thread is folded into a clickable bar.
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { Thread, ThreadPlacement } from '../../shared/api.ts';
 import { actionKey, replyDraftKey } from '../composables/useDiscussion.ts';
@@ -57,7 +57,7 @@ function focusReply(): void {
     replyBox.value?.scrollIntoView({ block: 'nearest' });
 }
 
-// n/p et « Voir dans le diff » font défiler jusqu'à ce fil (barre repliée ou fil complet)
+// n/p and "View in diff" scroll to this thread (folded bar or full thread)
 watch(root, (el, previous) => {
     if (previous) {
         page.unregisterThread(previous);

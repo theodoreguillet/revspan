@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Page PR : premier chargement du détail, puis PrLoaded (qui ne voit jamais de PR absente).
+// PR page: first load of the detail, then PrLoaded (which never sees a missing PR).
 import { onMounted, shallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import type { PrDetail, PrRef } from '../../shared/api.ts';

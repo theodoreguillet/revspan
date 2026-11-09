@@ -1,4 +1,4 @@
-// Réglages : emplacements du jeton (la liste des dépôts est lue par src/shared/repos.ts).
+// Settings: token locations (the repository list is read by src/shared/repos.ts).
 import type { TokenStoreKind } from '../../shared/api.ts';
 import type { MessageKey } from '../i18n/index.ts';
 

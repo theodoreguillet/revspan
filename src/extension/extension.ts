@@ -1,4 +1,4 @@
-// Point d'entrée de l'extension VS Code Revspan.
+// Entry point of the Revspan VS Code extension.
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import { parsePrUrl } from '../shared/pr-url.ts';
@@ -31,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         tree,
         vscode.window.registerTreeDataProvider('revspan.home', tree),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
-        // Après « Recharger la fenêtre », VS Code rouvre le panneau avec l'état enregistré par la page (sa route).
+        // After "Reload Window", VS Code reopens the panel with the state saved by the page (its route).
         vscode.window.registerWebviewPanelSerializer(PANEL_VIEW_TYPE, {
             deserializeWebviewPanel: async (webviewPanel, state: unknown) => panel.restore(webviewPanel, restoredRoute(state)),
         }),
@@ -53,5 +53,5 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-    // Rien à libérer : tout est enregistré dans context.subscriptions.
+    // Nothing to release: everything is registered in context.subscriptions.
 }

@@ -1,4 +1,4 @@
-// Arbre « Mes PR » de la barre latérale, construit à partir de l'accueil (mêmes groupes que la page).
+// "My PRs" tree of the side bar, built from the home page data (same groups as the page).
 import type { Home, HomeGroupKey, PrCard, PrRef } from '../../shared/api.ts';
 import { errorText } from './error-text.ts';
 import type { L10n, Translate } from './l10n.ts';
@@ -13,7 +13,7 @@ export interface PrNode {
 export interface GroupNode {
     key: HomeGroupKey;
     label: string;
-    /** Icône (codicon) du groupe. */
+    /** Icon (codicon) of the group. */
     icon: string;
     collapsed: boolean;
     prs: PrNode[];
@@ -76,7 +76,7 @@ function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey): PrNode {
     const extra = badges(l10n, card, key);
     return {
         ref: { workspace: card.workspace, repo: card.repo, id: card.id },
-        // Dépôt et numéro devant le titre : repérables d'un coup d'œil dans la liste.
+        // Repository and number before the title: easy to spot at a glance in the list.
         label: `${card.repo} #${card.id} · ${card.title}`,
         description: extra.join(' · '),
         tooltip: [
@@ -89,7 +89,7 @@ function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey): PrNode {
     };
 }
 
-/** Groupes non vides ; « Autres PR ouvertes » replié (déplié si l'outil ne sait pas qui je suis). */
+/** Non-empty groups; "Other open PRs" collapsed (expanded if the tool does not know who I am). */
 export function buildHomeTree(home: Home, l10n: L10n): GroupNode[] {
     return home.groups
         .filter((group) => group.prs.length > 0)
@@ -102,7 +102,7 @@ export function buildHomeTree(home: Home, l10n: L10n): GroupNode[] {
         }));
 }
 
-/** Tree line of a repository that could not be read, e.g. « acme/x: Not found on Bitbucket: … ». */
+/** Tree line of a repository that could not be read, e.g. "acme/x: Not found on Bitbucket: ...". */
 export function repoErrorLabel(t: Translate, error: Home['errors'][number]): string {
     return t('{repo}: {message}', { repo: error.repo, message: errorText(t, error) });
 }

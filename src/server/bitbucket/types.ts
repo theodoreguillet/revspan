@@ -1,4 +1,4 @@
-// Objets bruts de l'API Bitbucket Cloud 2.0 (seuls les champs utilisés sont typés).
+// Raw objects of the Bitbucket Cloud 2.0 API (only the fields in use are typed).
 
 export interface BbUser {
     uuid?: string;

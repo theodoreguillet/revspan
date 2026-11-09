@@ -1,6 +1,6 @@
-// Comparaison de deux versions d'une PR en ne gardant que les changements de l'auteur.
-// Si B a été rebasée, A est d'abord rejouée sur la base de B (fusion 3 voies), puis comparée à B :
-// les lignes apportées par master (lockfile, changelog…) disparaissent.
+// Comparison of two PR versions, keeping only the author's changes.
+// If B was rebased, A is first replayed onto B's base (3-way merge), then compared with B:
+// lines brought in by master (lockfile, changelog...) disappear.
 import { createHash } from 'node:crypto';
 import type {
     Comparison, FileCategory, FileDiff, FileStatus, Thread, ThreadPlacement, Version, VersionKind, VersionSummary,
@@ -13,7 +13,7 @@ import { isReadable, previousAvailable } from './model.ts';
 
 const MAX_LINES = 60000;
 
-/** Entrée de diffstat (diff à deux points entre deux commits). */
+/** Diffstat entry (two-dot diff between two commits). */
 export interface DiffstatEntry {
     status: string;
     oldPath: string | null;
@@ -22,10 +22,10 @@ export interface DiffstatEntry {
     removed: number;
 }
 
-/** Chemin d'une entrée (le nouveau, ou l'ancien pour un fichier supprimé). */
+/** Path of an entry (the new one, or the old one for a deleted file). */
 export const pathOf = (entry: DiffstatEntry): string => entry.newPath ?? entry.oldPath ?? '';
 
-/** fingerprint : empreinte du contenu, absente des entrées de cache antérieures (deux côtés sans empreinte ne sont jamais égaux). */
+/** fingerprint: content fingerprint, absent from older cache entries (two sides without a fingerprint are never equal). */
 export type FileContent =
     | { text: string; submodule?: boolean }
     | { missing: true }
@@ -33,13 +33,13 @@ export type FileContent =
     | { tooLarge: true; fingerprint?: string }
     | { special: true };
 
-/** Accès aux données d'un dépôt (Bitbucket en vrai, mémoire en test). */
+/** Access to a repository's data (real Bitbucket, in-memory in tests). */
 export interface CompareSource {
     diffstat(newHash: string, oldHash: string): Promise<DiffstatEntry[]>;
     content(hash: string, path: string): Promise<FileContent>;
 }
 
-/** Version comparée ; `available` absent = lisible. */
+/** Compared version; `available` absent = readable. */
 export type CompareVersion = Pick<Version, 'index' | 'hash' | 'base' | 'message' | 'isRebase' | 'messageChanged'> & Partial<Pick<Version, 'available'>>;
 
 export class InvalidComparisonError extends Error {
@@ -48,13 +48,13 @@ export class InvalidComparisonError extends Error {
 
 type Flag = 'binary' | 'tooLarge' | 'special';
 
-/** Un côté d'une comparaison de fichier. */
+/** One side of a file comparison. */
 interface Side {
     exists: boolean;
     lines: string[];
     text: string | null;
     flag: Flag | null;
-    /** Empreinte d'un côté binaire ou trop gros (null si inconnue). */
+    /** Fingerprint of a binary or oversized side (null if unknown). */
     fingerprint: string | null;
     submodule: boolean;
 }
@@ -86,7 +86,7 @@ function sameSide(a: Side, b: Side): boolean {
         return true;
     }
     if (a.flag || b.flag) {
-        // Binaire ou trop gros : égaux seulement si les deux empreintes sont connues et identiques.
+        // Binary or too large: equal only if both fingerprints are known and identical.
         return a.flag === b.flag && a.fingerprint !== null && a.fingerprint === b.fingerprint;
     }
     return a.text === b.text;
@@ -105,7 +105,7 @@ function statusOf(entry: DiffstatEntry, oldSide: Side, newSide: Side): FileStatu
 function finishFile(entry: DiffstatEntry, oldSide: Side, newSide: Side, options: FileOptions & { conflict: boolean }): FileDiff | null {
     const path = pathOf(entry);
     const status = statusOf(entry, oldSide, newSide);
-    // Un pointeur de sous-module se range avec les dépendances.
+    // A submodule pointer is grouped with the dependencies.
     const category: FileCategory = oldSide.submodule || newSide.submodule ? 'deps' : categoryOf(path);
     const base: FileDiff = {
         path,
@@ -121,7 +121,7 @@ function finishFile(entry: DiffstatEntry, oldSide: Side, newSide: Side, options:
         hunks: [],
         threads: [],
     };
-    // Contenu identique : rien à montrer, sauf un renommage (gardé, comme pour un fichier texte).
+    // Identical content: nothing to show, except a rename (kept, as for a text file).
     const unchanged = status === 'modified' && sameSide(oldSide, newSide);
     if (oldSide.flag || newSide.flag) {
         if (unchanged) {
@@ -146,7 +146,7 @@ function finishFile(entry: DiffstatEntry, oldSide: Side, newSide: Side, options:
     };
 }
 
-/** Les deux côtés d'un fichier à comparer, et s'il y a une zone touchée par master et par l'auteur. */
+/** Both sides of a file to compare, and whether an area was touched by both master and the author. */
 interface Sides {
     oldSide: Side;
     newSide: Side;
@@ -161,7 +161,7 @@ async function directSides(src: CompareSource, entry: DiffstatEntry, oldHash: st
     return { oldSide: sideOf(oldContent), newSide: sideOf(newContent), conflict: false };
 }
 
-/** Rejoue la version A sur la base de B (fusion 3 voies) : le côté « ancien » ne garde que les changements de l'auteur. */
+/** Replays version A onto B's base (3-way merge): the "old" side keeps only the author's changes. */
 async function rebasedSides(src: CompareSource, entry: DiffstatEntry, va: CompareVersion, vb: CompareVersion): Promise<Sides> {
     const path = pathOf(entry);
     const [anc, mine, newBase, target] = (await Promise.all([
@@ -171,7 +171,7 @@ async function rebasedSides(src: CompareSource, entry: DiffstatEntry, va: Compar
         src.content(vb.hash, path),
     ])).map(sideOf) as [Side, Side, Side, Side];
 
-    // Fichier non touché par l'auteur en A (A rejouée = nouvelle base) ou par master (A inchangée) : vaut aussi pour un binaire.
+    // File untouched by the author in A (A replayed = new base) or by master (A unchanged): also holds for a binary.
     if (sameSide(mine, anc)) {
         return { oldSide: newBase, newSide: target, conflict: false };
     }
@@ -193,7 +193,7 @@ async function rebasedSides(src: CompareSource, entry: DiffstatEntry, va: Compar
     };
 }
 
-/** va = null : version vb complète contre sa base. Sinon diff direct si même base (ou renommage), rejoué sinon. */
+/** va = null: full version vb against its base. Otherwise direct diff if same base (or rename), replayed otherwise. */
 function sidesFor(src: CompareSource, entry: DiffstatEntry, va: CompareVersion | null, vb: CompareVersion): Promise<Sides> {
     if (!va) {
         return directSides(src, entry, vb.base, vb.hash);
@@ -208,7 +208,7 @@ function sortFiles(files: FileDiff[]): FileDiff[] {
     return files.sort((a, b) => (a.category === b.category ? a.path.localeCompare(b.path) : a.category === 'code' ? -1 : 1));
 }
 
-/** from = 0 : version `to` complète contre sa base ; sinon changements de l'auteur entre from et to. */
+/** from = 0: full `to` version against its base; otherwise the author's changes between from and to. */
 export async function compareVersions(
     src: CompareSource,
     versions: readonly CompareVersion[],
@@ -242,7 +242,7 @@ export async function compareVersions(
             src.diffstat(vb.hash, vb.base),
             sameHash(a.hash, vb.hash) ? Promise.resolve([]) : src.diffstat(vb.hash, a.hash),
         ]);
-        // Seuls les fichiers touchés par la PR (en A ou en B) peuvent porter des changements de l'auteur.
+        // Only files touched by the PR (in A or in B) can carry author changes.
         const prPaths = new Set([...entriesA, ...entriesB].flatMap((e) => [e.oldPath, e.newPath]).filter((p): p is string => Boolean(p)));
         const candidates: DiffstatEntry[] = [];
         for (const entry of tips) {
@@ -280,13 +280,13 @@ export async function compareVersions(
     };
 }
 
-/** Texte affichable d'un côté (retour à la ligne final restitué comme à l'origine). */
+/** Displayable text of a side (final newline restored as in the original). */
 function sideText(side: Side, path: string): string {
     if (!side.exists) {
         return '';
     }
     if (side.flag) {
-        return `(${side.flag === 'tooLarge' ? 'fichier trop volumineux' : 'fichier binaire'} : ${path})\n`;
+        return `(${side.flag === 'tooLarge' ? 'file too large' : 'binary file'}: ${path})\n`;
     }
     const lines = side.lines.slice();
     const last = lines[lines.length - 1];
@@ -300,7 +300,7 @@ function sideText(side: Side, path: string): string {
     return `${lines.join('\n')}\n`;
 }
 
-/** Contenu des deux côtés d'un fichier, tel que comparé par compareVersions (A rejouée sur la base de B si besoin). */
+/** Content of both sides of a file, as compared by compareVersions (A replayed onto B's base if needed). */
 export async function fileSides(
     src: CompareSource,
     versions: readonly CompareVersion[],
@@ -319,7 +319,7 @@ export async function fileSides(
     return { oldText: sideText(oldSide, before), newText: sideText(newSide, path) };
 }
 
-/** Place les fils de commentaires sur les fichiers de la comparaison (côté « to »). */
+/** Places the comment threads on the files of the comparison ("to" side). */
 export async function placeThreads(
     src: CompareSource,
     versions: readonly CompareVersion[],
@@ -342,7 +342,7 @@ export async function placeThreads(
             if (thread.version === result.to) {
                 line = anchorLine;
             } else {
-                // Version du fil indisponible (commit effacé) : position d'origine illisible, fil laissé au niveau du fichier.
+                // Thread version unavailable (commit erased): original position unreadable, thread left at file level.
                 const vc = versions[thread.version - 1];
                 if (vc && isReadable(vc)) {
                     const [oldContent, newContent] = await Promise.all([src.content(vc.hash, thread.path), src.content(vb.hash, file.path)]);
@@ -368,7 +368,7 @@ export async function placeThreads(
 
 type SummaryFile = VersionSummary['files'][number];
 
-/** Type d'une version d'après les fichiers changés par l'auteur. */
+/** Type of a version based on the files changed by the author. */
 function kindOf(files: readonly SummaryFile[], version: CompareVersion): VersionKind {
     if (files.length > 0) {
         return files.every((f) => f.category === 'deps') ? 'deps' : 'code';
@@ -380,8 +380,8 @@ function kindOf(files: readonly SummaryFile[], version: CompareVersion): Version
 }
 
 /**
- * Ce que l'auteur a changé dans une version, bruit master retiré : par rapport à la précédente, ou à la dernière
- * version lisible si les intermédiaires sont indisponibles (`since`), ou à la base s'il n'y en a aucune.
+ * What the author changed in a version, master noise removed: against the previous one, or the last
+ * readable version if the intermediate ones are unavailable (`since`), or the base if there is none.
  */
 export async function summarizeVersion(src: CompareSource, versions: readonly CompareVersion[], index: number): Promise<VersionSummary> {
     const version = versions[index - 1];

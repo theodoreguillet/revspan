@@ -1,4 +1,4 @@
-// Descriptions de versions et de fichiers (bandeau de reprise, onglet Versions, infobulles).
+// Descriptions of versions and files (resume banner, Versions tab, tooltips).
 import type { Version, VersionSummary } from '../../shared/api.ts';
 import type { Translator } from '../i18n/index.ts';
 import { basename, masterMasked, MINUS } from './format.ts';
@@ -6,7 +6,7 @@ import { add, del, mono, tSegs, type Seg } from './segments.ts';
 
 type FileRef = { path: string };
 
-/** « a.ts, b.ts et c.ts » or « a.ts, b.ts, c.ts et 2 autres ». */
+/** "a.ts, b.ts and c.ts" or "a.ts, b.ts, c.ts and 2 others". */
 export function filesText(tr: Translator, files: FileRef[], max = 3): string {
     const names = files.map((f) => basename(f.path));
     if (names.length <= max) {
@@ -33,7 +33,7 @@ export function versionTypeBadge(tr: Translator, v: Version): { label: string; c
     return v.isRebase ? { label: tr.t('versionType.rebase'), cls: 'rv-kind r' } : { label: tr.t('versionType.amend'), cls: 'rv-kind' };
 }
 
-/** « Changed by the author » column of the Versions tab. */
+/** "Changed by the author" column of the Versions tab. */
 export function changedSegs(tr: Translator, v: Version, sum: VersionSummary | undefined): Seg[] {
     if (!sum) {
         return ['…'];

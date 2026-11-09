@@ -1,5 +1,5 @@
-// Client REST Bitbucket Cloud (API 2.0) : authentification Basic e-mail + jeton API Atlassian, pagination,
-// limite de concurrence, reprises (429/5xx pour les lectures, 429 seul pour les écritures), cache disque des données immuables.
+// Bitbucket Cloud REST client (API 2.0): Basic auth with e-mail + Atlassian API token, pagination,
+// concurrency limit, retries (429/5xx for reads, 429 only for writes), disk cache of immutable data.
 import { createHash } from 'node:crypto';
 import type { NewComment, User } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
@@ -80,7 +80,7 @@ const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).
 const commitKey = (ws: string, repo: string, hash: string): string => `commit:${ws}/${repo}:${hash}`;
 const mergeBaseKey = (ws: string, repo: string, a: string, b: string): string => `merge-base:${ws}/${repo}:${a}..${b}`;
 
-/** Encode un chemin de fichier ; refuse les segments vides, `.` et `..` (new URL() les normaliserait hors du dépôt). */
+/** Encodes a file path; rejects empty segments, `.` and `..` (new URL() would normalize them out of the repo). */
 function encodePath(filePath: string): string {
     const segments = filePath.split('/');
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
@@ -120,7 +120,7 @@ export class BitbucketClient {
         return url.toString();
     }
 
-    /** Requête brute : réponse HTTP (null si 404 autorisé). Les erreurs sont traduites en AppError. */
+    /** Raw request: HTTP response (null if a 404 is allowed). Errors are translated into AppError. */
     private async send(method: string, path: string, { query, body, allow404 = false }: RequestOptions, accept: string): Promise<Response | null> {
         const url = this.url(path, query);
         const headers: Record<string, string> = {
@@ -130,8 +130,8 @@ export class BitbucketClient {
         if (body !== undefined) {
             headers['Content-Type'] = 'application/json';
         }
-        // Une écriture n'est reprise que sur 429 (requête non traitée) : après un 5xx, une erreur réseau ou un délai
-        // dépassé, Bitbucket a pu l'exécuter, la renvoyer créerait un doublon.
+        // A write is retried only on 429 (request not processed): after a 5xx, a network error or a timeout,
+        // Bitbucket may have executed it, and resending it would create a duplicate.
         const idempotent = method === 'GET';
         return this.limiter.run(async () => {
             for (let attempt = 0; ; attempt++) {
@@ -172,8 +172,8 @@ export class BitbucketClient {
     }
 
     /**
-     * Suit au plus MAX_REDIRECTS redirections (GET seulement). L'en-tête Authorization n'est envoyé qu'à l'origine
-     * de l'API configurée, jamais à un autre domaine (stockage de fichiers, CDN).
+     * Follows at most MAX_REDIRECTS redirects (GET only). The Authorization header is sent only to the origin
+     * of the configured API, never to another domain (file storage, CDN).
      */
     private async fetchFollowingRedirects(url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<Response> {
         const apiOrigin = new URL(this.baseUrl).origin;
@@ -234,7 +234,7 @@ export class BitbucketClient {
             if (!page.next || i >= maxPages) {
                 return values;
             }
-            // Le jeton ne suit jamais une URL de pagination hors de l'API configurée.
+            // The token never follows a pagination URL outside the configured API.
             if (!page.next.startsWith(`${this.baseUrl}/`)) {
                 throw new AppError(502, 'BB_ERROR', `Unexpected Bitbucket pagination: ${new URL(page.next).origin}`);
             }
@@ -250,7 +250,7 @@ export class BitbucketClient {
         return `${this.repoPath(ws, repo)}/pullrequests/${id}`;
     }
 
-    // ---------- Données vivantes (cache mémoire court) ----------
+    // ---------- Live data (short in-memory cache) ----------
 
     async me(): Promise<User | null> {
         return userOf(await this.getJson<BbUser>('user'));
@@ -283,19 +283,19 @@ export class BitbucketClient {
         this.cache.invalidateLive('live:home:');
     }
 
-    // ---------- Données immuables (cache disque) ----------
+    // ---------- Immutable data (disk cache) ----------
 
     /**
-     * Commit, ou null s'il n'existe plus : Bitbucket efface au bout d'un moment les commits écrasés par un force-push
-     * (anciennes versions d'une PR). L'absence n'est pas mise en cache.
+     * Commit, or null if it no longer exists: Bitbucket eventually erases commits overwritten by a force-push
+     * (old versions of a PR). Absence is not cached.
      */
     commit(ws: string, repo: string, hash: string): Promise<CommitSummary | null> {
         return this.cache.getOrCompute(commitKey(ws, repo, hash), () => this.fetchCommit(ws, repo, hash), (commit) => commit !== null);
     }
 
     /**
-     * Le commit existe-t-il encore ? Demandé à Bitbucket même s'il est en cache (réponse gardée LIVE_TTL_MS) : un commit
-     * mis en cache peut avoir été effacé depuis.
+     * Does the commit still exist? Asked to Bitbucket even if cached (answer kept LIVE_TTL_MS): a cached
+     * commit may have been erased since.
      */
     commitExists(ws: string, repo: string, hash: string): Promise<boolean> {
         return this.cache.getLive(`live:commit:${ws}/${repo}:${hash}`, LIVE_TTL_MS, async () => (await this.fetchCommit(ws, repo, hash)) !== null);
@@ -306,12 +306,12 @@ export class BitbucketClient {
         return raw ? { hash: raw.hash, message: raw.message ?? '', date: raw.date ?? null, parents: (raw.parents ?? []).map((p) => p.hash) } : null;
     }
 
-    /** Oublie un commit effacé par Bitbucket depuis sa mise en cache (hash tel que passé à commit()). */
+    /** Forgets a commit erased by Bitbucket since it was cached (hash as passed to commit()). */
     forgetCommit(ws: string, repo: string, hash: string): void {
         this.cache.delete(commitKey(ws, repo, hash));
     }
 
-    /** Oublie une merge-base mise en cache (celle d'une version effacée). */
+    /** Forgets a cached merge-base (that of an erased version). */
     forgetMergeBase(ws: string, repo: string, a: string, b: string): void {
         this.cache.delete(mergeBaseKey(ws, repo, a, b));
     }
@@ -323,7 +323,7 @@ export class BitbucketClient {
         }, (hash) => hash !== null);
     }
 
-    /** Fichiers différents entre deux commits (diff à deux points : oldHash → newHash). */
+    /** Files that differ between two commits (two-dot diff: oldHash -> newHash). */
     diffstat(ws: string, repo: string, newHash: string, oldHash: string): Promise<DiffstatEntry[]> {
         return this.cache.getOrCompute(`diffstat:${ws}/${repo}:${newHash}..${oldHash}`, async () => {
             const values = await this.getAllPages<BbDiffstatEntry>(`${this.repoPath(ws, repo)}/diffstat/${newHash}..${oldHash}`,
@@ -338,7 +338,7 @@ export class BitbucketClient {
         });
     }
 
-    /** Contenu d'un fichier à un commit (un 404 n'est pas mis en cache : il peut être transitoire). */
+    /** Content of a file at a commit (a 404 is not cached: it may be transient). */
     fileContent(ws: string, repo: string, hash: string, filePath: string): Promise<FileContent> {
         let srcPath: string;
         try {
@@ -351,11 +351,11 @@ export class BitbucketClient {
             if (!response) {
                 return { missing: true };
             }
-            // Contenu non téléchargé : aucune empreinte (l'ETag de /src n'est pas garanti propre au contenu), jamais jugé égal.
+            // Content not downloaded: no fingerprint (the /src ETag is not guaranteed to depend only on content), never judged equal.
             if (Number(response.headers.get('content-length')) > MAX_FILE_BYTES) {
                 return { tooLarge: true };
             }
-            // Binaire ou trop gros : on garde l'empreinte des octets pour reconnaître le même fichier d'une version à l'autre.
+            // Binary or too large: keep the bytes' fingerprint to recognize the same file from one version to the next.
             const buffer = Buffer.from(await response.arrayBuffer());
             if (buffer.length > MAX_FILE_BYTES) {
                 return { tooLarge: true, fingerprint: sha1(buffer) };
@@ -364,14 +364,14 @@ export class BitbucketClient {
                 return { binary: true, fingerprint: sha1(buffer) };
             }
             const text = buffer.toString('utf8');
-            // Un sous-module renvoie le hash du commit pointé (40 caractères) : on le présente comme git.
+            // A submodule returns the hash of the pointed commit (40 characters): present it as git does.
             if (/^[0-9a-f]{40}$/.test(text)) {
                 const meta = await this.json<BbSrcMeta>('GET', srcPath, { query: { format: 'meta' }, allow404: true });
                 if (meta?.attributes?.includes('subrepository')) {
                     return { text: `Subproject commit ${text}\n`, submodule: true };
                 }
             }
-            // Un dossier renvoie un listing JSON paginé au lieu d'un contenu.
+            // A folder returns a paginated JSON listing instead of content.
             if ((response.headers.get('content-type') ?? '').includes('application/json') && !filePath.endsWith('.json') && isListing(text)) {
                 return { special: true };
             }
@@ -379,7 +379,7 @@ export class BitbucketClient {
         }, (content) => !('missing' in content));
     }
 
-    /** Source de comparaison (core/compare.ts) adossée à ce client. */
+    /** Comparison source (core/compare.ts) backed by this client. */
     source(ws: string, repo: string): CompareSource {
         return {
             diffstat: (newHash, oldHash) => this.diffstat(ws, repo, newHash, oldHash),
@@ -387,7 +387,7 @@ export class BitbucketClient {
         };
     }
 
-    // ---------- Écritures ----------
+    // ---------- Writes ----------
 
     async createComment(ws: string, repo: string, id: number, { raw, parentId, inline }: NewComment): Promise<BbComment> {
         const body: Record<string, unknown> = { content: { raw } };

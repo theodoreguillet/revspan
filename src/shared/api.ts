@@ -1,5 +1,5 @@
-// Contrat de l'API locale, partagé par le serveur (src/server) et la page (src/web).
-// Toutes les routes sont sous /api ; toute requête autre que GET porte l'en-tête X-Revspan: 1.
+// Local API contract, shared by the server (src/server) and the page (src/web).
+// All routes are under /api; any request other than GET carries the X-Revspan: 1 header.
 
 export const MUTATION_HEADER = 'X-Revspan';
 
@@ -55,9 +55,9 @@ export interface PrRef {
     id: number;
 }
 
-// ---------- Réglages ----------
+// ---------- Settings ----------
 
-/** vscode : stockage sécurisé de VS Code (extension). */
+/** vscode: VS Code's secure storage (extension). */
 export type TokenStoreKind = 'keychain' | 'secret-tool' | 'file' | 'vscode';
 
 export interface Settings {
@@ -68,7 +68,7 @@ export interface Settings {
     me: User | null;
 }
 
-/** token : chaîne non vide pour le remplacer, "" pour le supprimer. */
+/** token: non-empty string to replace it, "" to delete it. */
 export interface SettingsUpdate {
     email?: string;
     token?: string;
@@ -77,7 +77,7 @@ export interface SettingsUpdate {
 
 export type ConnectionTest = { ok: true; me: User } | { ok: false; error: ApiErrorBody['error'] };
 
-// ---------- Accueil ----------
+// ---------- Home ----------
 
 export type HomeGroupKey = 'to-review' | 'rebase-only' | 'up-to-date' | 'mine' | 'others';
 
@@ -87,12 +87,12 @@ export interface PrCard extends PrRef {
     url: string;
     createdOn: string;
     updatedOn: string;
-    /** null : PR qui ne me concerne pas (historique non chargé). */
+    /** null: PR that does not concern me (history not loaded). */
     versionsCount: number | null;
     lastPushAt: string;
     lastReviewed: number | null;
     newVersions: number;
-    /** null : types des nouvelles versions pas encore calculés. */
+    /** null: types of the new versions not yet computed. */
     newCodeVersions: number | null;
     approvals: number;
     myApproval: boolean;
@@ -107,7 +107,7 @@ export interface HomeGroup {
 
 export interface Home {
     me: User | null;
-    /** Dépôts suivis (réglages) ; vide tant que l'utilisateur n'en a pas choisi. */
+    /** Tracked repositories (settings); empty until the user has chosen some. */
     repos: string[];
     groups: HomeGroup[];
     /** Repositories that could not be read, with the error (same shape as an API error). */
@@ -131,23 +131,23 @@ export interface PrInfo extends PrRef {
 }
 
 export interface Version {
-    /** 1..n, ordre chronologique. */
+    /** 1..n, chronological order. */
     index: number;
     hash: string;
     shortHash: string;
     pushedAt: string;
     pushedBy: User | null;
-    /** master au moment du push. */
+    /** master at push time. */
     destHash: string;
-    /** merge-base réelle (vide si la version est indisponible). */
+    /** Real merge-base (empty if the version is unavailable). */
     base: string;
     baseShort: string;
     isRebase: boolean;
     message: string;
     messageChanged: boolean;
     /**
-     * false : Bitbucket a effacé le commit (ancienne version écrasée par un force-push) ; contenu illisible,
-     * la version reste dans la frise mais ne peut pas être comparée.
+     * false: Bitbucket erased the commit (old version overwritten by a force-push); content unreadable,
+     * the version stays in the timeline but cannot be compared.
      */
     available: boolean;
 }
@@ -159,7 +159,7 @@ export interface Participant {
     role: 'REVIEWER' | 'PARTICIPANT';
     approved: boolean;
     state: ReviewState | null;
-    /** Version en cours lors de l'approbation / la demande de modifs. */
+    /** Version in progress at the time of the approval / change request. */
     approvedVersion: number | null;
 }
 
@@ -169,7 +169,7 @@ export interface Review {
     lastReviewed: number | null;
     lastReviewedSource: ReviewSource | null;
     lastReviewedAt: string | null;
-    /** chemin → empreinte du contenu vu. */
+    /** path -> fingerprint of the content seen. */
     viewed: Record<string, string>;
 }
 
@@ -177,9 +177,9 @@ export interface Comment {
     id: number;
     user: User | null;
     createdOn: string;
-    /** Version en cours à la création (null juste après une création via l'API). */
+    /** Version in progress at creation (null right after a creation through the API). */
     version: number | null;
-    /** HTML rendu par Bitbucket : non fiable, à assainir côté page. */
+    /** HTML rendered by Bitbucket: untrusted, to be sanitized on the page side. */
     html: string;
     raw: string;
     isNew: boolean;
@@ -188,15 +188,15 @@ export interface Comment {
 }
 
 export interface Thread {
-    /** id du commentaire racine. */
+    /** id of the root comment. */
     id: number;
-    /** null = commentaire général. */
+    /** null = general comment. */
     path: string | null;
     anchor: { to: number | null; from: number | null } | null;
     version: number;
     resolved: boolean;
     resolvedBy: User | null;
-    /** Racine d'abord, puis réponses (ordre chronologique). */
+    /** Root first, then replies (chronological order). */
     comments: Comment[];
 }
 
@@ -215,15 +215,15 @@ export type FileCategory = 'code' | 'deps';
 export interface VersionSummary {
     index: number;
     kind: VersionKind;
-    /** Version de référence quand ce n'est pas la précédente (versions intermédiaires indisponibles) ; 0 = base. */
+    /** Reference version when it is not the previous one (intermediate versions unavailable); 0 = base. */
     since?: number;
-    /** Lignes de l'auteur, après retrait du bruit master. */
+    /** Author's lines, after removing master noise. */
     added: number;
     removed: number;
     files: { path: string; added: number; removed: number; category: FileCategory }[];
-    /** Fichiers masqués car venus de master. */
+    /** Files hidden because they came from master. */
     masterFiles: number;
-    /** Fichiers avec une zone touchée par master et par l'auteur. */
+    /** Files with an area touched by both master and the author. */
     conflicts: number;
 }
 
@@ -236,9 +236,9 @@ export interface DiffLine {
     o: number | null;
     n: number | null;
     text: string;
-    /** Plages [début, fin[ (indices de caractères) à surligner. */
+    /** Ranges [start, end[ (character indices) to highlight. */
     hl: [number, number][];
-    /** Dernière ligne sans retour à la ligne final. */
+    /** Last line without a final newline. */
     noEol?: true;
 }
 
@@ -247,18 +247,18 @@ export interface Hunk {
     oldLines: number;
     newStart: number;
     newLines: number;
-    /** Section englobante façon git (ex. « export default class CreateRecord … »). */
+    /** Enclosing section, git-style (e.g. "export default class CreateRecord ..."). */
     header: string;
     lines: DiffLine[];
 }
 
 export interface ThreadPlacement {
     threadId: number;
-    /** Ligne côté « to » où afficher le fil ; null = niveau fichier. */
+    /** Line on the "to" side where to show the thread; null = file level. */
     line: number | null;
-    /** La ligne d'origine a changé depuis le commentaire. */
+    /** The original line changed since the comment. */
     moved: boolean;
-    /** La ligne existe mais hors des hunks affichés. */
+    /** The line exists but outside the displayed hunks. */
     outOfHunks: boolean;
 }
 
@@ -273,9 +273,9 @@ export interface FileDiff {
     tooLarge: boolean;
     added: number;
     removed: number;
-    /** Empreinte du contenu côté « to » (pour « vu »). */
+    /** Fingerprint of the content on the "to" side (for "seen"). */
     contentHash: string;
-    /** Zone modifiée par master et par l'auteur (rebase). */
+    /** Area modified by both master and the author (rebase). */
     conflict: boolean;
     hunks: Hunk[];
     threads: ThreadPlacement[];
@@ -285,9 +285,9 @@ export interface Comparison {
     from: number;
     to: number;
     stats: { files: number; added: number; removed: number };
-    /** Triés : code d'abord puis deps, puis par chemin. */
+    /** Sorted: code first then deps, then by path. */
     files: FileDiff[];
-    /** Chemins masqués (venus de master). */
+    /** Hidden paths (coming from master). */
     masterOnly: string[];
     messageChanged: boolean;
     messageFrom: string;

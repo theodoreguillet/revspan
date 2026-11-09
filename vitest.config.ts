@@ -10,8 +10,8 @@ export default defineConfig({
                     name: 'web',
                     include: ['test/web/**/*.test.ts'],
                     environment: 'happy-dom',
-                    // Les <iframe> des HTML hostiles testés pointent sur about:blank (aucun accès réseau) : happy-dom peut
-                    // les « charger » comme un navigateur au lieu de signaler une erreur dans la console.
+                    // The <iframe>s of the tested hostile HTML point to about:blank (no network access): happy-dom may
+                    // "load" them like a browser instead of reporting an error in the console.
                     environmentOptions: { happyDOM: { settings: { enableIframePageLoading: true } } },
                 },
             },

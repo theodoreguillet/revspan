@@ -1,10 +1,10 @@
-// Aide des raccourcis clavier (overlay global).
+// Keyboard shortcut help (global overlay).
 import { ref } from 'vue';
 import type { MessageKey } from '../i18n/index.ts';
 
 export const shortcutsOpen = ref(false);
 
-/** Keys (alternatives separated by « / ») and description of each shortcut. */
+/** Keys (alternatives separated by " / ") and description of each shortcut. */
 export const SHORTCUTS = [
     { keys: 'shortcuts.keysFile', label: 'shortcuts.file' },
     { keys: 'shortcuts.keysThread', label: 'shortcuts.thread' },

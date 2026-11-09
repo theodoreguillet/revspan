@@ -1,4 +1,4 @@
-// Approbations : version approuvée, approbations périmées, état de mes boutons.
+// Approvals: approved version, stale approvals, state of my buttons.
 import type { Participant, PrDetail } from '../../shared/api.ts';
 import type { Translator } from '../i18n/index.ts';
 import { displayName, vname } from './format.ts';
@@ -14,7 +14,7 @@ export interface Staleness extends StaleVersions {
     text: string;
 }
 
-/** Versions avec du code (ou des dépendances) arrivées après la version approuvée ; null si l'approbation est à jour. */
+/** Versions with code (or dependency) changes after the approved version; null if the approval is up to date. */
 export function staleVersions(approvedVersion: number | null, sums: SummaryMap, n: number): StaleVersions | null {
     if (approvedVersion == null || approvedVersion >= n) {
         return null;
@@ -32,7 +32,7 @@ export function staleVersions(approvedVersion: number | null, sums: SummaryMap, 
     return code.length || deps.length ? { code, deps } : null;
 }
 
-/** Same, with its description: « code modifié en v4, v10 » / « code changed in v4, v10 ». */
+/** Same, with its description: "code changed in v4, v10". */
 export function staleness(tr: Translator, approvedVersion: number | null, sums: SummaryMap, n: number): Staleness | null {
     const stale = staleVersions(approvedVersion, sums, n);
     if (!stale) {
@@ -46,10 +46,10 @@ export function staleness(tr: Translator, approvedVersion: number | null, sums: 
 }
 
 /**
- * Mon approbation vaut pour la dernière version : toujours active sur Bitbucket (qui ne la retire pas forcément à chaque
- * push) et rien de l'auteur depuis (seulement des rebases ou le message). Tant que le résumé n'est pas chargé,
- * l'état de Bitbucket fait foi ; une fois chargé, une version arrivée depuis et absente du résumé (poussée pendant la
- * lecture) n'est pas neutre : inconnu = pas valable, comme approvalHoldsSince côté serveur.
+ * My approval holds for the latest version: still active on Bitbucket (which does not necessarily remove it on every
+ * push) and nothing from the author since (only rebases or the message). Until the summary is loaded,
+ * Bitbucket's state is authoritative; once loaded, a version that arrived since and is absent from the summary (pushed
+ * while reading) is not neutral: unknown = not valid, like approvalHoldsSince on the server side.
  */
 export function approvalHolds(part: Participant | null | undefined, sums: SummaryMap, n: number, summaryLoaded: boolean): boolean {
     if (!part?.approved) {
@@ -71,7 +71,7 @@ export type ApprovalItem =
     | { kind: 'changes'; name: string; version: number | null; title: string }
     | { kind: 'pending'; name: string; title: string };
 
-/** Whose item: another reviewer (by name) or me (« toi » / « you », with first-person titles). */
+/** Whose item: another reviewer (by name) or me ("you", with first-person titles). */
 type Who = { me: false; name: string } | { me: true };
 
 function approvedItem(tr: Translator, who: Who, part: Participant, sums: SummaryMap, n: number, summaryLoaded: boolean): ApprovalItem {
@@ -99,7 +99,7 @@ function changesItem(tr: Translator, who: Who, part: Participant): ApprovalItem 
         : { kind: 'changes', name: who.name, version: part.approvedVersion, title: tr.t('approval.changes', { name: who.name }) };
 }
 
-/** Ligne des approbations : chaque relecteur ayant approuvé ou demandé des modifs, puis moi. */
+/** Approvals row: each reviewer who approved or requested changes, then me. */
 export function approvalItems(tr: Translator, data: PrDetail, sums: SummaryMap, summaryLoaded: boolean): ApprovalItem[] {
     const n = data.versions.length;
     const me = data.me;
@@ -131,14 +131,14 @@ export function approvalItems(tr: Translator, data: PrDetail, sums: SummaryMap, 
 }
 
 export interface MyActions {
-    /** PR dont je suis l'auteur : pas d'approbation possible. */
+    /** PR I authored: no approval possible. */
     mine: boolean;
-    /** PR fermée : boutons désactivés. */
+    /** Closed PR: buttons disabled. */
     closed: boolean;
     changesActive: boolean;
-    /** Mon approbation vaut pour la dernière version (voir approvalHolds) : bouton « Retirer l'approbation ». */
+    /** My approval holds for the latest version (see approvalHolds): "Remove approval" button. */
     approvalHolds: boolean;
-    /** J'ai approuvé, mais l'auteur a changé du code ou des dépendances depuis : « Réapprouver ». */
+    /** I approved, but the author changed code or dependencies since: "Re-approve". */
     reapprove: boolean;
 }
 

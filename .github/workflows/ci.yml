@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, types, tests, paquet
+    name: Lint, types, tests, package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # .npmrc : ignore-scripts=true, aucun script d'installation n'est exécuté.
+      # .npmrc: ignore-scripts=true, no install script is run.
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -36,7 +36,7 @@ jobs:
           if-no-files-found: error
 
   e2e:
-    name: Tests UI (Playwright, faux Bitbucket)
+    name: UI tests (Playwright, fake Bitbucket)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -63,13 +63,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - name: Le tag correspond à la version
+      - name: The tag matches the version
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - uses: actions/download-artifact@v8
         with:
           name: revspan-vsix
           path: dist
-      - name: Release avec le .vsix
+      - name: Release with the .vsix
         run: gh release create "$GITHUB_REF_NAME" dist/revspan.vsix --title "Revspan $GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

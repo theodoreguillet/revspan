@@ -1,4 +1,4 @@
-// Frise des versions : modèle d'affichage (jours, écarts, repli des longues PR, masquage), deltas et infobulles.
+// Version timeline: display model (days, gaps, folding of long PRs, hiding), deltas and tooltips.
 import type { Version, VersionSummary } from '../../shared/api.ts';
 import type { Translator } from '../i18n/index.ts';
 import { dayKey, daysBetween, fmtDateTime, fmtDay, fmtMonth, gapLabel, isToday, MINUS } from './format.ts';
@@ -9,7 +9,7 @@ export const MAX_VISIBLE_NODES = 12;
 
 export type TimelineNode = { type: 'node'; version: Version } | { type: 'hidden'; list: number[] };
 
-/** `after` = index de la version juste avant l'élément (sert à colorer la plage). */
+/** `after` = index of the version just before the item (used to color the range). */
 export type TimelineItem =
     | { type: 'base' }
     | { type: 'day'; key: string; label: string; nodes: TimelineNode[] }
@@ -36,12 +36,12 @@ export interface VersionNode {
     state: NodeState;
 }
 
-/** État de chaque version : affichée, masquée (sans code) ou repliée (longue PR). */
+/** State of each version: shown, hidden (no code) or folded (long PR). */
 export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode, foldDisabled, maxVisible = MAX_VISIBLE_NODES }: TimelineInput): VersionNode[] {
     const n = versions.length;
     const nodes: VersionNode[] = versions.map((version) => ({ version, state: 'shown' }));
     if (hideNoCode) {
-        // jamais masqués : les bornes, l'intérieur de la plage, ma dernière relecture
+        // never hidden: the bounds, the inside of the range, my last review
         for (const node of nodes) {
             const i = node.version.index;
             const keep = i === from || i === to || (i > from && i <= to) || i === lastReviewed;
@@ -53,8 +53,8 @@ export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode,
     if (foldDisabled) {
         return nodes;
     }
-    // jamais repliés : après ma relecture, la relecture elle-même, les bornes, l'intérieur de la plage
-    // (sauf « vN complète », dont l'intérieur n'est pas une sélection), la dernière version
+    // never folded: after my review, the review itself, the bounds, the inside of the range
+    // (except "full vN", whose inside is not a selection), the latest version
     const isProtected = (i: number): boolean => i === n || i === from || i === to
         || (lastReviewed != null && i >= lastReviewed)
         || (from > 0 && i > from && i < to);
@@ -71,7 +71,7 @@ export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode,
         }
         node.state = 'folded';
     }
-    // un repli d'une seule version n'apporte rien
+    // folding a single version brings nothing
     nodes.forEach((node, k) => {
         if (node.state === 'folded' && nodes[k - 1]?.state !== 'folded' && nodes[k + 1]?.state !== 'folded') {
             node.state = 'shown';
@@ -80,7 +80,7 @@ export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode,
     return nodes;
 }
 
-/** Suite d'éléments à rendre de gauche à droite. */
+/** Sequence of items to render from left to right. */
 export function timelineModel(tr: Translator, input: TimelineInput): TimelineItem[] {
     const { sums, lastReviewed } = input;
     const items: TimelineItem[] = [{ type: 'base' }];
@@ -146,12 +146,12 @@ export function timelineModel(tr: Translator, input: TimelineInput): TimelineIte
     return items;
 }
 
-/** Un élément intermédiaire (écart, espace, relu) est dans la bande de la plage. */
+/** An intermediate item (gap, space, reviewed) is in the range band. */
 export const inBand = (after: number, from: number, to: number): boolean => after >= from && after < to;
 
 export type NodeDelta = { code: true; added: number; removed: number } | { code: false; text: string };
 
-/** Delta affiché sous un nœud : « +35 −14 » pour du code, sinon le type (« deps », « rebase seul »…). */
+/** Delta shown under a node: "+35 -14" for code, otherwise the type ("deps", "rebase only"...). */
 export function nodeDelta(tr: Translator, sum: VersionSummary | undefined): NodeDelta {
     if (!sum) {
         return { code: false, text: '…' };
@@ -162,7 +162,7 @@ export function nodeDelta(tr: Translator, sum: VersionSummary | undefined): Node
     return { code: false, text: tr.t(KIND_LABELS[sum.kind]) };
 }
 
-/** Infobulle d'un nœud : version, date, hash, base, type, fichiers. */
+/** Tooltip of a node: version, date, hash, base, type, files. */
 export function nodeTooltip(tr: Translator, v: Version, sum: VersionSummary | undefined, opts: { lastReviewed: number | null; n: number }): string {
     const parts = [`v${v.index}`, fmtDateTime(tr, v.pushedAt), v.shortHash];
     if (!v.available) {

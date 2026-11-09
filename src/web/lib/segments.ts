@@ -1,4 +1,4 @@
-// Texte enrichi minimal produit par la logique (bandeau, onglet Versions) et rendu par <SegText>.
+// Minimal rich text produced by the logic (banner, Versions tab) and rendered by <SegText>.
 import type { MessageKey, Translator } from '../i18n/index.ts';
 import type { ParamName, ParamValue } from '../i18n/translator.ts';
 
@@ -10,7 +10,7 @@ export const mono = (text: string): Seg => ({ text, kind: 'mono' });
 export const add = (text: string): Seg => ({ text, kind: 'add' });
 export const del = (text: string): Seg => ({ text, kind: 'del' });
 
-/** Texte brut (pour les tests et les infobulles). */
+/** Plain text (for tests and tooltips). */
 export function segText(segs: Seg[]): string {
     return segs.map((s) => (typeof s === 'string' ? s : s.text)).join('');
 }

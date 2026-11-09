@@ -1,16 +1,16 @@
-// Relocalisation d'une ligne d'une version d'un fichier vers une autre.
+// Relocating a line from one version of a file to another.
 import { diffLines } from './diff.ts';
 
 export interface MappedLine {
-    /** Numéro 1-based dans le nouveau texte (null si le fichier est vide). */
+    /** 1-based number in the new text (null if the file is empty). */
     line: number | null;
-    /** La ligne d'origine a été modifiée ou supprimée ; line pointe alors sur la position la plus proche. */
+    /** The original line was modified or deleted; line then points to the closest position. */
     changed: boolean;
 }
 
 const clamp = (line: number, max: number): number => Math.max(1, Math.min(line, max));
 
-/** line : numéro 1-based dans oldLines. */
+/** line: 1-based number in oldLines. */
 export function mapLine(oldLines: readonly string[], newLines: readonly string[], line: number): MappedLine {
     if (newLines.length === 0) {
         return { line: null, changed: true };

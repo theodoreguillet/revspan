@@ -1,11 +1,11 @@
-// Fusion 3 voies ligne à ligne.
-// merge3(base, ours, theirs) applique sur `base` les changements de `ours` ET de `theirs`.
-// Une zone modifiée des deux côtés de façon différente est un conflit : on garde la version `theirs`.
-// Usage : rejouer une ancienne version de PR (theirs) sur la nouvelle base master (ours).
+// Line-by-line 3-way merge.
+// merge3(base, ours, theirs) applies the changes of `ours` AND `theirs` onto `base`.
+// An area modified differently on both sides is a conflict: the `theirs` version is kept.
+// Usage: replay an old PR version (theirs) onto the new master base (ours).
 import { diffLines, type DiffOp } from './diff.ts';
 
 interface Chunk {
-    /** Plage [start, end[ remplacée dans `base`. */
+    /** Range [start, end[ replaced in `base`. */
     start: number;
     end: number;
     lines: string[];
@@ -23,7 +23,7 @@ export interface MergeResult {
     conflicts: number;
 }
 
-/** Regroupe les segments non '=' consécutifs en blocs exprimés en coordonnées de `base`. */
+/** Groups consecutive non-'=' segments into blocks expressed in `base` coordinates. */
 export function changeChunks(ops: readonly DiffOp[], otherLines: readonly string[], side: Chunk['side']): Chunk[] {
     const chunks: Chunk[] = [];
     let current: Chunk | null = null;
@@ -62,7 +62,7 @@ function overlaps(chunk: Chunk, group: Group): boolean {
     return group.start > chunk.start && group.start < chunk.end;
 }
 
-// push(...grand tableau) dépasse la pile au-delà de ~100 000 éléments : copie en boucle.
+// push(...large array) overflows the stack beyond ~100,000 elements: copy in a loop.
 function append(out: string[], items: readonly string[]): void {
     for (const item of items) {
         out.push(item);

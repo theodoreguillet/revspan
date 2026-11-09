@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Un hunk en vue unifiée ou côte à côte, avec les fils et le composeur insérés sous leur ligne.
+// A hunk in unified or side-by-side view, with the threads and composer inserted under their line.
 import { computed } from 'vue';
 import type { Hunk } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Bouton d'action destructive. Sur le web : confirm() du navigateur. Dans un panneau VS Code, les boîtes de dialogue
-// sont bloquées : un premier clic arme le bouton (« Confirmer ? »), un second clic dans les 4 s exécute l'action.
+// Destructive action button. On the web: the browser's confirm(). In a VS Code panel, dialog boxes
+// are blocked: a first click arms the button ("Confirm?"), a second click within 4 s runs the action.
 import { onBeforeUnmount, ref } from 'vue';
 import { t } from '../i18n/index.ts';
 import { isVsCode } from '../services/host.ts';

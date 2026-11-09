@@ -1,4 +1,4 @@
-// « Ouvrir le fichier » : le fichier de la PR dans le dépôt cloné localement, à la ligne demandée.
+// "Open file": the PR's file in the locally cloned repository, at the requested line.
 import fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';

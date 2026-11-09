@@ -2,7 +2,7 @@
     "name": "revspan",
     "version": "2.0.0",
     "private": true,
-    "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push — outil local et extension VS Code",
+    "description": "Review Bitbucket PRs version by version, despite amend, rebase and force-push — local tool and VS Code extension",
     "license": "MIT",
     "author": "Théodore Guillet",
     "repository": {

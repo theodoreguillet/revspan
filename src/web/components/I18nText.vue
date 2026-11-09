@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Translated sentence with embedded markup: each named slot fills the placeholder of the same name
-// (« Add the {scope} scope… » with <template #scope><code>…</code></template>), in any language's word order.
+// ("Add the {scope} scope..." with <template #scope><code>...</code></template>), in any language's word order.
 import { computed, useSlots } from 'vue';
 import { tr, type MessageKey } from '../i18n/index.ts';
 

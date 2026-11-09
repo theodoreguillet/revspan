@@ -1,7 +1,7 @@
 import { builtinModules } from 'node:module';
 import { defineConfig } from 'vite';
 
-// Extension VS Code : un seul fichier CommonJS (hôte d'extensions de VS Code), dépendances incluses, `vscode` fourni par VS Code.
+// VS Code extension: a single CommonJS file (VS Code's extension host), dependencies included, `vscode` provided by VS Code.
 export default defineConfig({
     build: {
         ssr: 'src/extension/extension.ts',

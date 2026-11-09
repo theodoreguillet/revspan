@@ -1,5 +1,5 @@
-// Point d'entrée : lance Revspan et ouvre le navigateur.
-// Usage : revspan [URL de PR Bitbucket] [--port 7420] [--no-open]
+// Entry point: starts Revspan and opens the browser.
+// Usage: revspan [Bitbucket PR URL] [--port 7420] [--no-open]
 import { spawn } from 'node:child_process';
 import { parsePrUrl } from '../shared/pr-url.ts';
 import { startApp } from './app.ts';
@@ -11,7 +11,7 @@ interface CliArgs {
     help: boolean;
 }
 
-const USAGE = 'Usage : revspan [URL de PR Bitbucket] [--port 7420] [--no-open]';
+const USAGE = 'Usage: revspan [Bitbucket PR URL] [--port 7420] [--no-open]';
 
 function parseArgs(argv: readonly string[]): CliArgs {
     const args: CliArgs = { port: 7420, open: true, url: null, help: false };
@@ -37,7 +37,7 @@ function openBrowser(url: string): void {
         : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
             : ['xdg-open', [url]];
     const child = spawn(cmd, cmdArgs, { stdio: 'ignore', detached: true });
-    child.on('error', () => console.log(`Ouvre ${url} dans ton navigateur.`));
+    child.on('error', () => console.log(`Open ${url} in your browser.`));
     child.unref();
 }
 
@@ -57,17 +57,17 @@ async function main(): Promise<void> {
         return;
     }
     if (!Number.isInteger(args.port) || args.port < 0 || args.port > 65535) {
-        throw new Error(`Port invalide. ${USAGE}`);
+        throw new Error(`Invalid port. ${USAGE}`);
     }
     const ref = args.url ? parsePrUrl(args.url) : null;
     if (args.url && !ref) {
-        throw new Error(`URL de PR Bitbucket non reconnue : ${args.url}`);
+        throw new Error(`Unrecognized Bitbucket PR URL: ${args.url}`);
     }
     const hash = ref ? `#/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '';
 
     if (args.port !== 0 && await alreadyRunning(args.port)) {
         const url = `http://127.0.0.1:${args.port}/${hash}`;
-        console.log(`Revspan tourne déjà : ${url}`);
+        console.log(`Revspan is already running: ${url}`);
         if (args.open) {
             openBrowser(url);
         }
@@ -76,8 +76,8 @@ async function main(): Promise<void> {
 
     const app = await startApp({ port: args.port });
     const url = `${app.url}/${hash}`;
-    console.log(`Revspan : ${url}`);
-    console.log(`Configuration : ${app.dir}  —  Ctrl+C pour arrêter.`);
+    console.log(`Revspan: ${url}`);
+    console.log(`Configuration: ${app.dir}  --  Ctrl+C to stop.`);
     if (args.open) {
         openBrowser(url);
     }

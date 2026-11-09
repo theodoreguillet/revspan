@@ -6,10 +6,10 @@ import { trappedFocus } from '../lib/keyboard.ts';
 
 const dialog = ref<HTMLElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
-/** Élément qui avait le focus à l'ouverture (bouton « ? » de la barre…) : il le retrouve à la fermeture. */
+/** Element that had focus when opened ("?" button in the bar...): focus returns to it on close. */
 let opener: HTMLElement | null = null;
 
-// capture : l'overlay ouvert intercepte Échap et ? avant les raccourcis de la page, et garde le focus (aria-modal)
+// capture: the open overlay intercepts Escape and ? before the page shortcuts, and keeps the focus (aria-modal)
 function onKey(event: KeyboardEvent): void {
     if (event.key === 'Escape' || event.key === '?') {
         event.preventDefault();

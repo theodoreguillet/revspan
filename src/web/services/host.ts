@@ -1,5 +1,5 @@
-// Page hébergée dans un panneau VS Code : échanges avec l'extension (src/shared/webview-protocol.ts).
-// Hors de VS Code, isVsCode est faux et rien ici n'est utilisé.
+// Page hosted in a VS Code panel: exchanges with the extension (src/shared/webview-protocol.ts).
+// Outside VS Code, isVsCode is false and nothing here is used.
 import type { PrRef } from '../../shared/api.ts';
 import { INITIAL_LOCALE_META, INITIAL_ROUTE_META, isPageRoute, type HostToWebview, type PanelState, type WebviewToHost } from '../../shared/webview-protocol.ts';
 
@@ -10,16 +10,16 @@ interface VsCodeApi {
 
 type HostGlobal = typeof globalThis & { acquireVsCodeApi?: () => VsCodeApi };
 
-/** Réponse relayée par l'extension (statut HTTP et corps JSON). */
+/** Response relayed by the extension (HTTP status and JSON body). */
 export interface HostResponse {
     status: number;
     body: unknown;
 }
 
-// Délai large : le premier calcul du résumé d'une longue PR peut prendre plusieurs secondes.
+// Generous timeout: the first summary computation of a long PR can take several seconds.
 const REQUEST_TIMEOUT_MS = 120000;
 
-// acquireVsCodeApi ne peut être appelé qu'une seule fois par page.
+// acquireVsCodeApi can only be called once per page.
 const acquire = (globalThis as HostGlobal).acquireVsCodeApi;
 const vscode: VsCodeApi | null = typeof acquire === 'function' ? acquire() : null;
 
@@ -38,7 +38,7 @@ function isHostMessage(data: unknown): data is HostToWebview {
         || (msg.type === 'navigate' && typeof msg.route === 'string');
 }
 
-/** Écoute les messages de l'extension ; renvoie la fonction de désabonnement. */
+/** Listens to the extension's messages; returns the unsubscribe function. */
 export function onHostMessage(handler: (message: HostToWebview) => void): () => void {
     const listener = (event: MessageEvent): void => {
         if (isHostMessage(event.data)) {
@@ -53,7 +53,7 @@ const pending = new Map<number, (response: HostResponse) => void>();
 let nextId = 1;
 let listening = false;
 
-/** Appel de l'API locale relayé par l'extension (path complet, ex. « /api/home »). Rejette si l'extension ne répond pas. */
+/** Local API call relayed by the extension (full path, e.g. "/api/home"). Rejects if the extension does not answer. */
 export function hostRequest(method: string, path: string, body?: unknown): Promise<HostResponse> {
     if (!vscode) {
         return Promise.reject(new Error('Not in VS Code'));
@@ -81,22 +81,22 @@ export function hostRequest(method: string, path: string, body?: unknown): Promi
     });
 }
 
-/** Enregistre la route affichée : VS Code la rend à l'extension pour rouvrir le panneau au même endroit (« Recharger la fenêtre »). */
+/** Saves the displayed route: VS Code gives it back to the extension to reopen the panel at the same place ("Reload Window"). */
 export function rememberRoute(route: string): void {
     vscode?.setState({ route });
 }
 
-/** Ouvre le fichier du dépôt cloné localement, à la ligne donnée (1-based) ou au début. */
+/** Opens the file of the locally cloned repository, at the given line (1-based) or at the start. */
 export function openLocalFile(ref: PrRef, path: string, line: number | null): void {
     postToHost({ type: 'openFile', ref: { ...ref }, path, line });
 }
 
-/** Ouvre la comparaison du fichier dans l'éditeur de diff de VS Code (from = 0 : contre la base). */
+/** Opens the file's comparison in VS Code's diff editor (from = 0: against the base). */
 export function openNativeDiff(ref: PrRef, from: number, to: number, path: string, oldPath: string | null): void {
     postToHost({ type: 'openDiff', ref: { ...ref }, from, to, path, oldPath });
 }
 
-/** Route initiale donnée par l'extension (<meta name="revspan-route" content="/pr/ws/repo/42">), ou null. */
+/** Route initially given by the extension (<meta name="revspan-route" content="/pr/ws/repo/42">), or null. */
 export function readInitialRoute(doc: Document): string | null {
     const content = doc.querySelector(`meta[name="${INITIAL_ROUTE_META}"]`)?.getAttribute('content')?.trim();
     return isPageRoute(content) ? content : null;

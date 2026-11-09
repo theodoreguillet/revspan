@@ -1,5 +1,5 @@
-// Cache disque pour les données immuables (contenus par commit, merge-base, diffstat entre deux commits,
-// résumés de versions) + cache mémoire : LRU pour l'immuable, durée de vie courte pour les données vivantes.
+// Disk cache for immutable data (contents per commit, merge-base, diffstat between two commits,
+// version summaries) + in-memory cache: LRU for immutable data, short lifetime for live data.
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,7 +28,7 @@ export class Cache {
     private remember(key: string, value: unknown): void {
         this.memory.delete(key);
         this.memory.set(key, value);
-        // Map garde l'ordre d'insertion : la première clé est la moins récemment utilisée.
+        // Map keeps insertion order: the first key is the least recently used.
         const oldest = this.memory.keys().next();
         if (this.memory.size > MEMORY_LIMIT && !oldest.done) {
             this.memory.delete(oldest.value);
@@ -65,11 +65,11 @@ export class Cache {
             fs.writeFileSync(tmp, JSON.stringify({ k: key, v: value }), { mode: 0o600 });
             fs.renameSync(tmp, file);
         } catch (error) {
-            console.warn(`revspan: écriture du cache impossible (${(error as Error).message})`);
+            console.warn(`revspan: cannot write the cache (${(error as Error).message})`);
         }
     }
 
-    /** Oublie une entrée (mémoire et disque) : donnée « immuable » qui a disparu de Bitbucket. */
+    /** Forgets an entry (memory and disk): "immutable" data that disappeared from Bitbucket. */
     delete(key: string): void {
         this.memory.delete(key);
         if (!this.dir) {
@@ -78,13 +78,13 @@ export class Cache {
         try {
             fs.rmSync(this.fileFor(this.dir, key), { force: true });
         } catch (error) {
-            console.warn(`revspan: suppression dans le cache impossible (${(error as Error).message})`);
+            console.warn(`revspan: cannot delete from the cache (${(error as Error).message})`);
         }
     }
 
     /**
-     * Calcule une seule fois une valeur immuable (requêtes concurrentes dédupliquées).
-     * keep(value) = false : résultat non mémorisé (ex. 404 peut-être transitoire).
+     * Computes an immutable value only once (concurrent requests deduplicated).
+     * keep(value) = false: result not memoized (e.g. a possibly transient 404).
      */
     async getOrCompute<T>(key: string, compute: () => Promise<T>, keep: (value: T) => boolean = () => true): Promise<T> {
         const cached = this.get<T>(key);
@@ -110,13 +110,13 @@ export class Cache {
         return promise;
     }
 
-    /** Données vivantes (PR, activité, commentaires) : mémoire seulement, durée courte. */
+    /** Live data (PR, activity, comments): memory only, short lifetime. */
     async getLive<T>(key: string, ttlMs: number, compute: () => Promise<T>): Promise<T> {
         const hit = this.live.get(key);
         if (hit && Date.now() - hit.at < ttlMs) {
             return hit.value as T;
         }
-        // Calculs concurrents de même clé partagés ; une erreur n'est jamais mise en cache.
+        // Concurrent computations with the same key are shared; an error is never cached.
         const pending = this.livePending.get(key);
         if (pending) {
             return pending as Promise<T>;

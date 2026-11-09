@@ -25,7 +25,7 @@ function toggle(): void {
     page.toggleCollapsed(props.file);
 }
 
-// Dans VS Code : ouvrir le fichier du dépôt local, ou sa comparaison dans l'éditeur de diff
+// In VS Code: open the local repository file, or its comparison in the diff editor
 function openFile(): void {
     openLocalFile(page.ref, props.file.path, firstChangedLine(props.file));
 }
@@ -41,7 +41,7 @@ function onViewed(event: Event): void {
     void page.setViewed(props.file, (event.target as HTMLInputElement).checked);
 }
 
-// la navigation (j/k, liste des fichiers) fait défiler jusqu'à ce bloc
+// navigation (j/k, file list) scrolls to this block
 onMounted(() => page.registerFile(props.file.path, root.value));
 onBeforeUnmount(() => page.registerFile(props.file.path, null));
 </script>

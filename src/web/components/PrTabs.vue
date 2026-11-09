@@ -15,7 +15,7 @@ function pick(tab: PrTab): void {
     page.tab = tab;
 }
 
-// repère pour remonter en haut des onglets quand la plage change
+// anchor to scroll back to the top of the tabs when the range changes
 onMounted(() => page.registerTabs(root.value));
 onBeforeUnmount(() => page.registerTabs(null));
 </script>

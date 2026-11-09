@@ -1,5 +1,5 @@
-// Client typé de l'API locale : HTTP vers le serveur, ou messages à l'extension dans un panneau VS Code.
-// Toute requête non-GET porte l'en-tête X-Revspan: 1 (ajouté par l'extension dans VS Code) et un corps JSON.
+// Typed client of the local API: HTTP to the server, or messages to the extension in a VS Code panel.
+// Every non-GET request carries the X-Revspan: 1 header (added by the extension in VS Code) and a JSON body.
 import {
     MUTATION_HEADER,
     type ApiErrorBody,
@@ -39,7 +39,7 @@ export class ApiError extends Error {
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
-/** HTTP vers le serveur local (version web). */
+/** HTTP to the local server (web version). */
 async function httpTransport(method: Method, path: string, body: unknown): Promise<HostResponse> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     const init: RequestInit = { method, headers, credentials: 'same-origin' };
@@ -61,14 +61,14 @@ async function httpTransport(method: Method, path: string, body: unknown): Promi
     return { status: res.status, body: data };
 }
 
-/** Messages à l'extension, qui appelle l'API et ajoute elle-même l'en-tête X-Revspan (panneau VS Code). */
+/** Messages to the extension, which calls the API and adds the X-Revspan header itself (VS Code panel). */
 function vsCodeTransport(method: Method, path: string, body: unknown): Promise<HostResponse> {
-    // copie JSON : même contenu qu'en HTTP, et clonable par postMessage (pas d'objet réactif)
+    // JSON copy: same content as over HTTP, and cloneable by postMessage (no reactive object)
     return hostRequest(method, path, body === undefined ? undefined : JSON.parse(JSON.stringify(body)));
 }
 
 async function request<T>(method: Method, path: string, payload?: unknown): Promise<T> {
-    // toute requête non-GET porte un corps JSON
+    // every non-GET request carries a JSON body
     const body = method === 'GET' ? undefined : payload ?? {};
     let response: HostResponse;
     try {
@@ -108,7 +108,7 @@ export const api = {
     viewed: (ref: PrRef, body: ViewedRequest) => request<Ok>('POST', `${prPath(ref)}/viewed`, body),
 };
 
-/** Erreurs de jeton : on propose d'ouvrir les réglages. */
+/** Token errors: we offer to open the settings. */
 export const AUTH_CODES: ReadonlySet<ApiErrorCode> = new Set<ApiErrorCode>(['NO_TOKEN', 'BB_UNAUTHORIZED']);
 
 /** Message to show (translated in the current locale) and error code. */

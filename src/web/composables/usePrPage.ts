@@ -1,5 +1,5 @@
-// État de la page PR, partagé par provide/inject : assemble les composables spécialisés
-// (données, plage, options d'affichage, navigation, commentaires, relecture) et les relie entre eux.
+// PR page state, shared through provide/inject: assembles the specialized composables
+// (data, range, display options, navigation, comments, review) and wires them together.
 import { computed, inject, nextTick, provide, reactive, watch, type InjectionKey } from 'vue';
 import type { PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
@@ -69,7 +69,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         return null;
     }
 
-    /** « Voir dans le diff » : onglet Diff, fichier déplié, fil résolu déplié, puis défilement jusqu'au fil. */
+    /** "View in diff": Diff tab, file expanded, resolved thread expanded, then scroll to the thread. */
     async function showInDiff(threadId: number): Promise<void> {
         const placement = placementOf(threadId);
         if (!placement) {
@@ -85,7 +85,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         nav.revealThread(threadId);
     }
 
-    /** Raccourcis : j/k fichier, n/p fil, v vu, [ ] version, Échap ferme le composeur. Renvoie true si la touche est traitée. */
+    /** Shortcuts: j/k file, n/p thread, v seen, [ ] version, Escape closes the composer. Returns true if the key is handled. */
     function handleKey(key: string): boolean {
         const inDiff = options.tab.value === 'diff';
         const current = files.value[nav.curFile.value];
@@ -122,7 +122,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         }
     }
 
-    // reactive() : les composants lisent page.from, page.detail… sans .value (les shallowRef restent superficiels).
+    // reactive(): components read page.from, page.detail... without .value (the shallowRefs stay shallow).
     return reactive({
         ref: prRef,
         ...load, ...range, ...options, ...nav, ...discussion, ...review,
@@ -134,7 +134,7 @@ export type PrPage = ReturnType<typeof createPrPage>;
 
 const PR_PAGE: InjectionKey<PrPage> = Symbol('prPage');
 
-/** Crée l'état de la page PR (détail déjà chargé) et le met à disposition des composants enfants. */
+/** Creates the PR page state (detail already loaded) and makes it available to the child components. */
 export function providePrPage(prRef: PrRef, initial: PrDetail): PrPage {
     const page = createPrPage(prRef, initial);
     provide(PR_PAGE, page);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// HTML de commentaire Bitbucket (non fiable) : assaini par liste blanche puis ajouté comme fragment DOM, jamais via v-html.
+// Bitbucket comment HTML (untrusted): sanitized with an allowlist then added as a DOM fragment, never through v-html.
 import { onMounted, ref, watch } from 'vue';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 

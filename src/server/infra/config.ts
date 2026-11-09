@@ -1,4 +1,4 @@
-// Dossier de configuration, réglages et état local (fichiers JSON écrits de façon atomique, droits 0600).
+// Configuration folder, settings and local state (JSON files written atomically, mode 0600).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,7 @@ export interface AppConfig {
     repos: string[];
 }
 
-/** État local d'une PR : marque « relue », fichiers vus, type de chaque version (clé = hash abrégé à 12). */
+/** Local state of a PR: "reviewed" mark, seen files, type of each version (key = hash abbreviated to 12). */
 export interface LocalPrState extends LocalReview {
     kinds: Record<string, VersionKind>;
 }
@@ -30,7 +30,7 @@ export function configDir(env: NodeJS.ProcessEnv = process.env, platform: NodeJS
     return path.join(env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'revspan');
 }
 
-/** Dépôts valides (« workspace/dépôt »), sans doublon. */
+/** Valid repositories ("workspace/repo"), without duplicates. */
 export const normalizeRepos = (repos: readonly string[]): string[] => parseRepoList(repos).repos;
 
 export const prKeyOf = ({ workspace, repo, id }: PrRef): string => `${workspace}/${repo}#${id}`;
@@ -46,13 +46,13 @@ function readJson<T>(file: string, fallback: T): T {
         return JSON.parse(fs.readFileSync(file, 'utf8')) as T;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            console.warn(`revspan: ${file} illisible, valeurs par défaut utilisées (${(error as Error).message})`);
+            console.warn(`revspan: ${file} unreadable, defaults used (${(error as Error).message})`);
         }
         return fallback;
     }
 }
 
-/** Signature d'un fichier (inode, date, taille) : l'écriture atomique change l'inode, donc toute réécriture est détectée. */
+/** Signature of a file (inode, date, size): atomic writing changes the inode, so any rewrite is detected. */
 function signatureOf(file: string): string {
     try {
         const { ino, mtimeMs, size } = fs.statSync(file);
@@ -62,7 +62,7 @@ function signatureOf(file: string): string {
     }
 }
 
-/** Fichier JSON relu seulement quand il a changé sur le disque (plusieurs fenêtres partagent le même dossier). */
+/** JSON file re-read only when it changed on disk (several windows share the same folder). */
 class JsonFile<T> {
     private signature: string | null = null;
     private cached: T;
@@ -75,7 +75,7 @@ class JsonFile<T> {
         this.cached = load({});
     }
 
-    /** Valeur à jour : relue si le fichier a changé depuis la dernière lecture, valeurs par défaut s'il est absent ou corrompu. */
+    /** Up-to-date value: re-read if the file changed since the last read, defaults if it is missing or corrupt. */
     read(): T {
         const signature = signatureOf(this.file);
         if (signature !== this.signature) {
@@ -94,7 +94,7 @@ class JsonFile<T> {
 
 const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: state.viewed ?? {}, kinds: state.kinds ?? {} });
 
-/** Liste des dépôts tenue ailleurs que dans config.json (extension VS Code : réglage revspan.repositories). */
+/** Repository list kept somewhere other than config.json (VS Code extension: revspan.repositories setting). */
 export interface RepoSource {
     get(): readonly string[];
     set(repos: string[]): Promise<void>;
@@ -131,7 +131,7 @@ export class Store {
         return { ...this.config };
     }
 
-    /** État local d'une PR (vide si elle n'a jamais été ouverte). */
+    /** Local state of a PR (empty if it was never opened). */
     prState(prKey: string): LocalPrState {
         return completeState(this.stateFile.read().prs[prKey]);
     }

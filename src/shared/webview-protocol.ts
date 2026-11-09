@@ -1,34 +1,34 @@
-// Messages échangés entre la page (dans un panneau VS Code) et l'extension.
-// Hors de VS Code, la page parle au serveur en HTTP ; dans VS Code, elle passe par ces messages.
+// Messages exchanged between the page (in a VS Code panel) and the extension.
+// Outside VS Code, the page talks to the server over HTTP; inside VS Code, it uses these messages.
 import type { PrRef } from './api.ts';
 
-/** Page → extension. */
+/** Page -> extension. */
 export type WebviewToHost =
-    /** Appel de l'API locale (même chemin et même corps qu'en HTTP, ex. « /api/pr/ws/repo/42 »). */
+    /** Call to the local API (same path and same body as over HTTP, e.g. "/api/pr/ws/repo/42"). */
     | { type: 'request'; id: number; method: string; path: string; body?: unknown }
-    /** Ouvrir le fichier du dépôt cloné localement, à une ligne (1-based) ou au début. */
+    /** Open the file of the locally cloned repository, at a line (1-based) or at the start. */
     | { type: 'openFile'; ref: PrRef; path: string; line: number | null }
-    /** Ouvrir la comparaison d'un fichier dans l'éditeur de diff de VS Code (from = 0 : contre la base). */
+    /** Open a file's comparison in VS Code's diff editor (from = 0: against the base). */
     | { type: 'openDiff'; ref: PrRef; from: number; to: number; path: string; oldPath: string | null };
 
-/** Extension → page. */
+/** Extension -> page. */
 export type HostToWebview =
-    /** Réponse à une requête (status HTTP, corps JSON ou null). */
+    /** Response to a request (HTTP status, JSON body or null). */
     | { type: 'response'; id: number; status: number; body: unknown }
-    /** Afficher une route de la page (ex. « /pr/ws/repo/42 », « /settings »). */
+    /** Show a page route (e.g. "/pr/ws/repo/42", "/settings"). */
     | { type: 'navigate'; route: string };
 
-/** Balise <meta> par laquelle l'extension donne la route initiale à la page. */
+/** <meta> tag through which the extension gives the initial route to the page. */
 export const INITIAL_ROUTE_META = 'revspan-route';
 
-/** <meta> tag through which the extension imposes the page language (VS Code display language, e.g. « fr », « en-us »). */
+/** <meta> tag through which the extension imposes the page language (VS Code display language, e.g. "fr", "en-us"). */
 export const INITIAL_LOCALE_META = 'revspan-locale';
 
-/** État du panneau enregistré par la page (vscode.setState), rendu par VS Code quand il rouvre le panneau. */
+/** Panel state saved by the page (vscode.setState), restored by VS Code when it reopens the panel. */
 export interface PanelState {
-    /** Route affichée (ex. « /pr/ws/repo/42?from=2&to=6 »). */
+    /** Route shown (e.g. "/pr/ws/repo/42?from=2&to=6"). */
     route: string;
 }
 
-/** Chemin de la page (« /… »), jamais une adresse d'une autre origine (« //hôte/… », « https:… »). */
+/** Page path ("/..."), never an address from another origin ("//host/...", "https:..."). */
 export const isPageRoute = (value: unknown): value is string => typeof value === 'string' && value.startsWith('/') && !value.startsWith('//');

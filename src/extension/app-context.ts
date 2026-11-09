@@ -1,6 +1,6 @@
-// Assemblage côté extension : les mêmes services et la même application HTTP que le serveur local,
-// avec le jeton dans le stockage sécurisé de VS Code, les dépôts suivis dans le réglage revspan.repositories
-// et les autres données dans le stockage global de l'extension.
+// Extension-side assembly: the same services and the same HTTP application as the local server,
+// with the token in VS Code's secure storage, the tracked repositories in the revspan.repositories setting
+// and the other data in the extension's global storage.
 import path from 'node:path';
 import * as vscode from 'vscode';
 import type { Hono } from 'hono';
@@ -18,7 +18,7 @@ export interface ExtensionApp {
     http: Hono;
 }
 
-/** Réglage VS Code des dépôts suivis : visible dans les Réglages, synchronisé par Settings Sync, propre au profil. */
+/** VS Code setting for the tracked repositories: visible in Settings, synced by Settings Sync, per profile. */
 export const REPOS_SETTING = { section: 'revspan', key: 'repositories', id: 'revspan.repositories' } as const;
 
 const TOKEN_KEY_PREFIX = 'revspan.bitbucket-token:';
@@ -31,7 +31,7 @@ function vscodeRepoSource(): RepoSource {
             return Array.isArray(value) ? value.filter((repo): repo is string => typeof repo === 'string') : [];
         },
         async set(repos) {
-            // Écrit au niveau qui donne la valeur effective (sinon un .vscode/settings.json masquerait l'enregistrement).
+            // Written at the level that gives the effective value (otherwise a .vscode/settings.json would mask the save).
             const target = settingTarget(config().inspect(REPOS_SETTING.key), vscode.workspace.isTrusted) === 'workspace'
                 ? vscode.ConfigurationTarget.Workspace
                 : vscode.ConfigurationTarget.Global;
@@ -58,7 +58,7 @@ function vscodeSecretStore(secrets: vscode.SecretStorage): SecretStore {
     };
 }
 
-/** En développement ou en test seulement : API Bitbucket et jeton de test fournis par l'environnement (faux Bitbucket). */
+/** In development or test only: Bitbucket API and test token provided by the environment (fake Bitbucket). */
 function testOverrides(mode: vscode.ExtensionMode): { baseUrl?: string; email?: string; token?: string; repos?: string[] } {
     if (mode === vscode.ExtensionMode.Production) {
         return {};

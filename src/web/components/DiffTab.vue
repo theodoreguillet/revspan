@@ -42,6 +42,6 @@ const masterOnlyNote = computed(() => {
 </template>
 
 <style scoped>
-/* laisse défiler le dernier fichier jusque sous la frise (navigation j/k) */
+/* lets the last file scroll up to just under the timeline (j/k navigation) */
 .rv-tail { height: 55vh; }
 </style>

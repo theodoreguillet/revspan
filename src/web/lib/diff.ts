@@ -1,4 +1,4 @@
-// Règles du diff : fichiers vus, paires côte à côte, placement des fils, commentaires sur ligne supprimée.
+// Diff rules: seen files, side-by-side pairs, thread placement, comments on deleted lines.
 import type { DiffLine, FileDiff, Hunk, Thread, ThreadPlacement } from '../../shared/api.ts';
 import type { MessageKey, Translator } from '../i18n/index.ts';
 import { MINUS, vname } from './format.ts';
@@ -6,7 +6,7 @@ import type { SummaryMap } from './kinds.ts';
 
 export type ViewedStatus = 'none' | 'seen' | 'changed';
 
-/** none : jamais vu ; seen : vu avec ce contenu ; changed : vu, mais le contenu a changé depuis. */
+/** none: never seen; seen: seen with this content; changed: seen, but the content changed since. */
 export function viewedStatus(file: Pick<FileDiff, 'path' | 'contentHash'>, viewed: Record<string, string> | undefined): ViewedStatus {
     const stored = viewed?.[file.path];
     if (stored == null) {
@@ -15,7 +15,7 @@ export function viewedStatus(file: Pick<FileDiff, 'path' | 'contentHash'>, viewe
     return stored === file.contentHash ? 'seen' : 'changed';
 }
 
-/** Dernière version de la plage (from, to] qui a modifié ce fichier, d'après le résumé. */
+/** Latest version of the range (from, to] that modified this file, according to the summary. */
 export function lastTouched(sums: SummaryMap, from: number, to: number, path: string): number | null {
     for (let i = to; i >= from + 1; i--) {
         if (sums.get(i)?.files.some((f) => f.path === path)) {
@@ -30,7 +30,7 @@ export interface SplitRow {
     right: DiffLine | null;
 }
 
-/** Paires gauche/droite d'un hunk : les suites - puis + sont alignées ligne à ligne. */
+/** Left/right pairs of a hunk: the - then + runs are aligned line by line. */
 export function splitRows(lines: DiffLine[]): SplitRow[] {
     const rows: SplitRow[] = [];
     let dels: DiffLine[] = [];
@@ -76,7 +76,7 @@ export interface TextPart {
     hl: boolean;
 }
 
-/** Découpe le texte d'une ligne selon les plages [début, fin[ à surligner. */
+/** Splits a line's text according to the [start, end[ ranges to highlight. */
 export function highlightParts(text: string, ranges: [number, number][] | undefined): TextPart[] {
     if (!ranges?.length) {
         return [{ text, hl: false }];
@@ -106,13 +106,13 @@ export interface PlacedThread {
 }
 
 export interface FileThreads {
-    /** Fils sans ligne affichée : niveau fichier, ligne hors des hunks. */
+    /** Threads without a displayed line: file level, line outside the hunks. */
     fileLevel: PlacedThread[];
-    /** Fils en ligne, par numéro de ligne côté « to ». */
+    /** Inline threads, by line number on the "to" side. */
     byLine: Map<number, PlacedThread[]>;
 }
 
-/** Répartit les fils d'un fichier entre la tête du fichier et les lignes affichées. Les fils résolus sont omis sauf demande. */
+/** Distributes a file's threads between the file head and the displayed lines. Resolved threads are omitted unless requested. */
 export function placeFileThreads(file: FileDiff, threadsById: Map<number, Thread>, showResolved: boolean): FileThreads {
     const lineSet = new Set<number>();
     for (const hunk of file.hunks) {
@@ -140,7 +140,7 @@ export function placeFileThreads(file: FileDiff, threadsById: Map<number, Thread
     return { fileLevel, byLine };
 }
 
-/** Nombre de fils d'un fichier (ouverts seulement, sauf si les résolus sont affichés). */
+/** Number of threads of a file (open ones only, unless resolved ones are shown). */
 export function fileThreadCount(file: FileDiff, threadsById: Map<number, Thread>, includeResolved: boolean): number {
     return file.threads.filter((p) => {
         const t = threadsById.get(p.threadId);
@@ -154,14 +154,14 @@ export interface ComposerTarget {
     key: string;
     path: string;
     kind: ComposerKind;
-    /** Numéro de ligne côté nouveau (new) ou ancien (old). */
+    /** Line number on the new (new) or old (old) side. */
     line: number;
     code: string;
 }
 
 /**
- * Cible du « + » sur une ligne : côté nouveau, commentaire en ligne ; sur une ligne supprimée, commentaire général
- * qui la cite. `side` : colonne de la vue côte à côte, ou 'both' en vue unifiée.
+ * Target of the "+" on a line: on the new side, an inline comment; on a deleted line, a general comment
+ * quoting it. `side`: column of the side-by-side view, or 'both' in the unified view.
  */
 export function composerTargetFor(path: string, line: DiffLine, side: 'old' | 'new' | 'both'): ComposerTarget | null {
     if (side !== 'old' && line.t !== '-' && line.n != null) {
@@ -177,9 +177,9 @@ const sameTarget = (a: ComposerTarget | null, b: ComposerTarget | null): boolean
 
 export interface LineView {
     line: DiffLine;
-    /** Cible du bouton « + » (null : pas de commentaire possible sur cette ligne). */
+    /** Target of the "+" button (null: no comment possible on this line). */
     target: ComposerTarget | null;
-    /** Composeur ouvert sous cette ligne. */
+    /** Composer open under this line. */
     composer: ComposerTarget | null;
     threads: PlacedThread[];
 }
@@ -192,7 +192,7 @@ export interface SplitCellView {
 
 export interface SplitRowView {
     cells: [SplitCellView, SplitCellView];
-    /** Composeur ouvert sous la ligne supprimée (gauche) ou sous la ligne côté nouveau (droite). */
+    /** Composer open under the deleted line (left) or under the new-side line (right). */
     leftComposer: ComposerTarget | null;
     rightComposer: ComposerTarget | null;
     threads: PlacedThread[];
@@ -209,7 +209,7 @@ export interface HunkViewInput {
 const threadsAt = (byLine: Map<number, PlacedThread[]>, line: DiffLine | null): PlacedThread[] =>
     (line && line.t !== '-' && line.n != null ? byLine.get(line.n) ?? [] : []);
 
-/** Lignes d'un hunk en vue unifiée, avec fils et composeur à insérer dessous. */
+/** Lines of a hunk in unified view, with threads and composer to insert below. */
 export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkViewInput): LineView[] {
     return lines.map((line) => {
         const target = canComment ? composerTargetFor(path, line, 'both') : null;
@@ -217,7 +217,7 @@ export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkV
     });
 }
 
-/** Lignes d'un hunk en vue côte à côte (ancien à gauche, nouveau à droite). */
+/** Lines of a hunk in side-by-side view (old on the left, new on the right). */
 export function sideBySideRows({ path, lines, byLine, canComment, composer }: HunkViewInput): SplitRowView[] {
     const cell = (side: 'old' | 'new', line: DiffLine | null): SplitCellView =>
         ({ side, line, target: line && canComment ? composerTargetFor(path, line, side) : null });
@@ -236,14 +236,14 @@ export function composerKey(kind: ComposerKind, line: number, path: string): str
     return `${kind === 'old' ? 'o' : 'n'}${line}:${path}`;
 }
 
-/** Commentaire général citant une ligne supprimée (Bitbucket ne permet pas d'ancrer côté ancien). */
+/** General comment quoting a deleted line (Bitbucket cannot anchor on the old side). */
 export function deletedLineComment(tr: Translator, path: string, from: number, to: number, code: string, text: string): string {
     const fence = code.includes('```') ? '~~~' : '```';
     const quote = tr.t('diff.deletedLineQuote', { path: `\`${path}\``, from: vname(from), to: vname(to) });
     return `${quote}\n${fence}\n${code}\n${fence}\n${text}`;
 }
 
-/** Première ligne ajoutée (côté nouveau) du fichier, pour l'ouvrir au bon endroit ; null s'il n'y en a pas. */
+/** First added line (new side) of the file, to open it at the right place; null if there is none. */
 export function firstChangedLine(file: Pick<FileDiff, 'hunks'>): number | null {
     for (const hunk of file.hunks) {
         const added = hunk.lines.find((line) => line.t === '+' && line.n != null);

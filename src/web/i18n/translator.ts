@@ -32,10 +32,10 @@ export interface Translator {
     t<K extends MessageKey>(key: K, ...params: ParamArgs<K>): string;
     /**
      * Same, but non-text values (rich-text segments, slot markers) are kept as separate parts instead of being
-     * stringified: `parts('x', { v: bold })` → `[bold, ' : …']`.
+     * stringified: `parts('x', { v: bold })` -> `[bold, ': ...']`.
      */
     parts<K extends MessageKey, V extends object>(key: K, params: Record<ParamName<K>, ParamValue | V>): (string | V)[];
-    /** « a, b et c » / « a, b, and c ». */
+    /** "a, b et c" / "a, b, and c". */
     list(items: readonly string[]): string;
     listParts(items: readonly string[]): ListPart[];
     /** Quantity with locale grouping. */

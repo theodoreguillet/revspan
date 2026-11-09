@@ -1,4 +1,4 @@
-// Bandeau d'erreurs global (erreurs d'API), partagé par toute l'application.
+// Global error banner (API errors), shared by the whole application.
 import { readonly, ref } from 'vue';
 import { errorInfo, type ApiErrorCode } from '../services/api.ts';
 
@@ -12,7 +12,7 @@ const MAX_ALERTS = 3;
 const list = ref<Alert[]>([]);
 let nextId = 1;
 
-/** Alertes affichées (lecture seule ; modifier via showError / dismissError / clearErrors). */
+/** Alerts shown (read-only; change through showError / dismissError / clearErrors). */
 export const alerts = readonly(list);
 
 export function showError(error: unknown): void {

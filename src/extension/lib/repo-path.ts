@@ -1,21 +1,21 @@
-// Où est cloné le dépôt d'une PR sur le poste ? Une copie git de l'espace de travail (une racine ou l'un de ses
-// dossiers) reconnue par l'une de ses remotes Bitbucket (<workspace>/<dépôt>), sinon par son nom de dossier ;
-// plus les worktrees enregistrés par git pour ce dépôt, où qu'ils soient (dépôts bare compris).
-// On privilégie une copie extraite sur la branche de la PR.
+// Where is a PR's repository cloned on this machine? A git copy of the workspace (a root or one of its
+// folders) recognized by one of its Bitbucket remotes (<workspace>/<repo>), otherwise by its folder name;
+// plus the worktrees registered by git for this repository, wherever they are (bare repositories included).
+// A copy checked out on the PR's branch is preferred.
 import path from 'node:path';
 
-/** Ligne d'un fichier .git de worktree : « gitdir: <dossier git du worktree> ». */
+/** Line of a worktree's .git file: "gitdir: <worktree git folder>". */
 const GITDIR_LINE = /^gitdir:\s*(.+?)\s*$/m;
-/** Contenu de HEAD quand une branche est extraite. */
+/** Content of HEAD when a branch is checked out. */
 const HEAD_REF = /^ref:\s*refs\/heads\/(.+?)\s*$/m;
-/** Remote Bitbucket : https://[utilisateur@]bitbucket.org/…, ssh://git@bitbucket.org/…, git@bitbucket.org:… (.git facultatif). */
+/** Bitbucket remote: https://[user@]bitbucket.org/..., ssh://git@bitbucket.org/..., git@bitbucket.org:... (.git optional). */
 const BITBUCKET_REMOTE = /^(?:(?:https?|ssh):\/\/(?:[^@/\s]+@)?(?:www\.)?bitbucket\.org(?::\d+)?\/|[^@/\s:]+@bitbucket\.org:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
-/** En-tête de section du fichier config de git (« [core] », « [remote "origin"] »). */
+/** Section header of git's config file ("[core]", "[remote "origin"]"). */
 const SECTION = /^\s*\[\s*([A-Za-z]+)/;
 const URL_LINE = /^\s*url\s*=\s*"?([^"\s]+)"?\s*$/i;
 const BARE_LINE = /^\s*bare\s*=\s*true\s*$/i;
 
-/** Accès disque minimal (injectable pour les tests). */
+/** Minimal disk access (injectable for tests). */
 export interface RepoFs {
     exists(file: string): boolean;
     readText(file: string): string | null;
@@ -24,19 +24,19 @@ export interface RepoFs {
 
 export interface LocalRepo {
     dir: string;
-    /** Branche actuellement extraite (null si illisible). */
+    /** Branch currently checked out (null if unreadable). */
     branch: string | null;
-    /** La copie est sur la branche de la PR (les lignes correspondent à la dernière version). */
+    /** The copy is on the PR's branch (lines match the latest version). */
     onPrBranch: boolean;
 }
 
-/** Dépôt Bitbucket recherché. */
+/** Bitbucket repository being looked for. */
 export interface RepoTarget {
     workspace: string;
     repo: string;
 }
 
-/** Copie git : son dossier, son dossier git (.git ou dossier du worktree) et le dossier git commun du dépôt. */
+/** Git copy: its folder, its git folder (.git or the worktree's folder) and the repository's common git folder. */
 interface GitCopy {
     dir: string;
     gitDir: string;
@@ -48,13 +48,13 @@ interface GitConfig {
     bare: boolean;
 }
 
-/** « <workspace>/<dépôt> » d'une URL de remote Bitbucket, sinon null. */
+/** "<workspace>/<repo>" of a Bitbucket remote URL, otherwise null. */
 export function bitbucketRepoOfRemote(url: string): RepoTarget | null {
     const match = BITBUCKET_REMOTE.exec(url.trim());
     return match ? { workspace: match[1] ?? '', repo: match[2] ?? '' } : null;
 }
 
-/** Dossier git d'une copie : son dossier .git, ou la cible de son fichier .git (worktree, dépôt bare à côté). */
+/** Git folder of a copy: its .git folder, or the target of its .git file (worktree, bare repository next to it). */
 function gitDirOf(dir: string, fs: RepoFs): string | null {
     const dotGit = path.join(dir, '.git');
     const pointer = fs.readText(dotGit);
@@ -65,7 +65,7 @@ function gitDirOf(dir: string, fs: RepoFs): string | null {
     return target ? path.resolve(dir, target) : null;
 }
 
-/** Dossier git commun : fichier commondir d'un worktree ; à défaut …/<commun>/worktrees/<nom> ; sinon lui-même. */
+/** Common git folder: a worktree's commondir file; failing that .../<common>/worktrees/<name>; otherwise itself. */
 function commonDirOf(gitDir: string, fs: RepoFs): string {
     const common = fs.readText(path.join(gitDir, 'commondir'))?.trim();
     if (common) {
@@ -80,18 +80,18 @@ function copyAt(dir: string, fs: RepoFs): GitCopy | null {
     return gitDir ? { dir, gitDir, commonDir: commonDirOf(gitDir, fs) } : null;
 }
 
-/** Copie principale d'un dépôt non bare (<copie>/.git), null pour un dépôt bare. */
+/** Main copy of a non-bare repository (<copy>/.git), null for a bare repository. */
 function mainCopyDir(commonDir: string): string | null {
     return path.basename(commonDir) === '.git' ? path.dirname(commonDir) : null;
 }
 
-/** Nom du dépôt d'après son dossier git commun : <copie>/.git → copie, <nom>.git (bare) → nom, <nom>/.bare → nom. */
+/** Repository name from its common git folder: <copy>/.git -> copy, <name>.git (bare) -> name, <name>/.bare -> name. */
 function repoNameOf(commonDir: string): string {
     const base = path.basename(commonDir);
     return base.startsWith('.') ? path.basename(path.dirname(commonDir)) : base.replace(/\.git$/i, '');
 }
 
-/** Remotes Bitbucket (toutes les sections [remote "…"]) et indicateur bare du fichier config commun. */
+/** Bitbucket remotes (all [remote "..."] sections) and bare flag from the common config file. */
 function readConfig(commonDir: string, fs: RepoFs): GitConfig {
     const config: GitConfig = { remotes: [], bare: false };
     let section = '';
@@ -113,7 +113,7 @@ function readConfig(commonDir: string, fs: RepoFs): GitConfig {
     return config;
 }
 
-/** Worktrees enregistrés par git pour un dépôt (<commun>/worktrees/<nom>/gitdir → <worktree>/.git). */
+/** Worktrees registered by git for a repository (<common>/worktrees/<name>/gitdir -> <worktree>/.git). */
 function registeredWorktrees(commonDir: string, fs: RepoFs): string[] {
     const registry = path.join(commonDir, 'worktrees');
     return fs.listDirs(registry).flatMap((name) => {
@@ -122,14 +122,14 @@ function registeredWorktrees(commonDir: string, fs: RepoFs): string[] {
     });
 }
 
-/** Branche extraite dans une copie git (dossier .git, ou fichier .git d'un worktree). */
+/** Branch checked out in a git copy (.git folder, or a worktree's .git file). */
 export function currentBranch(dir: string, fs: RepoFs): string | null {
     const gitDir = gitDirOf(dir, fs);
     const head = gitDir ? fs.readText(path.join(gitDir, 'HEAD')) : null;
     return head ? HEAD_REF.exec(head)?.[1] ?? null : null;
 }
 
-/** Copies git de l'espace de travail : chaque racine et ses dossiers (hors dossiers cachés). */
+/** Git copies of the workspace: each root and its folders (hidden folders excluded). */
 function workspaceCopies(roots: readonly string[], fs: RepoFs): GitCopy[] {
     const dirs = roots.flatMap((root) => [root, ...fs.listDirs(root).filter((name) => !name.startsWith('.')).map((name) => path.join(root, name))]);
     return [...new Set(dirs)].flatMap((dir) => copyAt(dir, fs) ?? []);
@@ -149,10 +149,10 @@ export function findLocalRepo(roots: readonly string[], target: RepoTarget, prBr
     const copies = workspaceCopies(roots, fs);
     const byRemote = copies.filter((copy) => configOf(copy).remotes.some((r) => same(r.workspace, target.workspace) && same(r.repo, target.repo)));
     const byName = copies.filter((copy) => path.basename(copy.dir) === target.repo || repoNameOf(copy.commonDir) === target.repo);
-    // Une remote <workspace>/<dépôt> exacte l'emporte sur un simple nom de dossier (dépôts homonymes, copie renommée).
+    // An exact <workspace>/<repo> remote wins over a plain folder name (homonymous repositories, renamed copy).
     const matched = byRemote.length > 0 ? byRemote : byName;
 
-    // Toutes les copies de ces dépôts : copie principale et worktrees enregistrés, sauf un dossier qui n'est qu'un dépôt bare.
+    // All the copies of these repositories: main copy and registered worktrees, except a folder that is only a bare repository.
     const found = new Map<string, GitCopy>();
     const add = (copy: GitCopy | null): void => {
         if (copy && !found.has(copy.dir) && !(copy.gitDir === copy.commonDir && configOf(copy).bare)) {

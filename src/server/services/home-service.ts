@@ -1,4 +1,4 @@
-// Accueil « Mes PR » : PR ouvertes des dépôts configurés, groupées par ce qui a bougé depuis ma relecture.
+// "My PRs" home: open PRs of the configured repositories, grouped by what moved since my review.
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
@@ -29,7 +29,7 @@ export class HomeService {
         this.cache = cache;
     }
 
-    /** fresh : ignore le cache court (actualisation demandée). */
+    /** fresh: ignores the short cache (refresh requested). */
     async get({ fresh = false }: { fresh?: boolean } = {}): Promise<Home> {
         if (fresh) {
             this.cache.invalidateLive('live:home:');
@@ -83,15 +83,15 @@ export class HomeService {
             myApproval: participants.some((p) => p.approved && p.user?.uuid === meUuid),
             newComments: 0,
         };
-        // PR qui ne me concerne pas (ni auteur, ni relecteur, ni participant, jamais marquée relue) :
-        // carte légère sans l'historique, pour que l'accueil reste rapide sur beaucoup de dépôts.
+        // PR that does not concern me (not author, reviewer or participant, never marked reviewed):
+        // light card without the history, so the home page stays fast with many repositories.
         if (!isMine && !involved && !local.reviewedHash) {
             return { group: 'others', data: base };
         }
 
         const activity = await client.activity(ref.workspace, ref.repo, ref.id);
         const versions = extractUpdates(activity, raw).map((u, i) => ({ index: i + 1, hash: u.hash, pushedAt: u.date }));
-        // Les commentaires de l'activité suffisent ici (pas de chargement de tous les commentaires).
+        // The activity comments are enough here (no need to load all the comments).
         const myComments = activity.flatMap((e) => (e.comment && e.comment.user?.uuid === meUuid ? [e.comment] : []));
         const review = computeReview({ versions, activity, comments: myComments, meUuid, local });
         const lastReviewed = review.lastReviewed;
@@ -116,7 +116,7 @@ export class HomeService {
         } else if (lastReviewed !== null && newVersions === 0) {
             group = 'up-to-date';
         } else if (lastReviewed !== null && newCodeVersions === 0) {
-            // Seulement des rebases depuis ma relecture : rien à faire si mon approbation tient encore sur Bitbucket.
+            // Only rebases since my review: nothing to do if my approval still holds on Bitbucket.
             group = approvalHolds ? 'up-to-date' : 'rebase-only';
         } else {
             group = 'to-review';

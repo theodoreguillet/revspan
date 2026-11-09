@@ -1,6 +1,6 @@
-// Application HTTP (Hono) : API JSON sous /api + page construite (dist/web).
-// Sécurité locale : en-tête Host vérifié (anti DNS-rebinding), écritures soumises à X-Revspan et à l'origine,
-// en-têtes CSP. Le jeton ne quitte jamais le serveur.
+// HTTP application (Hono): JSON API under /api + built page (dist/web).
+// Local security: Host header checked (anti DNS rebinding), writes require X-Revspan and a matching origin,
+// CSP headers. The token never leaves the server.
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
@@ -22,14 +22,14 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const PR_ROUTE = '/api/pr/:ws/:repo/:id{[0-9]+}';
 
 export interface HttpDeps {
-    /** Version affichée par /api/health. */
+    /** Version shown by /api/health. */
     version: string;
     settings: SettingsService;
     home: HomeService;
     prs: PrService;
-    /** Dossier de la page construite (dist/web) ; absent dans l'extension VS Code (la page est servie par VS Code). */
+    /** Folder of the built page (dist/web); absent in the VS Code extension (the page is served by VS Code). */
     webDir?: string;
-    /** Hôtes acceptés (ex. 127.0.0.1:7420), connus une fois le port ouvert. */
+    /** Accepted hosts (e.g. 127.0.0.1:7420), known once the port is open. */
     allowedHosts: () => readonly string[];
 }
 
@@ -56,7 +56,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     app.use('*', async (c, next) => {
         const hosts = allowedHosts();
-        // En HTTP, l'en-tête Host est toujours présent ; un appel en mémoire (extension) n'a que l'URL.
+        // Over HTTP the Host header is always present; an in-memory call (extension) only has the URL.
         const host = c.req.header('host') ?? new URL(c.req.url).host;
         if (!hosts.includes(host)) {
             return errorResponse(c, 403, 'FORBIDDEN', 'Host refused.');
@@ -106,7 +106,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.put('/api/settings', async (c) => c.json(await settings.update(parse(settingsUpdateSchema, await jsonBody(c)))));
     app.post('/api/settings/test', async (c) => c.json(await settings.test()));
 
-    // ?fresh=1 : ignore le cache court de l'accueil (bouton « Actualiser »).
+    // ?fresh=1: ignores the home page's short cache ("Refresh" button).
     app.get('/api/home', async (c) => c.json(await home.get({ fresh: c.req.query('fresh') === '1' })));
 
     app.get(PR_ROUTE, async (c) => c.json(await prs.detail(refOf(c))));
@@ -131,7 +131,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     // ---------- Page ----------
 
-    // Lien direct depuis une URL Bitbucket : /open?url=https://bitbucket.org/<ws>/<repo>/pull-requests/<id>
+    // Direct link from a Bitbucket URL: /open?url=https://bitbucket.org/<ws>/<repo>/pull-requests/<id>
     app.get('/open', (c) => {
         const ref = parsePrUrl(c.req.query('url'));
         return c.redirect(ref ? `/#/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '/', 302);

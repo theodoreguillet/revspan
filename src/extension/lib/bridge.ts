@@ -1,11 +1,11 @@
-// Pont page → API : une requête reçue par message est traitée par l'application HTTP en mémoire (sans port ouvert),
-// avec la même validation, les mêmes erreurs et les mêmes contrôles que le serveur local.
+// Page -> API bridge: a request received as a message is handled by the in-memory HTTP application (no open port),
+// with the same validation, the same errors and the same checks as the local server.
 import { MUTATION_HEADER } from '../../shared/api.ts';
 
-/** Hôte fictif des appels en mémoire (doit faire partie des hôtes acceptés par l'application HTTP). */
+/** Fictitious host of in-memory calls (must be one of the hosts accepted by the HTTP application). */
 export const IN_MEMORY_HOST = 'revspan.vscode';
 
-/** Ce dont le pont a besoin de l'application Hono. */
+/** What the bridge needs from the Hono application. */
 export interface InMemoryApp {
     request(input: string, init: RequestInit): Response | Promise<Response>;
 }
@@ -36,5 +36,5 @@ export async function callApi(app: InMemoryApp, { method, path, body }: ApiCall)
     return { status: response.status, body: text ? JSON.parse(text) as unknown : null };
 }
 
-/** Une écriture réussie peut changer l'accueil (approbation, commentaire, jeton…). */
+/** A successful write can change the home page (approval, comment, token...). */
 export const isSuccessfulWrite = ({ method }: ApiCall, { status }: ApiResult): boolean => method !== 'GET' && status < 400;

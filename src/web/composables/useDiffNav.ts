@@ -1,19 +1,19 @@
-// Navigation sous la frise collante : les composants déclarent leurs éléments (fichiers, onglets, fils),
-// ce module fait défiler vers eux et suit le fichier courant. Aucune recherche par sélecteur CSS.
+// Navigation under the sticky timeline: components declare their elements (files, tabs, threads),
+// this module scrolls to them and tracks the current file. No lookup by CSS selector.
 import { ref } from 'vue';
 
 export interface ThreadEntry {
     threadId: number;
-    /** Fil affiché dans le diff (et non dans l'onglet Discussions). */
+    /** Thread shown in the diff (not in the Discussions tab). */
     inDiff: boolean;
 }
 
-/** Fait défiler pour placer el à `offset` px du haut de la fenêtre. */
+/** Scrolls to place el at `offset` px from the top of the window. */
 function scrollToElement(el: Element, offset: number): void {
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset });
 }
 
-/** Met brièvement en évidence un élément (fil atteint au clavier, « Voir dans le diff »). */
+/** Briefly highlights an element (thread reached by keyboard, "View in diff"). */
 function flash(el: HTMLElement): void {
     el.classList.remove('flash');
     void el.offsetWidth;
@@ -23,9 +23,9 @@ function flash(el: HTMLElement): void {
 const isVisible = (el: HTMLElement): boolean => el.offsetParent !== null;
 
 export function useDiffNav() {
-    /** Hauteur de la frise collante (mesurée par Timeline). */
+    /** Height of the sticky timeline (measured by Timeline). */
     const tlHeight = ref(0);
-    /** Index du fichier courant dans la liste du diff. */
+    /** Index of the current file in the diff list. */
     const curFile = ref(0);
     const files = new Map<string, HTMLElement>();
     const threads = new Map<HTMLElement, ThreadEntry>();
@@ -58,7 +58,7 @@ export function useDiffNav() {
         }
     }
 
-    /** Un fichier qu'on vient de replier ne doit pas laisser la page plus bas que lui. */
+    /** A file that was just collapsed must not leave the page lower than it. */
     function keepFileInView(path: string): void {
         const el = files.get(path);
         if (el && el.getBoundingClientRect().top < tlHeight.value) {
@@ -66,7 +66,7 @@ export function useDiffNav() {
         }
     }
 
-    /** Après un changement de plage : remonte en haut des onglets si on lisait plus bas. */
+    /** After a range change: scrolls back to the top of the tabs if we were reading further down. */
     function scrollToTabsIfBelow(): void {
         if (!tabs) {
             return;
@@ -77,7 +77,7 @@ export function useDiffNav() {
         }
     }
 
-    /** Index (dans `paths`) du dernier fichier dont l'en-tête est passé sous la frise. */
+    /** Index (in `paths`) of the last file whose header went under the timeline. */
     function fileUnderTimeline(paths: string[]): number {
         const limit = tlHeight.value + 48;
         let cur = 0;
@@ -90,7 +90,7 @@ export function useDiffNav() {
         return cur;
     }
 
-    /** Fil suivant (1) ou précédent (-1) par rapport à la ligne de lecture, sous les en-têtes collants. */
+    /** Next (1) or previous (-1) thread relative to the reading line, below the sticky headers. */
     function nextThread(dir: 1 | -1): void {
         const y = tlHeight.value + 60;
         const ordered = [...threads.keys()]
@@ -104,7 +104,7 @@ export function useDiffNav() {
         }
     }
 
-    /** Fait défiler jusqu'au fil dans le diff et le met en évidence. */
+    /** Scrolls to the thread in the diff and highlights it. */
     function revealThread(threadId: number): void {
         for (const [el, entry] of threads) {
             if (entry.inDiff && entry.threadId === threadId) {

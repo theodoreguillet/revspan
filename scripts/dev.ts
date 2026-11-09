@@ -1,5 +1,5 @@
-// Développement : serveur Revspan en watch (port 7420) + Vite avec rechargement à chaud (port 5173).
-// Ctrl+C arrête les deux ; si l'un s'arrête, l'autre aussi.
+// Development: Revspan server in watch mode (port 7420) + Vite with hot reload (port 5173).
+// Ctrl+C stops both; if one stops, the other does too.
 import { spawn, type ChildProcess } from 'node:child_process';
 
 const children: ChildProcess[] = [

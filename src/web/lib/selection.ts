@@ -1,16 +1,16 @@
-// Plage de versions comparées : règles de clic, plage par défaut, préréglages, texte de lecture.
+// Range of compared versions: click rules, default range, presets, reading text.
 import type { Version } from '../../shared/api.ts';
 import type { MessageKey, Translator } from '../i18n/index.ts';
 import { MINUS, vname } from './format.ts';
 import { CODE_KINDS, type SummaryMap } from './kinds.ts';
 
-/** from = version de référence (0 = base master), to = version affichée ; 0 ≤ from < to ≤ n. */
+/** from = reference version (0 = master base), to = displayed version; 0 <= from < to <= n. */
 export interface Range {
     from: number;
     to: number;
 }
 
-/** Versions indisponibles (commit effacé par Bitbucket) : ni sélectionnables ni comparables. */
+/** Unavailable versions (commit erased by Bitbucket): neither selectable nor comparable. */
 export type Unavailable = ReadonlySet<number>;
 const NONE: Unavailable = new Set();
 
@@ -18,7 +18,7 @@ export function unavailableVersions(versions: readonly Pick<Version, 'index' | '
     return new Set(versions.filter((v) => !v.available).map((v) => v.index));
 }
 
-/** Borne « de » ramenée sur la dernière version lisible ≤ k (0 = base master). */
+/** "from" bound brought back to the last readable version <= k (0 = master base). */
 export function floorAvailable(k: number, unavailable: Unavailable = NONE): number {
     let index = k;
     while (index > 0 && unavailable.has(index)) {
@@ -27,7 +27,7 @@ export function floorAvailable(k: number, unavailable: Unavailable = NONE): numb
     return index;
 }
 
-/** Nouvelle plage après un clic (Maj = étendre) sur la version i (0 = master) ; une version indisponible ne fait rien. */
+/** New range after a click (Shift = extend) on version i (0 = master); an unavailable version does nothing. */
 export function clickSelection({ from, to }: Range, i: number, shift: boolean, unavailable: Unavailable = NONE): Range {
     if (i === 0) {
         return { from: 0, to };
@@ -45,11 +45,11 @@ export function clickSelection({ from, to }: Range, i: number, shift: boolean, u
     if (i <= from) {
         return { from: before, to };
     }
-    // dans la plage : on déplace la borne la plus proche
+    // inside the range: move the closest bound
     return i - from <= to - i ? { from: before, to } : { from, to: i };
 }
 
-/** Plage par défaut à l'ouverture d'une PR. */
+/** Default range when a PR is opened. */
 export function defaultSelection(n: number, lastReviewed: number | null, unavailable: Unavailable = NONE): Range {
     if (lastReviewed != null && lastReviewed >= 1 && lastReviewed < n) {
         return { from: floorAvailable(lastReviewed, unavailable), to: n };
@@ -66,8 +66,8 @@ export function isValidSelection(n: number, from: number | null, to: number | nu
 }
 
 /**
- * Plage après un rechargement du détail (version découverte effacée par Bitbucket) : gardée si elle reste valide ;
- * sinon « de » recule jusqu'à la dernière version lisible ; si « à » est touchée, plage par défaut.
+ * Range after a detail reload (version discovered erased by Bitbucket): kept if still valid;
+ * otherwise "from" moves back to the last readable version; if "to" is hit, default range.
  */
 export function repairSelection(n: number, range: Range, lastReviewed: number | null, unavailable: Unavailable = NONE): Range {
     if (isValidSelection(n, range.from, range.to, unavailable)) {
@@ -77,7 +77,7 @@ export function repairSelection(n: number, range: Range, lastReviewed: number | 
     return isValidSelection(n, from, range.to, unavailable) ? { from, to: range.to } : defaultSelection(n, lastReviewed, unavailable);
 }
 
-/** Sélection d'une seule version i : (dernière lisible avant i → i), bornée à 1..n. */
+/** Selection of a single version i: (last readable before i -> i), clamped to 1..n. */
 export function singleVersion(n: number, i: number, unavailable: Unavailable = NONE): Range {
     const v = Math.min(Math.max(i, 1), n);
     return { from: floorAvailable(v - 1, unavailable), to: v };
@@ -111,7 +111,7 @@ export interface ReadoutInput extends Range {
     destBranch?: string;
 }
 
-/** Texte de lecture de la plage : { bold, rest }. */
+/** Reading text of the range: { bold, rest }. */
 export function readout(tr: Translator, { from, to, versions, sums, stats, destBranch = 'master' }: ReadoutInput): { bold: string; rest: string } {
     if (from === 0) {
         const rest = [tr.t('readout.againstBase', { branch: destBranch })];
@@ -156,7 +156,7 @@ export function readout(tr: Translator, { from, to, versions, sums, stats, destB
     return { bold, rest: `· ${rest.join(' · ')}` };
 }
 
-/** Lit from/to dans les paramètres de route (chaînes de chiffres seulement). */
+/** Reads from/to from the route parameters (digit strings only). */
 export function parseRangeQuery(query: Record<string, unknown>): { from: number | null; to: number | null } {
     const num = (value: unknown): number | null => (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : null);
     return { from: num(query.from), to: num(query.to) };

@@ -1,9 +1,9 @@
-// Diff de lignes (Myers) + construction de hunks + surlignage intra-ligne.
+// Line diff (Myers) + hunk building + intra-line highlighting.
 import type { DiffLine, Hunk } from '../../shared/api.ts';
 
 /**
- * Segment d'édition. a = position (0-based) dans l'ancien texte, b = position dans le nouveau.
- * '=' : len lignes identiques ; '-' : len lignes supprimées depuis a ; '+' : len lignes ajoutées depuis b.
+ * Edit segment. a = (0-based) position in the old text, b = position in the new text.
+ * '=': len identical lines; '-': len lines removed from a; '+': len lines added from b.
  */
 export interface DiffOp {
     op: '=' | '-' | '+';
@@ -18,8 +18,8 @@ const MAX_HEADER = 80;
 const SECTION_LINE = /^[A-Za-z_$]/;
 
 /**
- * Marque la dernière ligne d'un texte sans retour à la ligne final (« \ No newline at end of file » de git),
- * pour que l'ajout ou le retrait de ce retour à la ligne soit vu comme un changement de cette ligne.
+ * Marks the last line of a text without a final newline (git's "\ No newline at end of file"),
+ * so that adding or removing that newline is seen as a change to that line.
  */
 export const NO_EOL = '\u0000';
 
@@ -101,7 +101,7 @@ export function diffLines(oldLines: readonly string[], newLines: readonly string
     return ops;
 }
 
-// Myers O((N+M)D) ; mémorise pour chaque d la tranche utile de V (≈ D² entiers au pire), null au-delà de maxD.
+// Myers O((N+M)D); stores for each d the useful slice of V (about D² integers at worst), null beyond maxD.
 function myers(a: Int32Array, b: Int32Array, maxD: number): DiffOp[] | null {
     const n = a.length;
     const m = b.length;
@@ -117,7 +117,7 @@ function myers(a: Int32Array, b: Int32Array, maxD: number): DiffOp[] | null {
     const trace: (Int32Array | null)[] = [];
 
     for (let d = 0; d <= limit; d++) {
-        // État après l'étape d-1, pour k ∈ [-(d-1), d-1].
+        // State after step d-1, for k in [-(d-1), d-1].
         trace.push(d === 0 ? null : v.slice(off - (d - 1), off + d));
         for (let k = -d; k <= d; k += 2) {
             let x = k === -d || (k !== d && v[off + k - 1]! < v[off + k + 1]!) ? v[off + k + 1]! : v[off + k - 1]! + 1;
@@ -198,7 +198,7 @@ function displayLine(t: DiffLine['t'], raw: string, o: number | null, n: number 
     return line;
 }
 
-// En-tête de section façon git : dernière ligne non indentée (lettre, _ ou $) avant le hunk.
+// Git-style section header: last non-indented line (letter, _ or $) before the hunk.
 function sectionHeader(oldLines: readonly string[], beforeIndex: number): string {
     for (let i = Math.min(beforeIndex, oldLines.length) - 1; i >= 0; i--) {
         const line = oldLines[i]!;
@@ -229,7 +229,7 @@ function closeHunk(open: OpenHunk, oldLines: readonly string[]): Hunk {
     }
     highlightIntraLine(open.lines);
     return {
-        // Convention unifiée : début 1-based, ou position précédente si le côté est vide.
+        // Unified convention: 1-based start, or previous position if the side is empty.
         oldStart: oldCount === 0 ? open.oldIndex : open.oldIndex + 1,
         oldLines: oldCount,
         newStart: newCount === 0 ? open.newIndex : open.newIndex + 1,
@@ -239,7 +239,7 @@ function closeHunk(open: OpenHunk, oldLines: readonly string[]): Hunk {
     };
 }
 
-/** Construit les hunks (format unifié) avec `context` lignes autour des changements. */
+/** Builds the hunks (unified format) with `context` lines around the changes. */
 export function buildHunks(ops: readonly DiffOp[], oldLines: readonly string[], newLines: readonly string[], context = 3): Hunk[] {
     const hunks: Hunk[] = [];
     if (!ops.some((op) => op.op !== '=')) {
@@ -288,7 +288,7 @@ export function buildHunks(ops: readonly DiffOp[], oldLines: readonly string[], 
     return hunks;
 }
 
-/** Associe les suites '-' puis '+' deux à deux et surligne la partie qui diffère. */
+/** Pairs the '-' then '+' runs two by two and highlights the part that differs. */
 export function highlightIntraLine(lines: DiffLine[]): void {
     let i = 0;
     while (i < lines.length) {
@@ -326,7 +326,7 @@ function markPair(del: DiffLine, add: DiffLine): void {
         suffix++;
     }
     const common = prefix + suffix;
-    // Lignes trop différentes : pas de surlignage (illisible).
+    // Lines too different: no highlighting (unreadable).
     if (common === 0 || common < 0.2 * Math.max(a.length, b.length)) {
         return;
     }

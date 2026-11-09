@@ -44,7 +44,7 @@ function hiddenTitle(list: number[]): string {
     return t('timeline.hiddenTitle', { count: list.length, versions: list.map((i) => `v${i}`).join(', ') });
 }
 
-// la hauteur de la frise (collante) décale les éléments collants en dessous : en-têtes de fichiers, liste des fichiers
+// the (sticky) timeline height offsets the sticky elements below it: file headers, file list
 let observer: ResizeObserver | null = null;
 onMounted(async () => {
     observer = new ResizeObserver(() => {
@@ -57,7 +57,7 @@ onMounted(async () => {
     }
     await nextTick();
     if (track.value) {
-        track.value.scrollLeft = track.value.scrollWidth; // les dernières versions d'abord
+        track.value.scrollLeft = track.value.scrollWidth; // the latest versions first
     }
 });
 onBeforeUnmount(() => {

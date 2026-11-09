@@ -1,4 +1,4 @@
-// Fils de discussion : groupes, activité, nouveaux commentaires, avatars.
+// Discussion threads: groups, activity, new comments, avatars.
 import type { Thread, User } from '../../shared/api.ts';
 import { firstName } from './format.ts';
 
@@ -10,7 +10,7 @@ export function hasNew(thread: Thread): boolean {
     return thread.comments.some((c) => c.isNew);
 }
 
-/** Groupes de l'onglet Discussions, chacun trié par activité récente. */
+/** Groups of the Discussions tab, each sorted by recent activity. */
 export function threadGroups(threads: Thread[]): { fresh: Thread[]; open: Thread[]; resolved: Thread[] } {
     const byActivity = (a: Thread, b: Thread): number => lastActivity(b).localeCompare(lastActivity(a));
     return {
@@ -20,7 +20,7 @@ export function threadGroups(threads: Thread[]): { fresh: Thread[]; open: Thread
     };
 }
 
-/** Nouveaux fils et réponses depuis ma relecture (avec les prénoms des auteurs). */
+/** New threads and replies since my review (with the authors' first names). */
 export function newActivity(threads: Thread[]): { newThreads: number; replies: number; names: string[] } {
     let newThreads = 0;
     let replies = 0;
@@ -52,7 +52,7 @@ export function initials(name: string | null | undefined): string {
     return (second ? first.charAt(0) + second.charAt(0) : first.slice(0, 2)).toUpperCase();
 }
 
-/** Teinte stable (0..359) dérivée de l'uuid. */
+/** Stable hue (0..359) derived from the uuid. */
 export function avatarHue(user: User | null | undefined): number {
     const s = user?.uuid ?? user?.displayName ?? '?';
     let x = 2166136261;

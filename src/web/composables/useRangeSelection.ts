@@ -1,5 +1,5 @@
-// Plage de versions comparées, synchronisée avec ?from=&to= (retour arrière et liens directs).
-// Les versions indisponibles (commit effacé par Bitbucket) ne sont jamais des bornes.
+// Range of compared versions, synchronized with ?from=&to= (back button and direct links).
+// Unavailable versions (commit erased by Bitbucket) are never bounds.
 import { computed, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { PrDetail, PrRef } from '../../shared/api.ts';
@@ -15,7 +15,7 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
 
     const rangeQuery = (r: Range): Record<string, string> => ({ from: String(r.from), to: String(r.to) });
 
-    /** Plage de l'URL si elle est valide, sinon la plage par défaut (écrite dans l'URL sans nouvelle entrée d'historique). */
+    /** Range from the URL if valid, otherwise the default range (written to the URL without a new history entry). */
     function rangeFromRoute(): Range | null {
         const q = parseRangeQuery(route.query);
         return isValidSelection(n.value, q.from, q.to, unavailable.value) && q.from != null && q.to != null ? { from: q.from, to: q.to } : null;
@@ -42,13 +42,13 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         select(next.from, next.to);
     }
 
-    /** Ce que la version i a changé, comme un clic dans la frise : depuis la dernière version lisible avant elle (ou la base). */
+    /** What version i changed, like a click in the timeline: since the last readable version before it (or the base). */
     function selectVersion(i: number): void {
         const r = singleVersion(n.value, i, unavailable.value);
         select(r.from, r.to);
     }
 
-    /** [ et ] : version seule précédente / suivante (les versions indisponibles sont sautées). */
+    /** [ and ]: single previous / next version (unavailable versions are skipped). */
     function stepVersion(dir: 1 | -1): boolean {
         let target = to.value + dir;
         while (unavailable.value.has(target)) {
@@ -63,10 +63,10 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
 
     const isThisPr = (): boolean => route.params.ws === prRef.workspace && route.params.repo === prRef.repo && Number(route.params.id) === prRef.id;
 
-    // retour arrière / lien direct : l'URL fait foi
+    // back button / direct link: the URL is authoritative
     watch(() => [route.query.from, route.query.to], () => {
         if (!isThisPr()) {
-            return; // navigation vers une autre PR : cette page va être démontée
+            return; // navigation to another PR: this page is about to be unmounted
         }
         const r = rangeFromRoute();
         if (r) {
@@ -77,7 +77,7 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         }
     });
 
-    // détail rechargé : une version découverte effacée depuis ne reste pas une borne (sans nouvelle entrée d'historique)
+    // detail reloaded: a version since discovered erased does not stay a bound (no new history entry)
     watch(unavailable, () => {
         const r = repairSelection(n.value, { from: from.value, to: to.value }, detail.value.review.lastReviewed, unavailable.value);
         if (r.from !== from.value || r.to !== to.value) {

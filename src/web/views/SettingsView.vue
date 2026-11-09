@@ -75,7 +75,7 @@ async function save(): Promise<boolean> {
     }
 }
 
-// la confirmation est demandée par le bouton (ConfirmButton) ; e-mail et dépôts en cours de saisie sont gardés
+// the confirmation is asked by the button (ConfirmButton); e-mail and repositories being typed are kept
 async function deleteToken(): Promise<void> {
     try {
         loaded.value = await api.saveSettings({ token: '' });
@@ -86,7 +86,7 @@ async function deleteToken(): Promise<void> {
     }
 }
 
-// POST /settings/test vérifie les réglages enregistrés : on enregistre d'abord une saisie en cours.
+// POST /settings/test checks the saved settings: save any input in progress first.
 async function test(): Promise<void> {
     testing.value = true;
     try {

@@ -1,5 +1,5 @@
-// Adresses des documents virtuels de l'éditeur de diff : le chemin se termine par celui du fichier
-// (VS Code choisit ainsi la coloration syntaxique), les paramètres de la comparaison sont dans la requête.
+// Addresses of the diff editor's virtual documents: the path ends with the file's own path
+// (so VS Code picks the syntax highlighting), the comparison parameters are in the query.
 import type { PrRef } from '../../shared/api.ts';
 import { prRefSchema } from '../../server/http/schemas.ts';
 
@@ -16,7 +16,7 @@ export interface DiffDocument {
     oldPath: string | null;
 }
 
-/** Parties d'URI (chemin + requête) d'un côté de la comparaison. */
+/** URI parts (path + query) of one side of the comparison. */
 export function encodeDiffDocument(doc: DiffDocument): { path: string; query: string } {
     const shown = doc.side === 'old' ? doc.oldPath ?? doc.path : doc.path;
     const query = new URLSearchParams({
@@ -32,7 +32,7 @@ export function encodeDiffDocument(doc: DiffDocument): { path: string; query: st
     return { path: `/${doc.ref.repo}/${doc.side === 'old' ? `v${doc.from}` : `v${doc.to}`}/${shown}`, query: query.toString() };
 }
 
-/** Entier ≥ min écrit en chiffres, sinon null : un paramètre absent ne vaut pas 0 (Number(null) === 0). */
+/** Integer >= min written in digits, otherwise null: a missing parameter is not 0 (Number(null) === 0). */
 function integerParam(value: string | null, min: number): number | null {
     const n = value !== null && /^\d+$/.test(value) ? Number(value) : NaN;
     return Number.isSafeInteger(n) && n >= min ? n : null;
@@ -51,7 +51,7 @@ export function decodeDiffDocument(query: string): DiffDocument | null {
     return { ref: ref.data, from, to, side, path, oldPath: params.get('oldPath') };
 }
 
-/** Titre de l'onglet de diff, ex. « CreateRecord.ts (v9 → v10) ». */
+/** Title of the diff tab, e.g. "CreateRecord.ts (v9 -> v10)". */
 export function diffTitle(path: string, from: number, to: number): string {
     const name = path.split('/').pop() ?? path;
     return `${name} (${from === 0 ? 'base' : `v${from}`} → v${to})`;

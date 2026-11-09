@@ -1,5 +1,5 @@
-// Session Bitbucket : client construit à partir de l'e-mail (config) et du jeton (stockage sécurisé),
-// profil de l'utilisateur du jeton mis en mémoire.
+// Bitbucket session: client built from the e-mail (config) and the token (secure storage),
+// profile of the token's user kept in memory.
 import type { User } from '../../shared/api.ts';
 import { BitbucketClient, DEFAULT_BASE_URL } from '../bitbucket/client.ts';
 import { AppError } from '../errors.ts';
@@ -44,7 +44,7 @@ export class BitbucketSession {
         return (await this.connect()).client;
     }
 
-    /** Profil de l'utilisateur du jeton ; null si le droit read:user:bitbucket manque. */
+    /** Profile of the token's user; null if the read:user:bitbucket scope is missing. */
     async me(): Promise<User | null> {
         const connection = await this.connect();
         if (connection.profile === undefined) {
@@ -60,13 +60,13 @@ export class BitbucketSession {
         return connection.profile;
     }
 
-    /** Changement de compte ou de jeton : plus aucune donnée de l'ancien. */
+    /** Account or token change: no data left from the old one. */
     reset(): void {
         this.connection = null;
         this.cache.invalidateLive('live:');
     }
 
-    /** Le jeton est lu une fois (sur macOS, un sous-processus `security` par lecture) puis gardé jusqu'à reset(). */
+    /** The token is read once (on macOS, one `security` subprocess per read) then kept until reset(). */
     private async connect(): Promise<Connection> {
         const { email } = this.store.config;
         if (this.connection && this.connection.email === email) {

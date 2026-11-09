@@ -1,4 +1,4 @@
-// Panneau Revspan : la page Vue dans un webview ; ses appels d'API et ses actions passent par messages.
+// Revspan panel: the Vue page in a webview; its API calls and actions go through messages.
 import fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { HostToWebview, WebviewToHost } from '../shared/webview-protocol.ts';
@@ -30,7 +30,7 @@ export class RevspanPanel {
         this.onWrite = onWrite;
     }
 
-    /** Affiche une route de la page (un seul panneau, réutilisé). */
+    /** Shows a page route (a single panel, reused). */
     show(route: string): void {
         if (this.panel) {
             this.panel.title = titleOf(route);
@@ -45,10 +45,10 @@ export class RevspanPanel {
         this.attach(panel, route);
     }
 
-    /** Panneau rouvert par VS Code (« Recharger la fenêtre ») : même construction que show(), sur la route enregistrée. */
+    /** Panel reopened by VS Code ("Reload Window"): same construction as show(), on the saved route. */
     restore(panel: vscode.WebviewPanel, route: string): void {
         if (this.panel) {
-            // Un seul panneau : déjà rouvert par une commande, le doublon est fermé.
+            // A single panel: already reopened by a command, the duplicate is closed.
             panel.dispose();
             return;
         }
@@ -64,7 +64,7 @@ export class RevspanPanel {
         return { enableScripts: true, localResourceRoots: [this.webDir] };
     }
 
-    /** Page, titre, icône et écouteurs du panneau. */
+    /** Page, title, icon and listeners of the panel. */
     private attach(panel: vscode.WebviewPanel, route: string): void {
         panel.title = titleOf(route);
         panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon.svg');
@@ -75,7 +75,7 @@ export class RevspanPanel {
             initialRoute: route,
             locale: hostPageLocale(),
         });
-        // Écouteurs propres à ce panneau, libérés à sa fermeture (et non gardés jusqu'à l'arrêt de l'extension).
+        // Listeners specific to this panel, released when it closes (not kept until the extension stops).
         const listeners: vscode.Disposable[] = [];
         panel.webview.onDidReceiveMessage((data: unknown) => {
             const message = parseWebviewMessage(data);
@@ -100,7 +100,7 @@ export class RevspanPanel {
         try {
             switch (message.type) {
                 case 'request': {
-                    // Titre mis à jour dès la demande : les lectures suivent l'ordre de navigation dans la page.
+                    // Title updated as soon as requested: the following reads follow the navigation order in the page.
                     const route = routeOfApiRead(message.method, message.path);
                     if (this.panel && route) {
                         this.panel.title = titleOf(route);

@@ -1,4 +1,4 @@
-// Accueil : badges et sous-titre d'une carte de PR.
+// Home: badges and subtitle of a PR card.
 import type { HomeGroupKey, PrCard, User } from '../../shared/api.ts';
 import type { MessageKey, Translator } from '../i18n/index.ts';
 import { ago, displayName, openedSince } from './format.ts';
@@ -23,7 +23,7 @@ export function cardBadges(tr: Translator, card: PrCard, groupKey: HomeGroupKey,
     const mine = !!me && card.author?.uuid === me.uuid;
     const badges: Badge[] = [];
     if (card.lastReviewed == null && !mine) {
-        // versionsCount null : PR qui ne me concerne pas, historique non chargé
+        // versionsCount null: PR that does not concern me, history not loaded
         const text = card.versionsCount == null
             ? tr.t('home.badge.notReviewed')
             : `${tr.t('home.badge.notReviewed')} · ${tr.t('common.versions', { count: card.versionsCount })}`;

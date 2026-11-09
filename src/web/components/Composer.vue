@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Composeur de commentaire : sur une ligne du diff (target) ou commentaire général (onglet Discussions).
+// Comment composer: on a diff line (target) or general comment (Discussions tab).
 import { computed, onMounted, ref } from 'vue';
 import { GENERAL_DRAFT } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';

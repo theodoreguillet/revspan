@@ -1,4 +1,4 @@
-// Relecture : approuver, demander des modifs, marquer une version relue, marquer un fichier vu (optimiste).
+// Review: approve, request changes, mark a version reviewed, mark a file seen (optimistic).
 import { nextTick } from 'vue';
 import type { FileDiff, PrRef } from '../../shared/api.ts';
 import { api } from '../services/api.ts';
@@ -6,7 +6,7 @@ import type { DiffOptions } from './useDiffOptions.ts';
 import { showError } from './useErrors.ts';
 import type { PrLoad } from './usePrLoad.ts';
 
-/** Clés des boutons de relecture (indicateur de chargement). */
+/** Keys of the review buttons (loading indicator). */
 export const ACTION_KEYS = { approve: 'approve', requestChanges: 'request-changes', markReviewed: 'mark-reviewed' } as const;
 
 export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOptions, keepFileInView: (path: string) => void) {
@@ -14,7 +14,7 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
     const toggleRequestChanges = (on: boolean): Promise<boolean> => load.act(() => api.requestChanges(prRef, on), { key: ACTION_KEYS.requestChanges });
     const markReviewed = (version: number): Promise<boolean> => load.act(() => api.reviewed(prRef, version), { key: ACTION_KEYS.markReviewed });
 
-    /** Coche « Vu » d'un fichier dans l'état local (empreinte, ou undefined = pas vu), sans toucher aux autres fichiers. */
+    /** Ticks "Seen" for a file in the local state (fingerprint, or undefined = not seen), without touching other files. */
     function patchViewed(path: string, contentHash: string | undefined): void {
         const review = load.detail.value.review;
         const viewed = { ...review.viewed };
@@ -27,8 +27,8 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
     }
 
     /**
-     * Coche « Vu » : mise à jour immédiate (le fichier se replie), annulée si le serveur refuse. Seul ce fichier est
-     * annulé : les coches posées entre-temps sur d'autres fichiers restent.
+     * Ticks "Seen": immediate update (the file collapses), rolled back if the server refuses. Only this file is
+     * rolled back: ticks set meanwhile on other files stay.
      */
     async function setViewed(file: FileDiff, viewed: boolean): Promise<void> {
         const previous = load.detail.value.review.viewed[file.path];

@@ -1,5 +1,5 @@
-// Routage par hash : #/ accueil, #/pr/:ws/:repo/:id?from=&to=, #/settings.
-// Le hash est gardé aussi dans VS Code : les liens « #/… » y restent internes (sinon le panneau les ouvre dans le navigateur).
+// Hash routing: #/ home, #/pr/:ws/:repo/:id?from=&to=, #/settings.
+// The hash is kept in VS Code too: "#/..." links stay internal there (otherwise the panel opens them in the browser).
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { clearErrors } from './composables/useErrors.ts';
 import { isVsCode, onHostMessage, readInitialRoute, rememberRoute } from './services/host.ts';
@@ -9,7 +9,7 @@ import SettingsView from './views/SettingsView.vue';
 
 const history = createWebHashHistory();
 
-// Route initiale donnée par l'extension (balise <meta>), si l'adresse n'en impose pas déjà une.
+// Initial route given by the extension (<meta> tag), if the address does not already impose one.
 const initialRoute = readInitialRoute(document);
 if (initialRoute && (isVsCode || location.hash.replace(/^#\/?/, '') === '')) {
     history.replace(initialRoute);
@@ -25,8 +25,8 @@ export const router = createRouter({
     ],
 });
 
-// Changer d'écran efface les erreurs de l'écran précédent (pas un simple changement de plage).
-// Dans VS Code, la route affichée est gardée dans l'état du panneau (rouvert sur elle après rechargement).
+// Changing screen clears the previous screen's errors (not a mere range change).
+// In VS Code, the displayed route is kept in the panel state (reopened on it after a reload).
 router.afterEach((to, from, failure) => {
     if (!failure) {
         rememberRoute(to.fullPath);
@@ -37,7 +37,7 @@ router.afterEach((to, from, failure) => {
     }
 });
 
-// L'extension peut demander d'afficher une autre PR (commande « Ouvrir une PR », lien cliqué…).
+// The extension can ask to show another PR ("Open a PR" command, clicked link...).
 if (isVsCode) {
     onHostMessage((message) => {
         if (message.type === 'navigate') {

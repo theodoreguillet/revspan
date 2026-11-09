@@ -1,12 +1,12 @@
-// Assainissement du HTML des commentaires Bitbucket (contenu non fiable) par liste blanche.
-// Le HTML est analysé par DOMParser (document inerte : aucun script ni chargement), puis reconstruit
-// élément par élément dans le document courant. Rien n'est jamais injecté via innerHTML.
+// Sanitizing of Bitbucket comment HTML (untrusted content) with an allowlist.
+// The HTML is parsed by DOMParser (inert document: no script, no loading), then rebuilt
+// element by element in the current document. Nothing is ever injected through innerHTML.
 
 const ALLOWED = new Set([
     'p', 'br', 'a', 'strong', 'em', 'b', 'i', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'del', 'span', 'img',
 ]);
-// Éléments supprimés avec leur contenu (ce qu'ils contiennent n'est pas du texte lisible).
+// Elements removed with their content (what they contain is not readable text).
 const DROP_WITH_CONTENT = new Set([
     'script', 'style', 'template', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
     'svg', 'math', 'head', 'title', 'meta', 'link', 'base', 'textarea', 'select', 'option', 'button', 'input', 'form',
@@ -15,7 +15,7 @@ const MAX_DEPTH = 64;
 const TEXT_NODE = 3;
 const ELEMENT_NODE = 1;
 
-/** URL de lien autorisée (http, https, mailto) ou null. Les liens relatifs « /… » sont résolus sur bitbucket.org. */
+/** Allowed link URL (http, https, mailto) or null. Relative links "/..." are resolved against bitbucket.org. */
 export function safeHref(value: string | null): string | null {
     if (typeof value !== 'string') {
         return null;
@@ -30,7 +30,7 @@ export function safeHref(value: string | null): string | null {
     return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.href : null;
 }
 
-/** Source d'image autorisée (https seulement) ou null. */
+/** Allowed image source (https only) or null. */
 export function safeImgSrc(value: string | null): string | null {
     if (typeof value !== 'string') {
         return null;
@@ -49,7 +49,7 @@ function copyNode(node: Node, out: Node, depth: number): void {
         return;
     }
     if (node.nodeType !== ELEMENT_NODE) {
-        return; // commentaires, instructions de traitement…
+        return; // comments, processing instructions...
     }
     const source = node as Element;
     const tag = source.localName;
@@ -61,7 +61,7 @@ function copyNode(node: Node, out: Node, depth: number): void {
         return;
     }
     if (!ALLOWED.has(tag)) {
-        // élément inconnu : on garde son contenu (assaini), pas la balise
+        // unknown element: keep its (sanitized) content, not the tag
         for (const child of Array.from(source.childNodes)) {
             copyNode(child, out, depth + 1);
         }
@@ -99,7 +99,7 @@ function copyNode(node: Node, out: Node, depth: number): void {
     out.appendChild(el);
 }
 
-/** HTML non fiable → DocumentFragment ne contenant que des éléments et attributs autorisés. */
+/** Untrusted HTML -> DocumentFragment containing only allowed elements and attributes. */
 export function sanitizeHtml(html: string | null | undefined): DocumentFragment {
     const out = document.createDocumentFragment();
     if (!html) {

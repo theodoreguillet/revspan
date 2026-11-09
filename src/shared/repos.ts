@@ -1,8 +1,8 @@
-// Liste des dépôts de l'accueil (règle commune au serveur et à la page).
+// Home repository list (rule shared by the server and the page).
 
 const SEGMENT = /^[A-Za-z0-9._-]+$/;
 
-/** « workspace/dépôt » normalisé, ou null. Accepte une URL bitbucket.org (seuls les deux premiers segments comptent). */
+/** Normalized "workspace/repo", or null. Accepts a bitbucket.org URL (only the first two segments count). */
 export function normalizeRepo(input: string): string | null {
     const segments = input.trim()
         .replace(/^https?:\/\/(www\.)?bitbucket\.org\//i, '')
@@ -13,7 +13,7 @@ export function normalizeRepo(input: string): string | null {
     return valid ? segments.join('/') : null;
 }
 
-/** Sépare les entrées valides (sans doublon) des invalides ; les lignes vides sont ignorées. */
+/** Splits valid entries (without duplicates) from invalid ones; empty lines are ignored. */
 export function parseRepoList(entries: readonly string[]): { repos: string[]; bad: string[] } {
     const repos: string[] = [];
     const bad: string[] = [];

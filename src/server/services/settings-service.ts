@@ -1,4 +1,4 @@
-// Réglages : e-mail Atlassian, jeton (stockage sécurisé), dépôts de l'accueil.
+// Settings: Atlassian e-mail, token (secure storage), home repositories.
 import type { ConnectionTest, Settings, SettingsUpdate } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
 import { normalizeRepos, type Store } from '../infra/config.ts';
@@ -35,7 +35,7 @@ export class SettingsService {
                 throw badRequest('Invalid email address.', { reason: 'invalid-email' });
             }
             if (email !== previousEmail) {
-                // Le jeton suit l'e-mail (il est rangé sous ce compte).
+                // The token follows the e-mail (it is stored under that account).
                 const previousToken = previousEmail ? await secrets.get(previousEmail) : null;
                 if (previousToken && email && patch.token === undefined) {
                     await secrets.set(email, previousToken);

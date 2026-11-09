@@ -1,4 +1,4 @@
-// Une PR : versions, comparaisons, résumés, et actions (commentaires, résolution, approbation).
+// One PR: versions, comparisons, summaries, and actions (comments, resolution, approval).
 import type {
     Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, ViewedRequest,
 } from '../../shared/api.ts';
@@ -12,12 +12,12 @@ import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
 import type { BitbucketSession } from './session.ts';
 
-/** À incrémenter si le calcul des résumés change (invalide le cache disque). */
+/** To increment if the summary computation changes (invalidates the disk cache). */
 const SUMMARY_VERSION = 4;
 
 interface LoadedPr {
     client: BitbucketClient;
-    /** Pushs lus dans l'activité : updates[i] est la version i + 1. */
+    /** Pushes read from the activity: updates[i] is version i + 1. */
     updates: PushUpdate[];
     versions: Version[];
     detail: PrDetail;
@@ -34,7 +34,7 @@ export class PrService {
         this.cache = cache;
     }
 
-    // ---------- Lecture ----------
+    // ---------- Reading ----------
 
     async detail(ref: PrRef): Promise<PrDetail> {
         return (await this.load(ref)).detail;
@@ -43,12 +43,12 @@ export class PrService {
     async summary(ref: PrRef): Promise<Summary> {
         const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => ({
             versions,
-            // Version indisponible : résumé immédiat, jamais mis en cache.
+            // Unavailable version: immediate summary, never cached.
             results: await Promise.all(versions.map((v) => (v.available
                 ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
                 : summarizeVersion(src, versions, v.index)))),
         }));
-        // Mémorise le type de chaque version pour l'accueil (pas de recalcul là-bas).
+        // Remembers the type of each version for the home page (no recomputation there).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
                 const result = results[i];
@@ -68,7 +68,7 @@ export class PrService {
         });
     }
 
-    /** Contenu des deux côtés d'un fichier, tel que comparé (pour l'éditeur de diff de VS Code). */
+    /** Content of both sides of a file, as compared (for VS Code's diff editor). */
     async fileSides(ref: PrRef, from: number, to: number, file: { path: string; oldPath: string | null }): Promise<{ oldText: string; newText: string }> {
         return this.withVersions(ref, ({ versions }, src) => {
             assertComparable(versions, from, to);
@@ -105,8 +105,8 @@ export class PrService {
     }
 
     /**
-     * Réapprouver : si mon approbation existe déjà (sur une version antérieure), on la retire puis on la remet,
-     * pour que Bitbucket enregistre une approbation datée de maintenant (donc sur la dernière version).
+     * Re-approve: if my approval already exists (on an earlier version), remove it then add it again,
+     * so Bitbucket records an approval dated now (hence on the latest version).
      */
     async approve(ref: PrRef, on: boolean): Promise<Ok> {
         const me = on ? await this.session.me().catch(() => null) : null;
@@ -152,7 +152,7 @@ export class PrService {
         return { ok: true };
     }
 
-    // ---------- Interne ----------
+    // ---------- Internal ----------
 
     private async load(ref: PrRef): Promise<LoadedPr> {
         const client = await this.session.getClient();
@@ -179,8 +179,8 @@ export class PrService {
     }
 
     /**
-     * Calcul sur les versions de la PR. Un commit mis en cache puis effacé par Bitbucket ne se révèle qu'ici (404 sur ses
-     * contenus) : il est oublié avec ce qui en dépend, la PR rechargée (la version devient indisponible) et le calcul repris.
+     * Computation over the PR's versions. A commit cached then erased by Bitbucket only shows up here (404 on its
+     * contents): it is forgotten along with what depends on it, the PR reloaded (the version becomes unavailable) and the computation resumed.
      */
     private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>): Promise<T> {
         let loaded = await this.load(ref);
@@ -189,7 +189,7 @@ export class PrService {
             try {
                 return await run(loaded, purgeAwareSource(loaded.client, ref, loaded.versions));
             } catch (error) {
-                // Garde-fou : une version déjà oubliée qui revient (Bitbucket se contredit) arrête la reprise (410).
+                // Safeguard: a version already forgotten that comes back (Bitbucket contradicts itself) stops the retry (410).
                 if (!(error instanceof VersionPurgedError) || purged.has(error.version.hash)) {
                     throw error;
                 }
@@ -197,7 +197,7 @@ export class PrService {
                 purged.add(hash);
                 this.forgetVersion(ref, loaded, error.version);
                 loaded = await this.load(ref);
-                // Si Bitbucket relit quand même ce commit (contenus en 404), on s'arrête là (410) au lieu de boucler.
+                // If Bitbucket still reads that commit (contents 404), stop here (410) instead of looping.
                 if (loaded.versions.some((v) => v.hash === hash && isReadable(v))) {
                     throw error;
                 }
@@ -205,9 +205,9 @@ export class PrService {
         }
     }
 
-    /** Oublie le commit d'une version effacée, sa merge-base et les résumés calculés avec elle (le sien, celui de la suivante). */
+    /** Forgets the commit of an erased version, its merge-base and the summaries computed with it (its own, the next one's). */
     private forgetVersion(ref: PrRef, { client, updates, versions }: LoadedPr, version: Version): void {
-        // Clés telles qu'au chargement (loadVersions) : commit demandé par le hash de l'activité, merge-base par le hash complet.
+        // Keys as at load time (loadVersions): commit requested by the activity hash, merge-base by the full hash.
         client.forgetCommit(ref.workspace, ref.repo, updates[version.index - 1]?.hash ?? version.hash);
         client.forgetMergeBase(ref.workspace, ref.repo, version.hash, version.destHash);
         this.cache.delete(summaryKey(ref, version, versions[previousAvailable(versions, version.index) - 1]));
@@ -217,7 +217,7 @@ export class PrService {
         }
     }
 
-    /** Écriture sur Bitbucket, puis invalidation des données vivantes de la PR et de l'accueil. */
+    /** Write to Bitbucket, then invalidation of the PR's live data and of the home page. */
     private async write<T>(ref: PrRef, action: (client: BitbucketClient) => Promise<T>): Promise<T> {
         const client = await this.session.getClient();
         try {
@@ -228,9 +228,9 @@ export class PrService {
     }
 }
 
-/** Versions de la PR : commit de chaque push + base réelle (merge-base avec master au moment du push). */
+/** PR versions: commit of each push + real base (merge-base with master at push time). */
 async function loadVersions(client: BitbucketClient, ref: PrRef, updates: readonly PushUpdate[]): Promise<Version[]> {
-    // null : commit effacé par Bitbucket (version écrasée par un force-push), la version est marquée indisponible.
+    // null: commit erased by Bitbucket (version overwritten by a force-push), the version is marked unavailable.
     const commits = await Promise.all(updates.map((u) => client.commit(ref.workspace, ref.repo, u.hash)));
     const bases = await Promise.all(updates.map(async (update, i) => {
         const commit = commits[i];
@@ -245,7 +245,7 @@ async function loadVersions(client: BitbucketClient, ref: PrRef, updates: readon
 const unavailableMessage = (index: number): string =>
     `Version v${index} is no longer available: Bitbucket deleted its commit (version overwritten by a force-push).`;
 
-/** Bornes valides et versions lisibles (une version dont Bitbucket a effacé le commit ne peut pas être comparée). */
+/** Valid bounds and readable versions (a version whose commit Bitbucket erased cannot be compared). */
 function assertComparable(versions: readonly Version[], from: number, to: number): void {
     if (to > versions.length || from >= to) {
         throw badRequest(`Invalid comparison: from ${from} to ${to} (versions 1 to ${versions.length}).`);
@@ -256,7 +256,7 @@ function assertComparable(versions: readonly Version[], from: number, to: number
     }
 }
 
-/** Commit d'une version lisible effacé par Bitbucket depuis sa mise en cache. */
+/** Commit of a readable version erased by Bitbucket since it was cached. */
 class VersionPurgedError extends AppError {
     readonly version: Version;
 
@@ -267,8 +267,8 @@ class VersionPurgedError extends AppError {
 }
 
 /**
- * Source de comparaison qui reconnaît une version effacée après sa mise en cache : sur un 404 (diffstat) ou un contenu
- * absent (src) portant sur le hash d'une version lisible, Bitbucket est interrogé sur le commit lui-même.
+ * Comparison source that recognizes a version erased after it was cached: on a 404 (diffstat) or missing content
+ * (src) concerning the hash of a readable version, Bitbucket is asked about the commit itself.
  */
 function purgeAwareSource(client: BitbucketClient, ref: PrRef, versions: readonly Version[]): CompareSource {
     const src = client.source(ref.workspace, ref.repo);
@@ -302,7 +302,7 @@ function purgeAwareSource(client: BitbucketClient, ref: PrRef, versions: readonl
     };
 }
 
-/** Clé de cache d'un résumé : dépend uniquement des commits (immuables) de la version et de sa version de référence. */
+/** Cache key of a summary: depends only on the (immutable) commits of the version and of its reference version. */
 function summaryKey(ref: PrRef, v: Version, prev: Version | undefined): string {
     const previous = prev ? `${prev.hash}:${prev.base}` : 'creation';
     return `summary:${SUMMARY_VERSION}:${ref.workspace}/${ref.repo}:${previous}:${v.hash}:${v.base}:${v.isRebase}:${v.messageChanged}`;

@@ -1,5 +1,5 @@
-// Données de la page PR : détail (toujours chargé), résumé des versions, diff de la plage (avec cache),
-// et écritures suivies d'un rechargement.
+// PR page data: detail (always loaded), version summary, range diff (cached),
+// and writes followed by a reload.
 import { computed, ref, shallowRef } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
@@ -13,11 +13,11 @@ export interface CompareParams extends Range {
 }
 
 export interface ActOptions {
-    /** Après une écriture réussie, avant le rechargement (fermer un composeur, oublier un brouillon…). */
+    /** After a successful write, before the reload (close a composer, forget a draft...). */
     onDone?: () => void;
-    /** Recharger aussi le diff (nouveau fil en ligne : son placement vient du diff). */
+    /** Also reload the diff (new inline thread: its placement comes from the diff). */
     reloadCompare?: boolean;
-    /** Bouton à l'origine de l'action (indicateur de chargement sur ce bouton). */
+    /** Button that started the action (loading indicator on that button). */
     key?: string;
 }
 
@@ -30,9 +30,9 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const compareError = shallowRef<unknown>(null);
     const cache = new Map<string, Comparison>();
     let current: CompareParams | null = null;
-    /** Dernière demande de résumé : seule sa réponse est gardée. */
+    /** Latest summary request: only its response is kept. */
     let summaryRequest = 0;
-    /** Incrémenté par chaque rechargement forcé du diff : une réponse d'avant n'écrit ni le cache ni le diff. */
+    /** Incremented by each forced diff reload: an earlier response writes neither the cache nor the diff. */
     let generation = 0;
 
     async function loadSummary(): Promise<void> {
@@ -50,14 +50,14 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             return;
         }
         summary.value = result;
-        // Un commit effacé par Bitbucket après sa mise en cache ne se révèle qu'au calcul du résumé : le détail, chargé
-        // avant, croit encore la version lisible (et la plage peut partir d'elle). Il est rechargé une fois.
+        // A commit erased by Bitbucket after being cached only shows up when the summary is computed: the detail, loaded
+        // before, still thinks the version is readable (and the range may start from it). It is reloaded once.
         if (purgedSinceDetail(detail.value.versions, result)) {
             await reloadDetail();
         }
     }
 
-    /** Recharge le détail, et le résumé si la liste des versions a changé (version poussée pendant la lecture). */
+    /** Reloads the detail, and the summary if the version list changed (version pushed while reading). */
     async function reloadDetail(): Promise<void> {
         const before = detail.value.versions;
         try {
@@ -119,14 +119,14 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
     }
 
-    /** Action d'écriture en cours (clé de son bouton), jusqu'à la fin du rechargement ; une seule à la fois. */
+    /** Write action in progress (key of its button), until the reload ends; only one at a time. */
     const pendingAction = ref<string | null>(null);
     const acting = computed(() => pendingAction.value !== null);
     const busy = (key: string): boolean => pendingAction.value === key;
 
     /**
-     * Exécute une écriture puis recharge la PR. Renvoie true si l'écriture a réussi ; false si elle a échoué, ou si une autre
-     * est en cours (message affiché, rien n'est envoyé ni oublié : le brouillon reste).
+     * Runs a write then reloads the PR. Returns true if the write succeeded; false if it failed, or if another
+     * is in progress (message shown, nothing is sent or forgotten: the draft stays).
      */
     async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false, key = 'action' }: ActOptions = {}): Promise<boolean> {
         if (pendingAction.value !== null) {
@@ -148,7 +148,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
     }
 
-    /** Mise à jour locale (optimiste) de l'état de relecture. */
+    /** Local (optimistic) update of the review state. */
     function patchReview(review: Review): void {
         detail.value = { ...detail.value, review };
     }

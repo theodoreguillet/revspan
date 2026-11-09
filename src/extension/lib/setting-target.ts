@@ -1,15 +1,15 @@
-// Niveau où enregistrer un réglage VS Code modifié depuis la page (ex. revspan.repositories).
+// Level at which to save a VS Code setting changed from the page (e.g. revspan.repositories).
 
-/** Valeurs d'un réglage par niveau (extrait de WorkspaceConfiguration.inspect()). */
+/** Values of a setting per level (extracted from WorkspaceConfiguration.inspect()). */
 export interface SettingInspection {
     globalValue?: unknown;
     workspaceValue?: unknown;
 }
 
 /**
- * Le niveau qui donne la valeur effective : l'espace de travail s'il la définit (sinon « Enregistrer » n'aurait
- * aucun effet visible), l'utilisateur sinon. Dans un espace de travail non approuvé, VS Code ignore sa valeur
- * (réglage restreint) : on écrit au niveau utilisateur.
+ * The level that gives the effective value: the workspace if it defines it (otherwise "Save" would have
+ * no visible effect), the user otherwise. In an untrusted workspace, VS Code ignores its value
+ * (restricted setting): we write at the user level.
  */
 export function settingTarget(inspection: SettingInspection | undefined, trusted: boolean): 'workspace' | 'global' {
     return trusted && inspection?.workspaceValue !== undefined ? 'workspace' : 'global';

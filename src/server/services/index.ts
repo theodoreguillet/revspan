@@ -1,4 +1,4 @@
-// Composition des services (utilisée par le serveur local et par l'extension VS Code).
+// Service composition (used by the local server and by the VS Code extension).
 import { DEFAULT_BASE_URL } from '../bitbucket/client.ts';
 import type { Cache } from '../infra/cache.ts';
 import type { Store } from '../infra/config.ts';

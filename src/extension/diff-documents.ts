@@ -1,5 +1,5 @@
-// « Diff VS Code » : la comparaison d'un fichier dans l'éditeur de diff natif (coloration syntaxique),
-// avec exactement les deux côtés de la page (version A rejouée sur la base de B si besoin).
+// "VS Code diff": the comparison of a file in the native diff editor (syntax highlighting),
+// with exactly the two sides of the page (version A replayed onto B's base if needed).
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import type { PrService } from '../server/services/pr-service.ts';
@@ -29,7 +29,7 @@ export class DiffDocuments implements vscode.TextDocumentContentProvider {
         await vscode.commands.executeCommand('vscode.diff', uriOf('old'), uriOf('new'), diffTitle(path, from, to), { preview: true });
     }
 
-    /** Les deux côtés sont calculés une seule fois pour les deux documents de l'éditeur. */
+    /** Both sides are computed only once for the two documents of the editor. */
     private load(doc: DiffDocument): Promise<{ oldText: string; newText: string }> {
         const key = JSON.stringify([doc.ref, doc.from, doc.to, doc.path, doc.oldPath]);
         let sides = this.sides.get(key);

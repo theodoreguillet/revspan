@@ -1,4 +1,4 @@
-// Options d'affichage de la page PR : onglet, frise, vue du diff, fichiers repliés, fils résolus dépliés.
+// Display options of the PR page: tab, timeline, diff view, collapsed files, expanded resolved threads.
 import { reactive, ref, type Ref } from 'vue';
 import type { FileDiff, PrDetail } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
@@ -17,7 +17,7 @@ export function useDiffOptions(detail: Ref<PrDetail>) {
     const fullContext = ref(false);
     const showResolved = ref(false);
     const showMasterOnly = ref(false);
-    /** Choix explicites de l'utilisateur ; sinon un fichier vu est replié. */
+    /** Explicit user choices; otherwise a seen file is collapsed. */
     const collapsed = reactive(new Map<string, boolean>());
     const expandedThreads = reactive(new Set<number>());
 

@@ -1,15 +1,15 @@
-// HTML du panneau : la page construite (dist/web/index.html) + politique de sécurité et route initiale.
-// Les fichiers de la page (./assets/…) sont réécrits en adresses du panneau. Pas de balise <base> : elle changerait
-// l'adresse de résolution du document, et le routeur (historique par hash) tenterait d'écrire une URL d'une autre origine.
+// Panel HTML: the built page (dist/web/index.html) + security policy and initial route.
+// The page files (./assets/...) are rewritten to panel addresses. No <base> tag: it would change the
+// document's resolution address, and the router (hash history) would try to write a URL from another origin.
 import { INITIAL_LOCALE_META, INITIAL_ROUTE_META } from '../../shared/webview-protocol.ts';
 import type { PageLocale } from './l10n.ts';
 
 export interface WebviewHtmlOptions {
-    /** URI webview du dossier dist/web. */
+    /** Webview URI of the dist/web folder. */
     assetsBaseUri: string;
-    /** Source autorisée pour les fichiers de l'extension (webview.cspSource). */
+    /** Source allowed for the extension's files (webview.cspSource). */
     cspSource: string;
-    /** Route à afficher au chargement (ex. « /pr/ws/repo/42 »). */
+    /** Route to show on load (e.g. "/pr/ws/repo/42"). */
     initialRoute: string;
     /** Page language, from VS Code's display language (the page uses it before the browser's). */
     locale: PageLocale;
@@ -17,7 +17,7 @@ export interface WebviewHtmlOptions {
 
 const escapeAttribute = (value: string): string => value.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Aucun script en ligne, aucun accès réseau depuis la page : tout passe par les messages vers l'extension. */
+/** No inline script, no network access from the page: everything goes through messages to the extension. */
 export function contentSecurityPolicy(cspSource: string): string {
     return [
         "default-src 'none'",

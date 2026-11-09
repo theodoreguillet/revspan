@@ -1,5 +1,5 @@
-// Messages reçus de la page : rien n'est utilisé avant d'avoir été vérifié (forme, types, référence de PR),
-// et « Ouvrir le fichier » ne sort jamais de la copie locale du dépôt.
+// Messages received from the page: nothing is used before being checked (shape, types, PR reference),
+// and "Open file" never leaves the repository's local copy.
 import path from 'node:path';
 import { z } from 'zod';
 import type { WebviewToHost } from '../../shared/webview-protocol.ts';
@@ -20,13 +20,13 @@ const messageSchema = z.discriminatedUnion('type', [
     }),
 ]);
 
-/** Message de la page, ou null s'il est mal formé (à ignorer). La méthode et le chemin d'API sont vérifiés par le pont. */
+/** Message from the page, or null if malformed (to be ignored). The method and the API path are checked by the bridge. */
 export function parseWebviewMessage(data: unknown): WebviewToHost | null {
     const result = messageSchema.safeParse(data);
     return result.success ? result.data : null;
 }
 
-/** Chemin absolu d'un fichier de la PR dans la copie locale, ou null s'il est absolu ou sort du dépôt (« ../ »). */
+/** Absolute path of a PR file in the local copy, or null if it is absolute or leaves the repository ("../"). */
 export function fileInRepo(repoDir: string, file: string): string | null {
     if (path.isAbsolute(file) || file.includes('\0')) {
         return null;

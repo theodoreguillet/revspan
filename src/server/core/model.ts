@@ -1,12 +1,12 @@
-// Modèle d'une PR à partir des données brutes Bitbucket : versions, participants, fils, dernière relecture.
-// Fonctions pures (le chargement réseau est dans services/).
+// PR model built from raw Bitbucket data: versions, participants, threads, last review.
+// Pure functions (network loading lives in services/).
 import type {
     Comment, Participant, PrInfo, PrRef, Review, ReviewSource, Thread, User, Version, VersionKind,
 } from '../../shared/api.ts';
 import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
 
-/** Push de la PR, tel que lu dans l'activité. */
+/** Push of the PR, as read from the activity. */
 export interface PushUpdate {
     hash: string;
     destHash: string | null;
@@ -14,17 +14,17 @@ export interface PushUpdate {
     author: BbUser | null;
 }
 
-/** Commit d'une version (endpoint commit). */
+/** Commit of a version (commit endpoint). */
 export interface CommitInfo {
     hash: string;
     message: string;
     parents: string[];
 }
 
-/** Version minimale (date + hash) suffisante pour dater les événements. */
+/** Minimal version (date + hash) enough to date the events. */
 export type DatedVersion = Pick<Version, 'index' | 'hash' | 'pushedAt'>;
 
-/** Marque locale « relue » et fichiers vus (stockés dans state.json). */
+/** Local "reviewed" mark and seen files (stored in state.json). */
 export interface LocalReview {
     reviewedHash?: string;
     reviewedAt?: string;
@@ -38,7 +38,7 @@ export function userOf(raw: BbUser | null | undefined): User | null {
     return { uuid: raw.uuid ?? '', displayName: raw.display_name ?? raw.nickname ?? '?', nickname: raw.nickname ?? '' };
 }
 
-/** Pushs dans l'ordre chronologique, doublons consécutifs retirés, version courante ajoutée si absente. */
+/** Pushes in chronological order, consecutive duplicates removed, current version added if missing. */
 export function extractUpdates(activity: readonly BbActivity[], pr: BbPullRequest | null): PushUpdate[] {
     const updates: PushUpdate[] = [];
     for (const entry of activity) {
@@ -75,8 +75,8 @@ export function extractUpdates(activity: readonly BbActivity[], pr: BbPullReques
 }
 
 /**
- * commits[i] et bases[i] (merge-base réelle, ou null) correspondent à updates[i]. Un commit absent (null) = version
- * indisponible : Bitbucket l'a effacé. Rebase et message se comparent à la dernière version lisible.
+ * commits[i] and bases[i] (real merge-base, or null) match updates[i]. A missing commit (null) = unavailable
+ * version: Bitbucket erased it. Rebase and message are compared with the last readable version.
  */
 export function buildVersions(updates: readonly PushUpdate[], commits: readonly (CommitInfo | null | undefined)[], bases: readonly (string | null)[]): Version[] {
     const versions: Version[] = [];
@@ -109,10 +109,10 @@ export function buildVersions(updates: readonly PushUpdate[], commits: readonly 
     return versions;
 }
 
-/** Version dont le commit existe encore (`available` absent = lisible). */
+/** Version whose commit still exists (`available` absent = readable). */
 export const isReadable = (version: Partial<Pick<Version, 'available'>> | undefined): boolean => version !== undefined && version.available !== false;
 
-/** Dernière version lisible avant `index` (0 = base master si aucune). */
+/** Last readable version before `index` (0 = master base if none). */
 export function previousAvailable(versions: readonly Partial<Pick<Version, 'available'>>[], index: number): number {
     for (let k = index - 1; k >= 1; k--) {
         if (isReadable(versions[k - 1])) {
@@ -122,7 +122,7 @@ export function previousAvailable(versions: readonly Partial<Pick<Version, 'avai
     return 0;
 }
 
-/** Index de la version en cours à une date donnée (1 si l'événement précède la 1re version). */
+/** Index of the version in progress at a given date (1 if the event precedes the 1st version). */
 export function versionAt(versions: readonly DatedVersion[], isoDate: string): number {
     let index = versions.length > 0 ? 1 : 0;
     for (const version of versions) {
@@ -137,18 +137,18 @@ export function versionByHash<V extends DatedVersion>(versions: readonly V[], ha
     return versions.find((v) => sameHash(v.hash, hash)) ?? null;
 }
 
-/** Versions sans aucun changement de l'auteur : une approbation donnée avant reste valable. */
+/** Versions with no author change: an approval given before remains valid. */
 const NEUTRAL_KINDS: ReadonlySet<VersionKind> = new Set(['rebase-only', 'message-only', 'none']);
 
 /**
- * Une approbation encore active sur Bitbucket vaut pour la dernière version si toutes les versions arrivées depuis la
- * version approuvée sont connues et neutres. kinds[i] = type de la version i + 1 (undefined si pas encore calculé).
+ * An approval still active on Bitbucket counts for the latest version if all versions that arrived since the
+ * approved version are known and neutral. kinds[i] = type of version i + 1 (undefined if not yet computed).
  */
 export function approvalHoldsSince(approvedVersion: number | null, kinds: readonly (VersionKind | undefined)[]): boolean {
     return approvedVersion !== null && kinds.slice(approvedVersion).every((kind) => kind !== undefined && NEUTRAL_KINDS.has(kind));
 }
 
-/** Une réponse (discussion) ne vaut pas relecture. */
+/** A reply (discussion) does not count as a review. */
 export function isReply(comment: Pick<BbComment, 'parent'>): boolean {
     return Boolean(comment.parent?.id);
 }
@@ -160,8 +160,8 @@ interface ReviewCandidate {
 }
 
 /**
- * Dernière relecture = la plus récente des approbations / demandes de modifs / nouveaux commentaires de moi,
- * ou de la marque locale « relue ».
+ * Last review = the most recent of my approvals / change requests / new comments,
+ * or of the local "reviewed" mark.
  */
 export function computeReview(input: {
     versions: readonly DatedVersion[];
@@ -241,7 +241,7 @@ function toComment(c: BbComment, versions: readonly DatedVersion[], meUuid: stri
     };
 }
 
-/** Fils de commentaires (racine + réponses, dans l'ordre). */
+/** Comment threads (root + replies, in order). */
 export function buildThreads(
     rawComments: readonly BbComment[],
     versions: readonly DatedVersion[],
@@ -289,7 +289,7 @@ export function buildThreads(
     for (const thread of list) {
         thread.comments.sort((a, b) => (a.id === thread.id ? -1 : b.id === thread.id ? 1 : a.createdOn.localeCompare(b.createdOn)));
     }
-    // Un fil dont tous les commentaires sont supprimés n'a plus d'intérêt.
+    // A thread whose comments are all deleted is no longer of interest.
     return list
         .filter((t) => t.comments.some((c) => !c.deleted))
         .sort((a, b) => (a.comments[0]?.createdOn ?? '').localeCompare(b.comments[0]?.createdOn ?? ''));

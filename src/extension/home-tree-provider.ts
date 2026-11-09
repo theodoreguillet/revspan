@@ -1,4 +1,4 @@
-// Vue « Mes PR » de la barre latérale.
+// "My PRs" view of the side bar.
 import * as vscode from 'vscode';
 import type { HomeService } from '../server/services/home-service.ts';
 import { AppError, errorPayload } from '../server/errors.ts';
@@ -8,7 +8,7 @@ import { buildHomeTree, repoErrorLabel, type GroupNode, type PrNode } from './li
 
 type Node = { kind: 'group'; group: GroupNode } | { kind: 'pr'; pr: PrNode } | { kind: 'message'; text: string };
 
-/** Clés de contexte des messages d'accueil de la vue (viewsWelcome) : jeton à configurer, aucun dépôt suivi. */
+/** Context keys of the view's welcome messages (viewsWelcome): token to configure, no tracked repository. */
 export const NEEDS_TOKEN_CONTEXT = 'revspan.needsToken';
 export const NO_REPOS_CONTEXT = 'revspan.noRepos';
 
@@ -22,7 +22,7 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
         this.home = home;
     }
 
-    /** fresh : ignore le cache court de l'accueil (bouton « Actualiser »). */
+    /** fresh: ignores the home page's short cache ("Refresh" button). */
     refresh({ fresh = false } = {}): void {
         this.fresh = this.fresh || fresh;
         this.changed.fire();

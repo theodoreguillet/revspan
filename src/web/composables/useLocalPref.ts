@@ -1,4 +1,4 @@
-// Préférence locale mémorisée dans localStorage (confort seulement : indisponible en navigation privée).
+// Local preference remembered in localStorage (comfort only: unavailable in private browsing).
 import { ref, watch, type Ref } from 'vue';
 
 const PREFIX = 'revspan:';
@@ -22,7 +22,7 @@ export function useLocalPref<T>(key: string, fallback: T, isValid: (value: unkno
         try {
             localStorage.setItem(PREFIX + key, JSON.stringify(value));
         } catch {
-            // stockage indisponible : préférence non mémorisée
+            // storage unavailable: preference not remembered
         }
     });
     return pref;

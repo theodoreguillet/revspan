@@ -1,4 +1,4 @@
-// Commentaires : brouillons, composeur de ligne, réponses, suppression, résolution.
+// Comments: drafts, line composer, replies, deletion, resolution.
 import { reactive, ref } from 'vue';
 import type { Comment, PrRef, Thread } from '../../shared/api.ts';
 import { tr } from '../i18n/index.ts';
@@ -9,7 +9,7 @@ import type { PrLoad } from './usePrLoad.ts';
 export const GENERAL_DRAFT = 'general';
 export const replyDraftKey = (threadId: number): string => `reply:${threadId}`;
 
-/** Clés des boutons de discussion (indicateur de chargement sur le bouton qui a lancé l'action). */
+/** Keys of the discussion buttons (loading indicator on the button that started the action). */
 export const actionKey = {
     composer: (draftKey: string): string => `comment:${draftKey}`,
     reply: (threadId: number): string => `reply:${threadId}`,
@@ -18,7 +18,7 @@ export const actionKey = {
 };
 
 export function useDiscussion(prRef: PrRef, load: PrLoad) {
-    /** Textes en cours de saisie, conservés quand le diff se redessine. */
+    /** Texts being typed, kept when the diff redraws. */
     const drafts = reactive(new Map<string, string>());
     const composer = ref<ComposerTarget | null>(null);
 
@@ -42,7 +42,7 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         composer.value = null;
     }
 
-    /** Commentaire en ligne (côté nouveau) ou, sur une ligne supprimée, commentaire général qui la cite. */
+    /** Inline comment (new side) or, on a deleted line, a general comment quoting it. */
     function submitComposer(target: ComposerTarget, text: string): Promise<boolean> {
         const done = (): void => {
             drafts.delete(target.key);
@@ -63,7 +63,7 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     const postGeneral = (text: string): Promise<boolean> =>
         load.act(() => api.comment(prRef, { raw: text }), { onDone: () => drafts.delete(GENERAL_DRAFT), key: actionKey.composer(GENERAL_DRAFT) });
 
-    // la confirmation est demandée par le bouton (ConfirmButton)
+    // the confirmation is asked by the button (ConfirmButton)
     const deleteComment = (comment: Comment): Promise<boolean> =>
         load.act(() => api.deleteComment(prRef, comment.id), { key: actionKey.remove(comment.id) });
 

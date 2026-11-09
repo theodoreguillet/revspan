@@ -23,7 +23,7 @@ export const fr: Catalog = {
     'common.reviewedMark': '✓ relu',
     'common.andOthers': { one: '{files} et {count} autre', other: '{files} et {count} autres' },
 
-    // ---------- Dates relatives et durées ----------
+    // ---------- Relative times and durations ----------
     'time.justNow': 'à l\'instant',
     'time.minutesAgo': { one: 'il y a {count} min', other: 'il y a {count} min' },
     'time.hoursAgo': { one: 'il y a {count} h', other: 'il y a {count} h' },
@@ -37,7 +37,7 @@ export const fr: Catalog = {
     'time.gapWeeks': '{count} sem.',
     'time.gapMonths': '{count} mois',
 
-    // ---------- Types de versions ----------
+    // ---------- Version kinds and types ----------
     'kind.creation': 'création',
     'kind.code': 'code',
     'kind.deps': 'deps',
@@ -49,14 +49,14 @@ export const fr: Catalog = {
     'versionType.rebase': 'rebase',
     'versionType.amend': 'amend',
 
-    // ---------- Barre du haut et champ d'URL ----------
+    // ---------- Navigation bar and URL field ----------
     'nav.shortcutsTitle': 'Raccourcis clavier (?)',
     'nav.shortcuts': 'Raccourcis clavier',
     'url.placeholder': 'Coller une URL de PR Bitbucket…',
     'url.label': 'URL de PR Bitbucket',
     'url.hint': 'URL attendue : https://bitbucket.org/<workspace>/<dépôt>/pull-requests/<numéro>',
 
-    // ---------- Accueil ----------
+    // ---------- Home ----------
     'home.docTitle': 'Mes PR · Revspan',
     'home.title': 'Mes PR',
     'home.reloadTitle': 'Recharger la liste',
@@ -83,7 +83,7 @@ export const fr: Catalog = {
     'home.badge.approved': '✓ approuvée',
     'home.pushed': 'push {ago}',
 
-    // ---------- En-tête de la PR ----------
+    // ---------- PR header ----------
     'pr.state.open': '● Ouverte',
     'pr.state.merged': 'Fusionnée',
     'pr.state.declined': 'Refusée',
@@ -103,7 +103,7 @@ export const fr: Catalog = {
     'pr.approve': '✓ Approuver v{version}',
     'pr.reapprove': '✓ Réapprouver v{version}',
 
-    // ---------- Approbations ----------
+    // ---------- Approvals ----------
     'approval.codeChanged': 'code modifié en {versions}',
     'approval.depsChanged': 'dépendances modifiées en {versions}',
     'approval.approved': '{name} a approuvé',
@@ -116,7 +116,7 @@ export const fr: Catalog = {
     'approval.meChanges': 'Tu as demandé des modifications',
     'approval.mePending': 'Tu n\'as pas encore approuvé',
 
-    // ---------- Bandeau de reprise ----------
+    // ---------- Resume banner ----------
     'banner.upToDate': 'Tu es à jour : v{version} relue',
     'banner.first': 'Première relecture : {versions}',
     'banner.firstSince': 'Première relecture : {versions} depuis le {date}',
@@ -149,7 +149,7 @@ export const fr: Catalog = {
     'banner.markReviewed': 'Marquer v{version} comme relue',
     'banner.rule': 'Approuver ou commenter marque la version comme relue automatiquement.',
 
-    // ---------- Frise et plage ----------
+    // ---------- Timeline and range ----------
     'timeline.label': 'Frise des versions',
     'timeline.base': 'base',
     'timeline.baseTitle': '{branch} · cible de la PR — clic : comparer la version « à » à sa base sur {branch}',
@@ -191,7 +191,7 @@ export const fr: Catalog = {
     'readout.codeChangedIn': 'code modifié en {versions}',
     'readout.manyVersions': '{versions}… ({count} versions)',
 
-    // ---------- Onglets ----------
+    // ---------- Tabs ----------
     'tabs.diff': 'Diff',
     'tabs.discussions': 'Discussions',
     'tabs.versions': 'Versions',
@@ -255,7 +255,7 @@ export const fr: Catalog = {
     'files.show': 'Afficher',
     'files.hide': 'Masquer',
 
-    // ---------- Onglet Versions ----------
+    // ---------- Versions tab ----------
     'versions.colVersion': 'Version',
     'versions.colDate': 'Date',
     'versions.colType': 'Type',
@@ -311,7 +311,7 @@ export const fr: Catalog = {
     'composer.hintSendCancel': '⌘/Ctrl + Entrée pour envoyer · Échap pour annuler',
     'composer.submit': 'Commenter',
 
-    // ---------- Raccourcis clavier ----------
+    // ---------- Keyboard shortcuts ----------
     'shortcuts.keysFile': 'j / k',
     'shortcuts.keysThread': 'n / p',
     'shortcuts.keysViewed': 'v',
@@ -329,7 +329,7 @@ export const fr: Catalog = {
     'shortcuts.escape': 'Fermer / annuler',
     'shortcuts.help': 'Afficher cette aide',
 
-    // ---------- Réglages ----------
+    // ---------- Settings ----------
     'settings.docTitle': 'Réglages · Revspan',
     'settings.loading': 'Chargement des réglages…',
     'settings.help': 'Crée un jeton API Atlassian sur {link} (« Créer un jeton API avec des portées », application Bitbucket) avec les portées {scopes}.',
@@ -366,7 +366,7 @@ export const fr: Catalog = {
     'settings.connectedAs': 'Connecté en tant que {name}.',
     'settings.failed': 'Échec : {message}',
 
-    // ---------- Erreurs ----------
+    // ---------- Errors ----------
     'error.title': 'Impossible de charger cette page',
     'error.authTitle': 'Connexion à Bitbucket impossible',
     'error.backHome': 'Retour à l\'accueil',

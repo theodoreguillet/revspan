@@ -15,7 +15,7 @@ useKeyboard((key) => {
 </script>
 
 <template>
-    <!-- La clé = le chemin : changer de PR recrée la page, changer de plage (?from=&to=) non. -->
+    <!-- The key = the path: changing PR recreates the page, changing the range (?from=&to=) does not. -->
     <RouterView v-slot="{ Component, route }">
         <component :is="Component" :key="route.path" />
     </RouterView>

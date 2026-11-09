@@ -1,4 +1,4 @@
-// Validation des entrées HTTP (zod). Les types produits correspondent au contrat src/shared/api.ts.
+// Validation of HTTP inputs (zod). The produced types match the src/shared/api.ts contract.
 import { z } from 'zod';
 import type { NewComment, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
 import { badRequest } from '../errors.ts';
@@ -40,7 +40,7 @@ export const reviewedSchema = z.object({ version: z.number().int().positive() })
 
 export const commentIdSchema = z.coerce.number().int().positive();
 
-/** Valide une entrée ; message lisible en cas d'échec (400). */
+/** Validates an input; readable message on failure (400). */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
     const result = schema.safeParse(value);
     if (!result.success) {

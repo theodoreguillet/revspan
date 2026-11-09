@@ -27,7 +27,7 @@ function reset(event: KeyboardEvent): void {
     (event.target as HTMLInputElement).blur();
 }
 
-// collage d'une URL valide : navigation immédiate
+// pasting a valid URL: navigate immediately
 function onPaste(): void {
     setTimeout(() => {
         if (parsePrUrl(value.value)) {
