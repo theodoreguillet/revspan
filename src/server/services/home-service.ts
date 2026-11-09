@@ -2,7 +2,6 @@
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
-import { reactionOf } from '../core/classify.ts';
 import { computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
@@ -109,7 +108,7 @@ export class HomeService {
         const since = review.lastReviewedAt;
         const newComments = since
             ? activity.filter((e) => e.comment && e.comment.user?.uuid !== meUuid && !e.comment.deleted
-                && e.comment.created_on > since && reactionOf(e.comment.content?.raw) === null).length
+                && e.comment.created_on > since).length
             : 0;
 
         let group: HomeGroupKey;

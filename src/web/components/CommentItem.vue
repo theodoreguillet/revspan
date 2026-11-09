@@ -4,7 +4,7 @@ import type { Comment } from '../../shared/api.ts';
 import { actionKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { displayName, fmtFull, relTime } from '../lib/format.ts';
-import { avatarHue, initials, reactionView, THUMBS } from '../lib/threads.ts';
+import { avatarHue, initials } from '../lib/threads.ts';
 import ConfirmButton from './ConfirmButton.vue';
 import SafeHtml from './SafeHtml.vue';
 
@@ -12,7 +12,6 @@ const props = defineProps<{ comment: Comment }>();
 const emit = defineEmits<{ reply: [] }>();
 const page = usePrPage();
 
-const reactions = computed(() => reactionView(props.comment, page.detail.me));
 const name = computed(() => displayName(props.comment.user));
 </script>
 
@@ -29,19 +28,6 @@ const name = computed(() => displayName(props.comment.user));
             <div v-if="comment.deleted" class="deleted">Commentaire supprimé</div>
             <SafeHtml v-else :html="comment.html" />
             <div v-if="!comment.deleted" class="acts">
-                <button
-                    type="button"
-                    :class="['react', { liked: reactions.liked, busy: page.busy(actionKey.react(comment.id)) }]"
-                    data-action="react"
-                    :disabled="page.acting"
-                    :aria-busy="page.busy(actionKey.react(comment.id))"
-                    :title="reactions.title"
-                    :aria-pressed="reactions.liked"
-                    @click="page.react(comment)"
-                >
-                    {{ reactions.count ? `${THUMBS} ${reactions.count}` : THUMBS }}
-                </button>
-                <span v-for="r in reactions.others" :key="r.emoji" class="chip" :title="r.title">{{ r.emoji }} {{ r.count }}</span>
                 <button type="button" data-action="reply" @click="emit('reply')">Répondre</button>
                 <ConfirmButton
                     v-if="comment.mine"

@@ -63,7 +63,7 @@ Sans `read:user:bitbucket`, l'outil marche mais ne reconnaît pas tes PR ni tes 
 - **Reprise** : trait « ✓ relu » sur ta dernière relecture (approbation, nouveau commentaire ou « Marquer comme relue »),
   bandeau de ce qui a bougé depuis, points bleus sur les versions nouvelles.
 - **Diff** : unifié ou côte à côte, fichiers « vus » (la coche saute si le fichier change), fichiers venus de master masqués.
-- **Discussions** : fils relocalisés sur la version affichée (« ligne modifiée depuis »), réponses, 👍, résolution ;
+- **Discussions** : fils relocalisés sur la version affichée (« ligne modifiée depuis »), réponses, résolution ;
   commentaire sur une ligne de la dernière version.
 - **Approuver / demander des modifs**, avec la version approuvée par chacun (« périmée » si du code a changé depuis).
 
@@ -125,8 +125,6 @@ celles de l'auteur restent. Détails : [docs/DESIGN.md](docs/DESIGN.md). Routes 
   suivante est résumée par rapport à la dernière version encore lisible (ou à la base), et un fil posé sur une version
   effacée s'affiche au niveau du fichier.
 
-- **Like** : l'API Bitbucket n'expose pas les réactions. Un 👍 est posté comme une réponse « 👍 » (visible comme telle
-  dans Bitbucket) ; les réponses d'un seul emoji sont affichées comme des réactions. Recliquer supprime ta réponse.
 - **Commentaire sur une ligne** : seulement sur la dernière version (Bitbucket ancre les commentaires sur la version
   courante). Sur une ligne supprimée, l'outil poste un commentaire général qui cite la ligne.
 - `npm audit` signale des alertes modérées dans l'outillage de lint (minimatch via typescript-eslint, sans correctif

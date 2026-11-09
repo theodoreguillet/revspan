@@ -27,7 +27,7 @@ const total = computed(() => page.detail.threads.length);
             <DiscussionItem v-for="t in groups.resolved" :key="t.id" :thread="t" />
         </details>
         <div v-if="!total" class="rv-empty">Aucune discussion sur cette PR.</div>
-        <p class="note">{{ plural(total, 'fil') }} au total. Les réponses « 👍 » sont affichées comme des réactions.</p>
+        <p class="note">{{ plural(total, 'fil') }} au total.</p>
     </div>
 </template>
 

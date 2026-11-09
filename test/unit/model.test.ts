@@ -99,9 +99,9 @@ describe('computeReview', () => {
         expect(computeReview({ versions, activity, comments: [], meUuid: null, local: null }).lastReviewed).toBeNull();
     });
 
-    it('un 👍 ou une réponse ne valent pas relecture', () => {
+    it('une réponse ne vaut pas relecture', () => {
         const versions = versionsFixture();
-        const comments = [myComment('merci', { parent: { id: 9 } }), myComment('👍')];
+        const comments = [myComment('merci', { parent: { id: 9 } })];
         expect(computeReview({ versions, activity, comments, meUuid: ME, local: null }).lastReviewed).toBe(2);
     });
 });
@@ -115,7 +115,7 @@ describe('buildParticipants', () => {
 });
 
 describe('buildThreads', () => {
-    it('fils, réactions emoji, nouveaux, résolu, supprimés', () => {
+    it('fils (réponses imbriquées comprises), nouveaux, résolu, supprimés', () => {
         const raw: BbComment[] = [
             {
                 id: 10, created_on: '2026-11-05T11:02:08Z', user: user(YAN, 'Yann'),
@@ -133,11 +133,7 @@ describe('buildThreads', () => {
         const [general, inline] = threads;
         expect(general).toMatchObject({ path: null, version: 1 });
         expect(inline).toMatchObject({ path: 'src/CreateRecord.ts', anchor: { to: 40, from: null }, version: 3, resolved: true });
-        expect(inline!.comments.map((c) => [c.id, c.isNew])).toEqual([[10, true], [11, true]]);
-        expect(inline!.comments[1]!.reactions).toEqual([{
-            emoji: '👍',
-            users: [{ uuid: ME, displayName: 'Moi', nickname: 'Moi' }, { uuid: YAN, displayName: 'Yann', nickname: 'Yann' }],
-            myCommentIds: [12],
-        }]);
+        // Une réponse « 👍 » est une réponse comme les autres (l'API Bitbucket n'expose pas de réactions).
+        expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false], [12, false, true], [13, true, false]]);
     });
 });

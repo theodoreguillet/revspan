@@ -1,8 +1,6 @@
-// Fils de discussion : groupes, activité, nouveaux commentaires, réactions, avatars.
-import type { Comment, Thread, User } from '../../shared/api.ts';
+// Fils de discussion : groupes, activité, nouveaux commentaires, avatars.
+import type { Thread, User } from '../../shared/api.ts';
 import { firstName } from './format.ts';
-
-export const THUMBS = '👍';
 
 export function lastActivity(thread: Thread): string {
     return thread.comments.reduce((max, c) => (c.createdOn > max ? c.createdOn : max), '');
@@ -63,26 +61,4 @@ export function avatarHue(user: User | null | undefined): number {
         x = Math.imul(x, 16777619);
     }
     return (x >>> 0) % 360;
-}
-
-export interface ReactionView {
-    liked: boolean;
-    count: number;
-    title: string;
-    others: { emoji: string; count: number; title: string }[];
-}
-
-/** Réaction 👍 (bascule) et autres réactions d'un commentaire. */
-export function reactionView(comment: Comment, me: User | null): ReactionView {
-    const names = (users: User[]): string => users.map((u) => (me && u.uuid === me.uuid ? `${u.displayName} (toi)` : u.displayName)).join(', ');
-    const thumbs = comment.reactions.find((r) => r.emoji === THUMBS);
-    const count = thumbs?.users.length ?? 0;
-    return {
-        liked: !!thumbs && thumbs.myCommentIds.length > 0,
-        count,
-        title: count && thumbs ? names(thumbs.users) : 'J\'aime',
-        others: comment.reactions
-            .filter((r) => r.emoji !== THUMBS && r.users.length)
-            .map((r) => ({ emoji: r.emoji, count: r.users.length, title: names(r.users) })),
-    };
 }

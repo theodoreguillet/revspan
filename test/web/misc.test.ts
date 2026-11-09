@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Comment, HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
+import type { HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
 import { ago, daysBetween, frList, gapLabel, masterMasked, openedSince, plural, relTime } from '../../src/web/lib/format.ts';
 import { cardBadges, cardSubtitle } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
-import { initials, newActivity, reactionView, threadGroups } from '../../src/web/lib/threads.ts';
-import { commentById, prLong } from './fixtures.ts';
+import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
+import { prLong } from './fixtures.ts';
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -93,13 +93,6 @@ describe('fils', () => {
 
     it('nouveaux fils et réponses depuis ma relecture', () => {
         expect(newActivity(data.threads)).toEqual({ newThreads: 1, replies: 1, names: ['Yann', 'Camille'] });
-    });
-
-    it('réaction 👍 : comptée, marquée « liked » via myCommentIds, noms en infobulle', () => {
-        const reply = commentById(data, 121);
-        expect(reactionView(reply, data.me)).toEqual({ liked: true, count: 1, title: 'Thomas Girard (toi)', others: [] });
-        const other: Comment = { ...reply, reactions: [{ emoji: '👍', users: [{ uuid: '{x}', displayName: 'X' }], myCommentIds: [] }, { emoji: '🎉', users: [{ uuid: '{x}', displayName: 'X' }], myCommentIds: [] }] };
-        expect(reactionView(other, data.me)).toEqual({ liked: false, count: 1, title: 'X', others: [{ emoji: '🎉', count: 1, title: 'X' }] });
     });
 
     it('initiales d\'avatar', () => {

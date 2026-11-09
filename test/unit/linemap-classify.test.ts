@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mapLine } from '../../src/server/core/linemap.ts';
-import { categoryOf, reactionOf, sameHash } from '../../src/server/core/classify.ts';
+import { categoryOf, sameHash } from '../../src/server/core/classify.ts';
 
 describe('mapLine', () => {
     it('ligne inchangée décalée par un ajout au-dessus', () => {
@@ -30,14 +30,6 @@ describe('classify', () => {
         expect(categoryOf('pnpm-lock.yaml')).toBe('deps');
         expect(categoryOf('src/package.json.ts')).toBe('code');
         expect(categoryOf('coverage.config.json')).toBe('code');
-    });
-
-    it('reactionOf', () => {
-        expect(reactionOf('👍')).toBe('👍');
-        expect(reactionOf(' :+1: ')).toBe('👍');
-        expect(reactionOf(':thumbsup:')).toBe('👍');
-        expect(reactionOf('👍 merci')).toBeNull();
-        expect(reactionOf(null)).toBeNull();
     });
 
     it('sameHash compare des hashes abrégés', () => {

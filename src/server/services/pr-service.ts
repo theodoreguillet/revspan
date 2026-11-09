@@ -1,6 +1,6 @@
-// Une PR : versions, comparaisons, résumés, et actions (commentaires, réactions, résolution, approbation).
+// Une PR : versions, comparaisons, résumés, et actions (commentaires, résolution, approbation).
 import type {
-    Comment, Comparison, NewComment, Ok, PrDetail, PrRef, ReactRequest, Summary, Thread, Version, ViewedRequest,
+    Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, ViewedRequest,
 } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbActivity, BbPullRequest } from '../bitbucket/types.ts';
@@ -88,7 +88,6 @@ export class PrService {
             isNew: false,
             deleted: false,
             mine: Boolean(me) && created.user?.uuid === me?.uuid,
-            reactions: [],
         };
     }
 
@@ -100,26 +99,6 @@ export class PrService {
     async resolve(ref: PrRef, commentId: number, resolved: boolean): Promise<Ok> {
         await this.write(ref, (client) => client.resolveComment(ref.workspace, ref.repo, ref.id, commentId, resolved));
         return { ok: true };
-    }
-
-    /** Like = réponse « 👍 » (pas de réactions dans l'API Bitbucket) ; recliquer supprime mes réponses-emoji. */
-    async react(ref: PrRef, { commentId, emoji }: ReactRequest): Promise<{ reacted: boolean }> {
-        // Données fraîches : un like posté depuis Bitbucket ne doit pas être doublé.
-        (await this.session.getClient()).invalidatePr(ref.workspace, ref.repo, ref.id);
-        const { detail } = await this.load(ref);
-        const comment = detail.threads.flatMap((t) => t.comments).find((c) => c.id === commentId);
-        if (!comment) {
-            throw new AppError(404, 'BB_NOT_FOUND', 'Commentaire introuvable.');
-        }
-        const mine = comment.reactions.find((r) => r.emoji === emoji)?.myCommentIds ?? [];
-        if (mine.length > 0) {
-            for (const id of mine) {
-                await this.deleteComment(ref, id);
-            }
-            return { reacted: false };
-        }
-        await this.write(ref, (client) => client.createComment(ref.workspace, ref.repo, ref.id, { raw: emoji, parentId: comment.id }));
-        return { reacted: true };
     }
 
     /**

@@ -1,4 +1,4 @@
-// Commentaires : brouillons, composeur de ligne, réponses, réactions, suppression, résolution.
+// Commentaires : brouillons, composeur de ligne, réponses, suppression, résolution.
 import { reactive, ref } from 'vue';
 import type { Comment, PrRef, Thread } from '../../shared/api.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
@@ -12,7 +12,6 @@ export const replyDraftKey = (threadId: number): string => `reply:${threadId}`;
 export const actionKey = {
     composer: (draftKey: string): string => `comment:${draftKey}`,
     reply: (threadId: number): string => `reply:${threadId}`,
-    react: (commentId: number): string => `react:${commentId}`,
     remove: (commentId: number): string => `delete:${commentId}`,
     resolve: (threadId: number): string => `resolve:${threadId}`,
 };
@@ -63,9 +62,6 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     const postGeneral = (text: string): Promise<boolean> =>
         load.act(() => api.comment(prRef, { raw: text }), { onDone: () => drafts.delete(GENERAL_DRAFT), key: actionKey.composer(GENERAL_DRAFT) });
 
-    const react = (comment: Comment): Promise<boolean> =>
-        load.act(() => api.react(prRef, { commentId: comment.id, emoji: '👍' }), { key: actionKey.react(comment.id) });
-
     // la confirmation est demandée par le bouton (ConfirmButton)
     const deleteComment = (comment: Comment): Promise<boolean> =>
         load.act(() => api.deleteComment(prRef, comment.id), { key: actionKey.remove(comment.id) });
@@ -73,5 +69,5 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     const resolve = (thread: Thread, resolved: boolean): Promise<boolean> =>
         load.act(() => api.resolve(prRef, thread.id, resolved), { key: actionKey.resolve(thread.id) });
 
-    return { drafts, composer, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, react, deleteComment, resolve };
+    return { drafts, composer, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, deleteComment, resolve };
 }

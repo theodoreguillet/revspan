@@ -14,7 +14,7 @@ import type { HomeService } from '../services/home-service.ts';
 import type { PrService } from '../services/pr-service.ts';
 import type { SettingsService } from '../services/settings-service.ts';
 import {
-    commentIdSchema, compareQuerySchema, newCommentSchema, parse, prRefSchema, reactSchema, reviewedSchema,
+    commentIdSchema, compareQuerySchema, newCommentSchema, parse, prRefSchema, reviewedSchema,
     settingsUpdateSchema, viewedSchema,
 } from './schemas.ts';
 
@@ -120,7 +120,6 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.delete(`${PR_ROUTE}/comments/:cid`, async (c) => c.json(await prs.deleteComment(refOf(c), parse(commentIdSchema, c.req.param('cid')))));
     app.post(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), true)));
     app.delete(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), false)));
-    app.post(`${PR_ROUTE}/react`, async (c) => c.json(await prs.react(refOf(c), parse(reactSchema, await jsonBody(c)))));
     app.post(`${PR_ROUTE}/approve`, async (c) => c.json(await prs.approve(refOf(c), true)));
     app.delete(`${PR_ROUTE}/approve`, async (c) => c.json(await prs.approve(refOf(c), false)));
     app.post(`${PR_ROUTE}/request-changes`, async (c) => c.json(await prs.requestChanges(refOf(c), true)));

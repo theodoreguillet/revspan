@@ -149,13 +149,6 @@ export interface Review {
     viewed: Record<string, string>;
 }
 
-export interface Reaction {
-    emoji: string;
-    users: User[];
-    /** Mes réponses-emoji (vide si je n'ai pas réagi). */
-    myCommentIds: number[];
-}
-
 export interface Comment {
     id: number;
     user: User | null;
@@ -168,7 +161,6 @@ export interface Comment {
     isNew: boolean;
     deleted: boolean;
     mine: boolean;
-    reactions: Reaction[];
 }
 
 export interface Thread {
@@ -180,7 +172,7 @@ export interface Thread {
     version: number;
     resolved: boolean;
     resolvedBy: User | null;
-    /** Racine d'abord, puis réponses (ordre chronologique), sans les réactions. */
+    /** Racine d'abord, puis réponses (ordre chronologique). */
     comments: Comment[];
 }
 
@@ -284,11 +276,6 @@ export interface NewComment {
     raw: string;
     parentId?: number;
     inline?: { path: string; to: number };
-}
-
-export interface ReactRequest {
-    commentId: number;
-    emoji: string;
 }
 
 export interface ViewedRequest {

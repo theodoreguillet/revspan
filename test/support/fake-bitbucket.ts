@@ -181,7 +181,6 @@ function mainPr(b: FakeBuilder): void {
             general,
             mine,
             reply,
-            b.comment(YAN, '2026-10-20T11:00:00Z', '👍', { parent: { id: reply.id } }),
             b.comment(YAN, '2026-10-20T11:05:00Z', 'Pourquoi une RC ici ?', { inline: { path: 'package-lock.json', to: 5, from: null } }),
             b.comment(AI, '2026-10-01T10:06:00Z', 'critical: missing check', { inline: { path: 'src/Action.ts', to: 4, from: null }, resolution: { user: CAM } }),
         ],

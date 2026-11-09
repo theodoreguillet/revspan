@@ -299,8 +299,7 @@
           "raw": "**Potential issue**: `findArchivedAt` may return `undefined`…",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         },
         {
           "id": 102,
@@ -315,8 +314,7 @@
           "raw": "no",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         }
       ]
     },
@@ -348,8 +346,7 @@
           "raw": "**Suggestion**: archiving and reindexing are not atomic…",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         },
         {
           "id": 104,
@@ -364,8 +361,7 @@
           "raw": "no",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         }
       ]
     },
@@ -397,8 +393,7 @@
           "raw": "**Security**: the bulk endpoint does not check each owner…",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         },
         {
           "id": 106,
@@ -413,8 +408,7 @@
           "raw": "Ownership is checked by the batch loader…",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         }
       ]
     },
@@ -439,8 +433,7 @@
           "raw": "## 🔍 Test impact\n\n**Scope**: bulk archiving…",
           "isNew": false,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         }
       ]
     },
@@ -468,8 +461,7 @@
           "raw": "can we reuse the batch loader here ?",
           "isNew": true,
           "deleted": false,
-          "mine": false,
-          "reactions": []
+          "mine": false
         },
         {
           "id": 121,
@@ -484,22 +476,7 @@
           "raw": "Done, it now uses `buildIdFromPayload`.",
           "isNew": true,
           "deleted": false,
-          "mine": false,
-          "reactions": [
-            {
-              "emoji": "👍",
-              "users": [
-                {
-                  "uuid": "{me-uuid}",
-                  "displayName": "Thomas Girard",
-                  "nickname": "tgirard"
-                }
-              ],
-              "myCommentIds": [
-                131
-              ]
-            }
-          ]
+          "mine": false
         }
       ]
     }

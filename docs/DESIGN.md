@@ -8,7 +8,7 @@ contre master : sur une PR longue, impossible de voir ce que le dernier amend a 
 des jours ou des mois, avec des dizaines de versions et plusieurs rebases.
 
 Strata est un petit outil local (serveur Node + page web, en TypeScript) qui reconstitue toutes les versions
-d'une PR Bitbucket et permet de relire version par version, de commenter, répondre, liker, résoudre et approuver.
+d'une PR Bitbucket et permet de relire version par version, de commenter, répondre, résoudre et approuver.
 
 ## Objectifs
 
@@ -16,7 +16,7 @@ d'une PR Bitbucket et permet de relire version par version, de commenter, répon
 - Ne montrer que ce que l'auteur a changé : le bruit apporté par un rebase (fichiers ou lignes venus de master)
   est retiré.
 - Reprendre là où on s'est arrêté : dernière relecture, nouvelles versions, nouveaux commentaires, fichiers vus.
-- Agir depuis l'outil : commenter une ligne, répondre, liker, résoudre/rouvrir, approuver, demander des modifs.
+- Agir depuis l'outil : commenter une ligne, répondre, résoudre/rouvrir, approuver, demander des modifs.
 - Accueil « Mes PR » sur une liste de dépôts configurable.
 
 ## Non-objectifs
@@ -51,13 +51,12 @@ d'une PR Bitbucket et permet de relire version par version, de commenter, répon
 | Dernière relecture | max(dernière approbation, dernier commentaire, marque locale « relue »), chacune convertie en version via sa date. Approuver ou commenter la fait avancer automatiquement. |
 | Fichiers vus | Locaux, mémorisés avec l'empreinte du contenu côté B ; la coche saute si le fichier change. |
 | Commentaires | Fils reconstruits (parent). Chaque commentaire est rattaché à la version en cours à sa date. Ancrage `to` relocalisé ligne à ligne vers la version affichée (marqué « ligne modifiée » si la ligne a changé). Ancrage `from` seul : affiché au niveau du fichier. Contenu : HTML rendu par Bitbucket, assaini côté client par liste blanche. |
-| Like | L'API Bitbucket n'expose pas les réactions. Like = réponse « 👍 » ; les réponses composées d'un seul emoji (👍, :+1:, :thumbsup:, +1) sont affichées comme réactions. Unlike = suppression de sa propre réponse. |
 | Commentaire en ligne | Possible seulement si B est la dernière version, côté nouveau (lignes ajoutées ou de contexte) : `inline.to`. Sur une ligne supprimée, commentaire général citant fichier, ligne et code. |
 | Approbations | Version d'approbation déduite de l'activité ; « périmée » si une version avec du code est arrivée depuis. |
 | Accueil | PR ouvertes des dépôts configurés, groupées : À relire / Réapprobation rapide (seulement rebases) / À jour / Mes PR / Autres. |
 | Sécurité locale | Écoute 127.0.0.1 seulement. En-tête `Host` vérifié (anti DNS-rebinding). Toute requête qui modifie exige l'en-tête `X-Strata: 1` (bloque les formulaires et requêtes d'autres sites). Le jeton ne quitte jamais le serveur. |
 | Extension VS Code | Même page Vue dans un webview et mêmes services. Les appels d'API passent par messages (`src/shared/webview-protocol.ts`) et sont traités par l'application Hono en mémoire (`app.request`, sans port), avec la même validation. Jeton dans le stockage sécurisé de VS Code, dépôts suivis dans le réglage `strata.repositories` (source de dépôts injectée dans `Store`), autres données dans le stockage global de l'extension (séparées de la version web). Ajouts propres à VS Code : vue « Mes PR » (TreeView), « Ouvrir le fichier » (dépôt de l'espace de travail, worktree de la branche de la PR préféré), « Diff VS Code » (documents virtuels + `vscode.diff`, mêmes côtés que la page). Bundle CommonJS unique (Vite, `vscode` externe). |
-| Dernière relecture (précision) | Les réponses et les réactions (👍) ne comptent pas comme relecture ; seuls les nouveaux commentaires, approbations et demandes de modifs. |
+| Dernière relecture (précision) | Les réponses ne comptent pas comme relecture ; seuls les nouveaux commentaires, approbations et demandes de modifs. |
 | Tests | Vitest : unitaires (diff, fusion, relocalisation, versions, fils, état), règles de la page (sélection, repli, bandeau, assainissement), intégration du serveur contre un faux Bitbucket à 6 PR (écritures comprises, chaque test isolé) ; UI Playwright sur le vrai serveur branché au même faux Bitbucket ; test réel en lecture seule sur une PR au choix (`npm run test:live`, invariants et diff complet identique au diffstat de Bitbucket) ; test de fumée de l'extension dans un VS Code isolé (`npm run test:extension`). Aucune écriture sur le vrai Bitbucket pendant les tests. |
 
 ## Laissé au constructeur

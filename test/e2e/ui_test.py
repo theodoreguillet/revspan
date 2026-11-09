@@ -37,7 +37,6 @@ FAKE_TOKEN = os.environ.get('STRATA_FAKE_TOKEN', '')
 SHOTS = os.environ.get('STRATA_SHOTS_DIR') or os.path.join(tempfile.gettempdir(), 'strata-shots')
 CHROMIUM_ARGS = ['--use-mock-keychain', '--password-store=basic']
 MINUS = '−'
-THUMBS = ('👍', ':+1:', ':thumbsup:', '+1')
 
 results = []
 
@@ -248,9 +247,8 @@ def run_checks(page):
     me = data['me'] or {}
     exp_from, exp_to = expected_default(n, lr)
     by_id = {t['id']: t for t in data['threads']}
-    # mon fil en ligne encore ouvert, et un commentaire d'un autre déjà aimé par quelqu'un d'autre
+    # mon fil en ligne encore ouvert
     my_thread = next((t for t in data['threads'] if t['path'] and not t['resolved'] and t['comments'][0]['mine']), None)
-    liked_by_other = next((c for t in data['threads'] for c in t['comments'] if not c['mine'] and any(r['emoji'] == '👍' and r['users'] for r in c['reactions'])), None)
 
     @check('accueil : groupes et cartes (avant d\'ouvrir les PR)')
     def home(page):
@@ -430,24 +428,6 @@ def run_checks(page):
                    'POST comments général avec citation')
         expect(page.locator('.rv-comp')).to_have_count(0, timeout=10000)
     deleted_line(page)
-
-    @check('réaction 👍 (bascule)')
-    def react(page):
-        assert liked_by_other, 'aucun commentaire aimé par un autre'
-        button = page.locator(f'.rv-cm[data-comment="{liked_by_other["id"]}"] [data-action="react"]')
-        expect(button).to_have_attribute('aria-pressed', 'false')
-        count = len(next(r for r in liked_by_other['reactions'] if r['emoji'] == '👍')['users'])
-        expect(button).to_have_text(f'👍 {count}')
-        calls.start()
-        button.click()
-        calls.wait(lambda c: is_post_comment(c) and comment_raw(c) in THUMBS and comment_parent(c) == liked_by_other['id'], 'POST comments « 👍 » en réponse')
-        expect(button).to_have_attribute('aria-pressed', 'true', timeout=10000)
-        expect(button).to_have_text(f'👍 {count + 1}')
-        calls.start()
-        button.click()
-        calls.wait(lambda c: c['method'] == 'DELETE' and '/comments/' in c['path'], 'DELETE de ma réponse « 👍 »')
-        expect(button).to_have_attribute('aria-pressed', 'false', timeout=10000)
-    react(page)
 
     @check('résoudre un fil')
     def resolve(page):

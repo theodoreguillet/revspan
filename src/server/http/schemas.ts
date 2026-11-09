@@ -1,6 +1,6 @@
 // Validation des entrées HTTP (zod). Les types produits correspondent au contrat src/shared/api.ts.
 import { z } from 'zod';
-import type { NewComment, PrRef, ReactRequest, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
+import type { NewComment, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
 import { badRequest } from '../errors.ts';
 
 const NAME = /^[A-Za-z0-9._-]+$/;
@@ -28,11 +28,6 @@ export const newCommentSchema: z.ZodType<NewComment> = z.object({
     raw: z.string().trim().min(1, 'Le commentaire est vide.').max(32000),
     parentId: z.number().int().positive().optional(),
     inline: z.object({ path: z.string().min(1).max(4096), to: z.number().int().positive() }).optional(),
-});
-
-export const reactSchema: z.ZodType<ReactRequest> = z.object({
-    commentId: z.number().int().positive(),
-    emoji: z.string().min(1).max(16),
 });
 
 export const viewedSchema: z.ZodType<ViewedRequest> = z.object({

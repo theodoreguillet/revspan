@@ -25,7 +25,6 @@ Règles communes :
 | POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` |
 | DELETE | `/api/pr/:ws/:repo/:id/comments/:cid` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/comments/:cid/resolve` | — | `Ok` |
-| POST | `/api/pr/:ws/:repo/:id/react` | `ReactRequest` | `{ reacted: boolean }` (bascule) |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/approve` | — | `Ok` (POST réapprouve si besoin) |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/request-changes` | — | `Ok` |
 | POST | `/api/pr/:ws/:repo/:id/reviewed` | `{ version }` | `Ok` (marque locale « relue ») |

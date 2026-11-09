@@ -145,7 +145,6 @@ describe('lecture d\'une PR', () => {
         expect(mine?.version).toBe(2);
         expect(mine?.comments.map((c) => c.raw)).toEqual(['Utilise le repository pour sauver.', 'Fait dans la dernière version.']);
         expect(mine?.comments[1]?.isNew).toBe(true);
-        expect(mine?.comments[1]?.reactions.map((r) => [r.emoji, r.users.length, r.myCommentIds])).toEqual([['👍', 1, []]]);
     });
 
     it('résumé des versions', async () => {
@@ -204,23 +203,16 @@ describe('lecture d\'une PR', () => {
 });
 
 describe('actions', () => {
-    it('répondre, commenter en ligne, like (bascule), résoudre, approuver', async () => {
+    it('répondre, commenter en ligne, résoudre, approuver', async () => {
         const { fake } = await setup();
         const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
-        const target = thread?.comments[1]?.id;
-        expect(thread && target).toBeTruthy();
-        if (!thread || !target) {
+        expect(thread).toBeTruthy();
+        if (!thread) {
             return;
         }
         const reply = await api<{ raw: string; mine: boolean }>('POST', `${prPath()}/comments`, { raw: 'Merci !', parentId: thread.id });
         expect(reply.body).toMatchObject({ raw: 'Merci !', mine: true });
         expect((await api('POST', `${prPath()}/comments`, { raw: 'Nit', inline: { path: 'src/Action.ts', to: 3 } })).status).toBe(200);
-
-        expect((await api('POST', `${prPath()}/react`, { commentId: target, emoji: '👍' })).body).toEqual({ reacted: true });
-        const liked = (await detail()).threads.find((t) => t.id === thread.id)?.comments.find((c) => c.id === target)?.reactions[0];
-        expect(liked?.users).toHaveLength(2);
-        expect(liked?.myCommentIds).toHaveLength(1);
-        expect((await api('POST', `${prPath()}/react`, { commentId: target, emoji: '👍' })).body).toEqual({ reacted: false });
 
         expect((await api('POST', `${prPath()}/comments/${thread.id}/resolve`)).status).toBe(200);
         expect((await detail()).threads.find((t) => t.id === thread.id)?.resolved).toBe(true);
@@ -232,19 +224,17 @@ describe('actions', () => {
         expect(approved.participants.find((p) => p.user?.uuid === '{me}')?.approved).toBe(true);
 
         expect(fake.calls.map(shortCall)).toEqual([
-            'POST /comments', 'POST /comments', 'POST /comments', `DELETE /comments/${liked?.myCommentIds[0]}`,
+            'POST /comments', 'POST /comments',
             `POST /comments/${thread.id}/resolve`, `DELETE /comments/${thread.id}/resolve`, 'POST /approve',
         ]);
         expect(fake.calls[0]?.body).toEqual({ content: { raw: 'Merci !' }, parent: { id: thread.id } });
         expect(fake.calls[1]?.body).toEqual({ content: { raw: 'Nit' }, inline: { path: 'src/Action.ts', to: 3 } });
-        expect(fake.calls[2]?.body).toEqual({ content: { raw: '👍' }, parent: { id: target } });
     });
 
-    it('une réponse ou un 👍 ne font pas avancer la dernière relecture', async () => {
+    it('une réponse ne fait pas avancer la dernière relecture', async () => {
         await setup();
         const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
         await api('POST', `${prPath()}/comments`, { raw: 'Merci !', parentId: thread?.id });
-        await api('POST', `${prPath()}/react`, { commentId: thread?.comments[1]?.id, emoji: '👍' });
         expect((await detail()).review.lastReviewed).toBe(2);
     });
 
