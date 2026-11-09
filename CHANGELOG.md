@@ -47,7 +47,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Keyboard access: Space and Enter on file rows and versions, focus kept inside the shortcuts dialog.
 - "Delete token" no longer erases the unsaved e-mail and repositories in the settings; undoing a failed "Seen" no longer
   reverts other files; a reload no longer shows a stale comparison.
-- VS Code extension: `revspan.repositories` is saved at the level that defines it (user, workspace or folder), and
+- VS Code extension: `revspan.repositories` is saved at the level that defines it (user or workspace), and
   closing a panel releases its listeners.
 
 ## [2.0.0] - 2026-11-06
