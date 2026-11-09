@@ -6,6 +6,7 @@ import type { ExtensionApp } from './app-context.ts';
 import type { DiffDocuments } from './diff-documents.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
+import { parseWebviewMessage } from './lib/webview-messages.ts';
 import { openLocalFile } from './local-files.ts';
 
 const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
@@ -50,7 +51,12 @@ export class RevspanPanel {
             cspSource: panel.webview.cspSource,
             initialRoute: route,
         });
-        panel.webview.onDidReceiveMessage((message: WebviewToHost) => void this.handle(message), undefined, this.context.subscriptions);
+        panel.webview.onDidReceiveMessage((data: unknown) => {
+            const message = parseWebviewMessage(data);
+            if (message) {
+                void this.handle(message);
+            }
+        }, undefined, this.context.subscriptions);
         panel.onDidDispose(() => {
             this.panel = null;
         }, undefined, this.context.subscriptions);

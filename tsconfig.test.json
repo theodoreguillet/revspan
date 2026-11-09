@@ -12,7 +12,8 @@
         "module": "ESNext",
         "moduleResolution": "Bundler",
         "types": [
-            "node"
+            "node",
+            "vscode"
         ]
     },
     "include": [
@@ -24,6 +25,6 @@
         "src/web/composables/**/*.ts",
         "vite.config.ts",
         "vitest.config.ts",
-        "src/extension/lib/**/*.ts"
+        "src/extension/**/*.ts"
     ]
 }

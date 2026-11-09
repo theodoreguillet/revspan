@@ -6,6 +6,7 @@ import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib
 import { currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import { buildHomeTree } from '../../src/extension/lib/home-tree.ts';
+import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 
 describe('manifeste de l\'extension', () => {
     const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -47,6 +48,64 @@ describe('HTML du panneau', () => {
         expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
         expect(csp).toContain("connect-src 'none'");
         expect(csp).toContain("base-uri 'none'");
+    });
+});
+
+describe('messages de la page', () => {
+    const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
+
+    it('messages bien formés acceptés ; seuls workspace, dépôt et numéro gardés dans la référence', () => {
+        const read = { type: 'request', id: 3, method: 'GET', path: '/api/home' };
+        const write = { type: 'request', id: 4, method: 'POST', path: '/api/pr/acme/records-api/212/comments', body: { raw: 'Merci' } };
+        const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
+        const openDiff = { type: 'openDiff', ref, from: 0, to: 3, path: 'src/A.ts', oldPath: 'src/Old.ts' };
+        for (const message of [read, write, openFile, { ...openFile, line: null }, openDiff, { ...openDiff, oldPath: null }]) {
+            expect(parseWebviewMessage(message)).toEqual(message);
+        }
+        expect(parseWebviewMessage({ ...openFile, ref: { ...ref, extra: 'x' } })).toEqual(openFile);
+    });
+
+    it('message mal formé : null, sans exception', () => {
+        const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
+        const openDiff = { type: 'openDiff', ref, from: 2, to: 3, path: 'src/A.ts', oldPath: null };
+        const malformed: unknown[] = [
+            null, undefined, 42, 'request', [], {}, { type: 'other' },
+            { type: 'request', id: '1', method: 'GET', path: '/api/home' },
+            { type: 'request', id: 1.5, method: 'GET', path: '/api/home' },
+            { type: 'request', id: 1, method: 'GET' },
+            { type: 'request', id: 1, method: 7, path: '/api/home' },
+            { ...openFile, ref: null },
+            { ...openFile, ref: { ...ref, workspace: '..' } },
+            { ...openFile, ref: { ...ref, repo: 'records-api/../x' } },
+            { ...openFile, ref: { ...ref, id: 0 } },
+            { ...openFile, ref: { ...ref, id: 1.5 } },
+            { ...openFile, path: '' },
+            { ...openFile, path: 42 },
+            { ...openFile, line: 0 },
+            { ...openFile, line: 1.5 },
+            { type: 'openFile', ref, path: 'src/A.ts' },
+            { ...openDiff, from: -1 },
+            { ...openDiff, from: '2' },
+            { ...openDiff, to: 0 },
+            { ...openDiff, to: 3.5 },
+            { ...openDiff, oldPath: 3 },
+        ];
+        for (const data of malformed) {
+            expect(parseWebviewMessage(data), JSON.stringify(data)).toBeNull();
+        }
+    });
+});
+
+describe('fichier du dépôt local', () => {
+    it('chemin relatif dans le dépôt : chemin absolu du fichier', () => {
+        expect(fileInRepo('/dev/records-api', 'src/A.ts')).toBe('/dev/records-api/src/A.ts');
+        expect(fileInRepo('/dev/records-api/', 'src/../README.md')).toBe('/dev/records-api/README.md');
+    });
+
+    it('chemin absolu ou qui sort du dépôt : null', () => {
+        for (const file of ['../../.ssh/id_rsa', 'src/../../x', '../records-api-copy/x', '/etc/passwd', '', '.', 'src/\0A.ts']) {
+            expect(fileInRepo('/dev/records-api', file), file).toBeNull();
+        }
     });
 });
 
