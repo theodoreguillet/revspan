@@ -40,7 +40,7 @@ export function errorText(t: Translate, error: ErrorLike): string {
         case 'emailRequired':
             return t('Enter the Atlassian account email first.');
         case 'refused':
-            return t('Request refused by the Revspan server.');
+            return t('Request refused.');
         case 'internal':
             return t('Revspan internal error: {detail}', { detail: message.detail });
     }

@@ -12,7 +12,7 @@
     "Version v{version} is no longer available: Bitbucket deleted its commit (version overwritten by a force-push).": "La version v{version} n'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).",
     "Invalid email address.": "Adresse e-mail invalide.",
     "Enter the Atlassian account email first.": "Renseigne d'abord l'adresse e-mail du compte Atlassian.",
-    "Request refused by the Revspan server.": "Requête refusée par le serveur Revspan.",
+    "Request refused.": "Requête refusée.",
     "Revspan internal error: {detail}": "Erreur interne de Revspan : {detail}",
     "{repo}: {message}": "{repo} : {message}",
     "To review": "À relire",

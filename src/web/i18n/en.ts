@@ -388,7 +388,7 @@ export const en = {
     'error.versionUnavailable': 'Version v{version} is no longer available: Bitbucket deleted its commit (version overwritten by a force-push).',
     'error.invalidEmail': 'Invalid email address.',
     'error.emailRequired': 'Enter the Atlassian account email first.',
-    'error.refused': 'Request refused by the Revspan server.',
+    'error.refused': 'Request refused.',
     'error.internal': 'Revspan internal error: {detail}',
 } as const satisfies Record<string, Entry>;
 

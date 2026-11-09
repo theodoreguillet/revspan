@@ -387,6 +387,6 @@ export const fr: Catalog = {
     'error.versionUnavailable': 'La version v{version} n\'est plus disponible : Bitbucket a effacé son commit (version écrasée par un force-push).',
     'error.invalidEmail': 'Adresse e-mail invalide.',
     'error.emailRequired': 'Renseigne d\'abord l\'adresse e-mail du compte Atlassian.',
-    'error.refused': 'Requête refusée par le serveur Revspan.',
+    'error.refused': 'Requête refusée.',
     'error.internal': 'Erreur interne de Revspan : {detail}',
 };
