@@ -90,7 +90,7 @@ export function openNativeDiff(ref: PrRef, from: number, to: number, path: strin
     postToHost({ type: 'openDiff', ref: { ...ref }, from, to, path, oldPath });
 }
 
-/** Route initiale donnée par l'extension (<meta name="strata-route" content="/pr/ws/repo/42">), ou null. */
+/** Route initiale donnée par l'extension (<meta name="revspan-route" content="/pr/ws/repo/42">), ou null. */
 export function readInitialRoute(doc: Document): string | null {
     const content = doc.querySelector(`meta[name="${INITIAL_ROUTE_META}"]`)?.getAttribute('content')?.trim();
     return content && content.startsWith('/') && !content.startsWith('//') ? content : null;

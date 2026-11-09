@@ -1,4 +1,4 @@
-// Développement : serveur Strata en watch (port 7420) + Vite avec rechargement à chaud (port 5173).
+// Développement : serveur Revspan en watch (port 7420) + Vite avec rechargement à chaud (port 5173).
 // Ctrl+C arrête les deux ; si l'un s'arrête, l'autre aussi.
 import { spawn, type ChildProcess } from 'node:child_process';
 

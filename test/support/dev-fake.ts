@@ -1,4 +1,4 @@
-// Développement sans toucher au vrai Bitbucket : faux Bitbucket + serveur Strata sur le port 7420
+// Développement sans toucher au vrai Bitbucket : faux Bitbucket + serveur Revspan sur le port 7420
 // (configuration temporaire). Lancer ensuite `npm run dev:web` pour la page avec rechargement à chaud.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,13 +6,13 @@ import path from 'node:path';
 import { startApp } from '../../src/server/app.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket } from './fake-bitbucket.ts';
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-dev-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-dev-'));
 const fake = await startFakeBitbucket();
-const app = await startApp({ port: 7420, maxPortTries: 1, env: { STRATA_CONFIG_DIR: dir, STRATA_TOKEN_STORE: 'file', STRATA_BITBUCKET_API: fake.url } });
+const app = await startApp({ port: 7420, maxPortTries: 1, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
 await app.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN, repos: [`${WS}/${REPO}`] });
 
 console.log(`Faux Bitbucket : ${fake.url}`);
-console.log(`Strata      : ${app.url}  (page construite)`);
+console.log(`Revspan      : ${app.url}  (page construite)`);
 for (const [name, id] of Object.entries(FAKE_PRS)) {
     console.log(`  ${name.padEnd(14)} ${app.url}/#/pr/${WS}/${REPO}/${id}`);
 }

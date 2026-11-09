@@ -1,8 +1,8 @@
-# Strata
+# Revspan
 
-Relire une PR Bitbucket **couche par couche** : chaque push est une couche, même quand l'auteur fait
+Relire une PR Bitbucket **version par version** : chaque push est une version, même quand l'auteur fait
 `git commit --amend` et rebase à chaque retour (une PR = un commit). Bitbucket ne montre que le diff complet contre
-master ; Strata retrouve toutes les versions poussées et montre ce que l'auteur a vraiment changé entre deux versions,
+master ; Revspan retrouve toutes les versions poussées et montre ce que l'auteur a vraiment changé entre deux versions,
 sans le bruit apporté par les rebases.
 
 Outil local : un serveur Node (TypeScript, Hono) qui sert une page Vue 3 dans ton navigateur.
@@ -11,16 +11,16 @@ Outil local : un serveur Node (TypeScript, Hono) qui sert une page Vue 3 dans to
 
 ```bash
 npm ci && npm run build                              # une fois (puis après chaque mise à jour)
-node bin/strata.js                                   # accueil « Mes PR »
-node bin/strata.js https://bitbucket.org/<workspace>/<dépôt>/pull-requests/<id>   # une PR directement
+node bin/revspan.js                                   # accueil « Mes PR »
+node bin/revspan.js https://bitbucket.org/<workspace>/<dépôt>/pull-requests/<id>   # une PR directement
 ```
 
 Node 22.18 ou plus. La page s'ouvre sur `http://127.0.0.1:7420` (`--port 7500`, `--no-open` disponibles).
-Pratique : `alias strata='node /chemin/vers/strata/bin/strata.js'`.
+Pratique : `alias revspan='node /chemin/vers/revspan/bin/revspan.js'`.
 
 ## Extension VS Code
 
-La même page existe en extension VS Code : vue **« Mes PR »** dans la barre d'activité (icône Strata), page de la PR
+La même page existe en extension VS Code : vue **« Mes PR »** dans la barre d'activité (icône Revspan), page de la PR
 dans un panneau, et deux actions sur chaque fichier du diff :
 
 - **Ouvrir le fichier** : le fichier du dépôt cloné dans l'espace de travail, à la ligne ; un worktree git du dépôt
@@ -30,28 +30,28 @@ dans un panneau, et deux actions sur chaque fichier du diff :
   les mêmes deux côtés que la page (version rejouée sur la nouvelle base après un rebase).
 
 Pas de serveur ni de port : l'extension appelle l'application en mémoire. Le jeton est rangé dans le stockage sécurisé
-de VS Code (⚙ Réglages du panneau ou commande « Strata : Réglages »), séparément de la version web. Les dépôts suivis
-sont le réglage VS Code `strata.repositories` : modifiable aussi depuis les Réglages de VS Code, synchronisé par
+de VS Code (⚙ Réglages du panneau ou commande « Revspan : Réglages »), séparément de la version web. Les dépôts suivis
+sont le réglage VS Code `revspan.repositories` : modifiable aussi depuis les Réglages de VS Code, synchronisé par
 Settings Sync, propre à chaque profil.
 
 ```bash
-npm run extension:install            # construit dist/strata.vsix et l'installe dans VS Code (puis recharger la fenêtre)
+npm run extension:install            # construit dist/revspan.vsix et l'installe dans VS Code (puis recharger la fenêtre)
 npm run extension:install -- --profile "Nom"   # idem dans un profil VS Code précis (sinon : profil par défaut)
 npm run package:extension            # seulement le .vsix (à partager : Extensions › … › Installer depuis un VSIX)
 npm run extension:dev -- <dossier>   # mode développement : fenêtre VS Code sur <dossier>, extension non installée
 ```
 
-Ou ouvrir le dossier `strata` dans VS Code et lancer « Extension Strata » (F5).
+Ou ouvrir le dossier `revspan` dans VS Code et lancer « Extension Revspan » (F5).
 
 ## Premier lancement : le jeton
 
 1. Crée un jeton API Atlassian **avec droits** sur <https://id.atlassian.com/manage-profile/security/api-tokens>
    (« Create API token with scopes », application Bitbucket) :
    `read:user:bitbucket`, `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket`.
-2. Dans Strata, ⚙ Réglages : ton e-mail Atlassian + le jeton, puis « Tester la connexion ».
+2. Dans Revspan, ⚙ Réglages : ton e-mail Atlassian + le jeton, puis « Tester la connexion ».
 3. Ajuste la liste des dépôts de l'accueil (un `workspace/repo` par ligne).
 
-Le jeton est rangé dans le **trousseau macOS** (service `strata-bitbucket`), via `secret-tool` sous Linux,
+Le jeton est rangé dans le **trousseau macOS** (service `revspan-bitbucket`), via `secret-tool` sous Linux,
 sinon dans un fichier `token.json` en `0600`. Il ne quitte jamais le serveur local.
 Sans `read:user:bitbucket`, l'outil marche mais ne reconnaît pas tes PR ni tes approbations.
 
@@ -79,7 +79,7 @@ Raccourcis : `j`/`k` fichier, `n`/`p` fil, `v` vu, `[`/`]` version, `?` aide.
 | `npm run dev:fake` | serveur branché sur le faux Bitbucket (aucun appel réel) ; puis `npm run dev:web` |
 | `npm run check` | lint + types + tests unitaires et d'intégration (Vitest) |
 | `npm run test:e2e` | build puis tests UI Playwright sur le vrai serveur branché au faux Bitbucket |
-| `npm run test:live` | test réel en lecture seule sur une PR au choix (`STRATA_LIVE_PR` = URL, `STRATA_LIVE_EMAIL`, `STRATA_KEYCHAIN_SERVICE`) |
+| `npm run test:live` | test réel en lecture seule sur une PR au choix (`REVSPAN_LIVE_PR` = URL, `REVSPAN_LIVE_EMAIL`, `REVSPAN_KEYCHAIN_SERVICE`) |
 | `npm run build:extension` / `npm run test:extension` | construit l'extension VS Code / test de fumée dans un VS Code isolé (faux Bitbucket) |
 | `npm run package:extension` / `npm run extension:install` | `.vsix` dans `dist/` (vsce) / le construit et l'installe dans VS Code |
 | `npm run build` / `npm start` / `npm run clean` | construit `dist/` / lance l'outil construit / supprime les builds |
@@ -133,7 +133,7 @@ celles de l'auteur restent. Détails : [docs/DESIGN.md](docs/DESIGN.md). Routes 
 
 ## Données locales
 
-`~/.config/strata/` (`%APPDATA%\strata` sous Windows ; `STRATA_CONFIG_DIR` pour changer) :
+`~/.config/revspan/` (`%APPDATA%\revspan` sous Windows ; `REVSPAN_CONFIG_DIR` pour changer) :
 `config.json` (e-mail, dépôts), `state.json` (versions relues, fichiers vus), `cache/` (contenus immuables par commit,
 peut être supprimé sans risque).
 

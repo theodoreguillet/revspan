@@ -1,4 +1,4 @@
-// Vrai serveur Strata (Hono) branché sur le faux Bitbucket. Chaque test part d'un environnement neuf
+// Vrai serveur Revspan (Hono) branché sur le faux Bitbucket. Chaque test part d'un environnement neuf
 // (faux Bitbucket + configuration temporaire) : aucun test ne dépend d'un autre.
 import fs from 'node:fs';
 import http from 'node:http';
@@ -19,9 +19,9 @@ let env: Env | null = null;
 
 /** Environnement neuf ; avec jeton configuré par défaut. */
 async function setup({ withToken = true } = {}): Promise<Env> {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-it-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-it-'));
     const fake = await startFakeBitbucket();
-    const app = await startApp({ port: 0, env: { STRATA_CONFIG_DIR: dir, STRATA_TOKEN_STORE: 'file', STRATA_BITBUCKET_API: fake.url } });
+    const app = await startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
     if (withToken) {
         await app.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN, repos: [`${WS}/${REPO}`] });
     }
@@ -43,7 +43,7 @@ const prPath = (id: number = FAKE_PRS.main): string => `/api/pr/${WS}/${REPO}/${
 async function api<T = unknown>(method: string, route: string, body?: unknown, { header = true } = {}): Promise<{ status: number; body: T }> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (header && method !== 'GET') {
-        headers['X-Strata'] = '1';
+        headers['X-Revspan'] = '1';
     }
     const response = await fetch(`${env?.app.url}${route}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: 'manual' });
     const text = await response.text();
@@ -74,16 +74,16 @@ describe('réglages et sécurité', () => {
         expect(home.body.error.code).toBe('NO_TOKEN');
     });
 
-    it('en-tête X-Strata obligatoire, Host et origine étrangers refusés, en-têtes de sécurité', async () => {
+    it('en-tête X-Revspan obligatoire, Host et origine étrangers refusés, en-têtes de sécurité', async () => {
         const { app } = await setup();
         expect((await api('PUT', '/api/settings', { email: 'x@y.z' }, { header: false })).status).toBe(403);
         expect(await rawGet('/api/health', 'evil.example:80')).toBe(403);
         const foreign = await fetch(`${app.url}/api/settings`, {
-            method: 'PUT', headers: { 'X-Strata': '1', Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{}',
+            method: 'PUT', headers: { 'X-Revspan': '1', Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{}',
         });
         expect(foreign.status).toBe(403);
         const health = await fetch(`${app.url}/api/health`);
-        expect(await health.json()).toEqual({ app: 'strata', version: '2.0.0' });
+        expect(await health.json()).toEqual({ app: 'revspan', version: '2.0.0' });
         expect(health.headers.get('content-security-policy')).toContain("script-src 'self'");
         expect(health.headers.get('cache-control')).toBe('no-store');
     });
@@ -108,7 +108,7 @@ describe('réglages et sécurité', () => {
         expect((await api('POST', `${prPath()}/comments`, { raw: '   ' })).status).toBe(400);
         expect((await api('GET', `${prPath()}/compare?from=5&to=2`)).status).toBe(400);
         expect((await api('GET', `/api/pr/${WS}/${REPO}/abc`)).status).toBe(404);
-        const nullBody = await fetch(`${app.url}${prPath()}/comments`, { method: 'POST', headers: { 'X-Strata': '1', 'Content-Type': 'application/json' }, body: 'null' });
+        const nullBody = await fetch(`${app.url}${prPath()}/comments`, { method: 'POST', headers: { 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: 'null' });
         expect(nullBody.status).toBe(400);
     });
 

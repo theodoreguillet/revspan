@@ -2,7 +2,7 @@
 // (VS Code choisit ainsi la coloration syntaxique), les paramètres de la comparaison sont dans la requête.
 import type { PrRef } from '../../shared/api.ts';
 
-export const DIFF_SCHEME = 'strata';
+export const DIFF_SCHEME = 'revspan';
 
 export type DiffSide = 'old' | 'new';
 

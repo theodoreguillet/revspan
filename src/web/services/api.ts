@@ -1,5 +1,5 @@
 // Client typé de l'API locale : HTTP vers le serveur, ou messages à l'extension dans un panneau VS Code.
-// Toute requête non-GET porte l'en-tête X-Strata: 1 (ajouté par l'extension dans VS Code) et un corps JSON.
+// Toute requête non-GET porte l'en-tête X-Revspan: 1 (ajouté par l'extension dans VS Code) et un corps JSON.
 import {
     MUTATION_HEADER,
     type ApiErrorBody,
@@ -58,7 +58,7 @@ async function httpTransport(method: Method, path: string, body: unknown): Promi
     return { status: res.status, body: data };
 }
 
-/** Messages à l'extension, qui appelle l'API et ajoute elle-même l'en-tête X-Strata (panneau VS Code). */
+/** Messages à l'extension, qui appelle l'API et ajoute elle-même l'en-tête X-Revspan (panneau VS Code). */
 function vsCodeTransport(method: Method, path: string, body: unknown): Promise<HostResponse> {
     // copie JSON : même contenu qu'en HTTP, et clonable par postMessage (pas d'objet réactif)
     return hostRequest(method, path, body === undefined ? undefined : JSON.parse(JSON.stringify(body)));
@@ -72,8 +72,8 @@ async function request<T>(method: Method, path: string, payload?: unknown): Prom
         response = await (isVsCode ? vsCodeTransport : httpTransport)(method, `/api${path}`, body);
     } catch {
         throw new ApiError(0, 'NETWORK', isVsCode
-            ? 'L\'extension Strata ne répond pas. Rouvrir le panneau peut aider.'
-            : 'Serveur Strata injoignable. Est-il toujours lancé ?');
+            ? 'L\'extension Revspan ne répond pas. Rouvrir le panneau peut aider.'
+            : 'Serveur Revspan injoignable. Est-il toujours lancé ?');
     }
     if (response.status < 200 || response.status >= 300) {
         const err = (response.body as Partial<ApiErrorBody> | null)?.error;

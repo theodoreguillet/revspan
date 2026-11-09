@@ -6,13 +6,20 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selo
 
 ### Ajouts
 
-- Extension VS Code : dépôts suivis dans le réglage `strata.repositories` (Réglages de VS Code, Settings Sync, propre à
+- Extension VS Code : dépôts suivis dans le réglage `revspan.repositories` (Réglages de VS Code, Settings Sync, propre à
   chaque profil), toujours modifiables depuis ⚙ Réglages du panneau.
 - Extension VS Code : fonctionne en espace de travail non approuvé ; en espace virtuel, tout sauf « Ouvrir le fichier ».
 - Licence MIT, icône, CI GitHub Actions (lint, types, tests, tests UI, `.vsix`) et release GitHub sur tag `v*`.
 - Indicateur de chargement sur les boutons d'action (approuver, demander des modifs, marquer relue, commenter,
   répondre, résoudre, supprimer, enregistrer, tester, actualiser) ; une seule écriture à la fois.
 - « Mes PR » (page et vue VS Code) : dépôt et numéro de la PR devant son titre.
+
+### Changements
+
+- Le projet s'appelle désormais Revspan (« Revspan for Bitbucket » dans VS Code), avec un nouveau logo : extension
+  `theodoreguillet.revspan`, réglage `revspan.repositories`, variables `REVSPAN_*`, configuration `~/.config/revspan`,
+  trousseau `revspan-bitbucket`, commande `revspan`. Rien n'est repris automatiquement depuis Strata : dans VS Code,
+  saisir à nouveau le jeton dans ⚙ Réglages.
 
 ### Corrections
 

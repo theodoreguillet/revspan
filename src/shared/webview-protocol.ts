@@ -19,4 +19,4 @@ export type HostToWebview =
     | { type: 'navigate'; route: string };
 
 /** Balise <meta> par laquelle l'extension donne la route initiale à la page. */
-export const INITIAL_ROUTE_META = 'strata-route';
+export const INITIAL_ROUTE_META = 'revspan-route';

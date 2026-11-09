@@ -13,7 +13,7 @@ withDefaults(defineProps<{ crumbs?: Crumb[] }>(), { crumbs: () => [] });
 
 <template>
     <nav class="rv-nav">
-        <RouterLink class="home" to="/">Strata</RouterLink>
+        <RouterLink class="home" to="/">Revspan</RouterLink>
         <template v-for="crumb in crumbs" :key="crumb.text">
             <span aria-hidden="true">›</span>
             <span :class="['crumb', { cur: crumb.cur }]">{{ crumb.text }}</span>

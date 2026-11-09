@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 const main = new URL('../dist/server/main.js', import.meta.url);
 const page = new URL('../dist/web/index.html', import.meta.url);
 if (!existsSync(main) || !existsSync(page)) {
-    console.error('Strata n\'est pas construit : lance `npm ci && npm run build` dans le dossier strata.');
+    console.error('Revspan n\'est pas construit : lance `npm ci && npm run build` dans le dossier revspan.');
     process.exit(1);
 }
 await import(main.href);

@@ -1,7 +1,7 @@
 // Contrat de l'API locale, partagé par le serveur (src/server) et la page (src/web).
-// Toutes les routes sont sous /api ; toute requête autre que GET porte l'en-tête X-Strata: 1.
+// Toutes les routes sont sous /api ; toute requête autre que GET porte l'en-tête X-Revspan: 1.
 
-export const MUTATION_HEADER = 'X-Strata';
+export const MUTATION_HEADER = 'X-Revspan';
 
 export type ErrorCode =
     | 'NO_TOKEN'
@@ -289,6 +289,6 @@ export interface Ok {
 }
 
 export interface Health {
-    app: 'strata';
+    app: 'revspan';
     version: string;
 }

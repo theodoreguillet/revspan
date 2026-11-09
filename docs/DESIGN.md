@@ -1,4 +1,4 @@
-# Strata — conception
+# Revspan — conception
 
 ## Pourquoi
 
@@ -7,7 +7,7 @@ Beaucoup d'équipes travaillent en « une PR = un commit » : chaque retour de r
 contre master : sur une PR longue, impossible de voir ce que le dernier amend a changé. Les PR peuvent durer
 des jours ou des mois, avec des dizaines de versions et plusieurs rebases.
 
-Strata est un petit outil local (serveur Node + page web, en TypeScript) qui reconstitue toutes les versions
+Revspan est un petit outil local (serveur Node + page web, en TypeScript) qui reconstitue toutes les versions
 d'une PR Bitbucket et permet de relire version par version, de commenter, répondre, résoudre et approuver.
 
 ## Objectifs
@@ -37,11 +37,11 @@ d'une PR Bitbucket et permet de relire version par version, de commenter, répon
 |---|---|
 | Forme | Application TypeScript : serveur Node 22 (Hono, validation zod) + page Vue 3 (Vite, vue-router), contrat partagé `src/shared/api.ts`. Pas de store global : composables. |
 | Architecture serveur | `core/` règles pures (diff, fusion, comparaison, modèle) · `bitbucket/` client REST · `infra/` config, jeton, cache · `services/` session, réglages, PR, accueil · `http/` routes Hono et schémas zod. |
-| Lancement | `npm ci && npm run build` puis `node bin/strata.js [URL de PR]` → ouvre le navigateur sur `http://127.0.0.1:7420`. Développement : `npm run dev` (serveur en watch + Vite) ou `npm run dev:fake` (faux Bitbucket). Pas de Makefile : tout passe par les scripts npm. |
+| Lancement | `npm ci && npm run build` puis `node bin/revspan.js [URL de PR]` → ouvre le navigateur sur `http://127.0.0.1:7420`. Développement : `npm run dev` (serveur en watch + Vite) ou `npm run dev:fake` (faux Bitbucket). Pas de Makefile : tout passe par les scripts npm. |
 | Dépendances | npm standard, lockfile sur registry.npmjs.org, aucun script d'installation exécuté (`.npmrc`). |
 | Jeton | Jeton API Atlassian (e-mail + jeton, Basic auth). Saisi dans l'écran Réglages. macOS : trousseau (`security`, jeton passé par stdin). Linux : `secret-tool` si présent. Sinon fichier `0600` dans le dossier de config. |
 | Droits du jeton | `read:user:bitbucket`, `read:repository:bitbucket`, `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket`. |
-| Config / état | `~/.config/strata/` (`%APPDATA%\strata` sous Windows) : `config.json`, `state.json`, `cache/`. |
+| Config / état | `~/.config/revspan/` (`%APPDATA%\revspan` sous Windows) : `config.json`, `state.json`, `cache/`. |
 | Versions | Entrées `update` de l'activité de la PR (hash source + hash master au moment du push), doublons consécutifs retirés, version courante de la PR ajoutée si absente. Commit introuvable (404 : Bitbucket efface les commits écrasés par un force-push) → version gardée mais `available: false` : ni comparable (410 `VERSION_UNAVAILABLE`) ni borne de sélection ; rebase, message et résumé de la suivante se calculent par rapport à la dernière version lisible (`since`). |
 | Base d'une version | `merge-base(version, master au moment du push)` via l'API (repli : 1er parent). Le hash master de l'activité n'est pas la base : si la branche a été créée avant les derniers commits de master, la base est plus ancienne que le master noté au moment du push. |
 | Rebase | Une version est un rebase si sa base diffère de celle de la version précédente. |
@@ -54,8 +54,8 @@ d'une PR Bitbucket et permet de relire version par version, de commenter, répon
 | Commentaire en ligne | Possible seulement si B est la dernière version, côté nouveau (lignes ajoutées ou de contexte) : `inline.to`. Sur une ligne supprimée, commentaire général citant fichier, ligne et code. |
 | Approbations | Version d'approbation déduite de l'activité ; « périmée » si une version avec du code (ou des dépendances) est arrivée depuis. Bitbucket ne retire pas forcément l'approbation à chaque push : une approbation encore active sans changement de l'auteur depuis (rebases, message) vaut pour la dernière version — « Retirer l'approbation » au lieu de « Réapprouver », bandeau « Marquer vN comme relue ». |
 | Accueil | PR ouvertes des dépôts configurés, groupées : À relire / Réapprobation rapide (seulement rebases, mon approbation retirée par Bitbucket) / À jour (dont : seulement rebases et mon approbation toujours active) / Mes PR / Autres. |
-| Sécurité locale | Écoute 127.0.0.1 seulement. En-tête `Host` vérifié (anti DNS-rebinding). Toute requête qui modifie exige l'en-tête `X-Strata: 1` (bloque les formulaires et requêtes d'autres sites). Le jeton ne quitte jamais le serveur. |
-| Extension VS Code | Même page Vue dans un webview et mêmes services. Les appels d'API passent par messages (`src/shared/webview-protocol.ts`) et sont traités par l'application Hono en mémoire (`app.request`, sans port), avec la même validation. Jeton dans le stockage sécurisé de VS Code, dépôts suivis dans le réglage `strata.repositories` (source de dépôts injectée dans `Store`), autres données dans le stockage global de l'extension (séparées de la version web). Ajouts propres à VS Code : vue « Mes PR » (TreeView), « Ouvrir le fichier » (dépôt de l'espace de travail, worktree de la branche de la PR préféré), « Diff VS Code » (documents virtuels + `vscode.diff`, mêmes côtés que la page). Bundle CommonJS unique (Vite, `vscode` externe). |
+| Sécurité locale | Écoute 127.0.0.1 seulement. En-tête `Host` vérifié (anti DNS-rebinding). Toute requête qui modifie exige l'en-tête `X-Revspan: 1` (bloque les formulaires et requêtes d'autres sites). Le jeton ne quitte jamais le serveur. |
+| Extension VS Code | Même page Vue dans un webview et mêmes services. Les appels d'API passent par messages (`src/shared/webview-protocol.ts`) et sont traités par l'application Hono en mémoire (`app.request`, sans port), avec la même validation. Jeton dans le stockage sécurisé de VS Code, dépôts suivis dans le réglage `revspan.repositories` (source de dépôts injectée dans `Store`), autres données dans le stockage global de l'extension (séparées de la version web). Ajouts propres à VS Code : vue « Mes PR » (TreeView), « Ouvrir le fichier » (dépôt de l'espace de travail, worktree de la branche de la PR préféré), « Diff VS Code » (documents virtuels + `vscode.diff`, mêmes côtés que la page). Bundle CommonJS unique (Vite, `vscode` externe). |
 | Dernière relecture (précision) | Les réponses ne comptent pas comme relecture ; seuls les nouveaux commentaires, approbations et demandes de modifs. |
 | Tests | Vitest : unitaires (diff, fusion, relocalisation, versions, fils, état), règles de la page (sélection, repli, bandeau, assainissement), intégration du serveur contre un faux Bitbucket à 6 PR (écritures comprises, chaque test isolé) ; UI Playwright sur le vrai serveur branché au même faux Bitbucket ; test réel en lecture seule sur une PR au choix (`npm run test:live`, invariants et diff complet identique au diffstat de Bitbucket) ; test de fumée de l'extension dans un VS Code isolé (`npm run test:extension`). Aucune écriture sur le vrai Bitbucket pendant les tests. |
 

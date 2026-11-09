@@ -13,7 +13,7 @@ const prRef: PrRef = { workspace: String(route.params.ws), repo: String(route.pa
 const detail = shallowRef<PrDetail | null>(null);
 const error = shallowRef<unknown>(null);
 
-document.title = `#${prRef.id} · Strata`;
+document.title = `#${prRef.id} · Revspan`;
 
 onMounted(async () => {
     try {

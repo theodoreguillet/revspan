@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-const API_TARGET = `http://127.0.0.1:${process.env.STRATA_PORT ?? '7420'}`;
+const API_TARGET = `http://127.0.0.1:${process.env.REVSPAN_PORT ?? '7420'}`;
 
-// La page vit dans src/web ; en dev, Vite sert la page et relaie /api vers le serveur Strata.
+// La page vit dans src/web ; en dev, Vite sert la page et relaie /api vers le serveur Revspan.
 export default defineConfig({
     root: 'src/web',
     // Chemins relatifs : la même page est servie par le serveur local et chargée dans un panneau VS Code.

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Test UI de Strata (Playwright pour Python, sans pytest), contre le vrai serveur branché sur le faux Bitbucket.
+"""Test UI de Revspan (Playwright pour Python, sans pytest), contre le vrai serveur branché sur le faux Bitbucket.
 
 Lancement normal (après « npx --no-install vite build ») :
     node test/e2e/run-against-fake.ts
 
 run-against-fake.ts démarre le faux Bitbucket et le serveur, puis lance ce script avec :
-    STRATA_BASE_URL    URL du serveur Strata (obligatoire).
-    STRATA_CALLS_URL   Journal des écritures reçues par le faux Bitbucket (GET → JSON array).
-    STRATA_PR          PR principale, « workspace/dépôt/id » (acme/demo-repo/42).
-    STRATA_FAKE_PRS    JSON des PR du faux Bitbucket : main, long, rebaseOnly, mine, neverReviewed, others, purged.
-    STRATA_FAKE_EMAIL, STRATA_FAKE_TOKEN   Identifiants du faux Bitbucket (remise du jeton après suppression).
+    REVSPAN_BASE_URL    URL du serveur Revspan (obligatoire).
+    REVSPAN_CALLS_URL   Journal des écritures reçues par le faux Bitbucket (GET → JSON array).
+    REVSPAN_PR          PR principale, « workspace/dépôt/id » (acme/demo-repo/42).
+    REVSPAN_FAKE_PRS    JSON des PR du faux Bitbucket : main, long, rebaseOnly, mine, neverReviewed, others, purged.
+    REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Identifiants du faux Bitbucket (remise du jeton après suppression).
 Options :
-    STRATA_SHOTS_DIR   Dossier des captures (défaut : <tmp>/strata-shots).
-    STRATA_FIXED_TIME  Heure figée du navigateur (ISO).
-    STRATA_HEADED=1    Navigateur visible.
+    REVSPAN_SHOTS_DIR   Dossier des captures (défaut : <tmp>/revspan-shots).
+    REVSPAN_FIXED_TIME  Heure figée du navigateur (ISO).
+    REVSPAN_HEADED=1    Navigateur visible.
 
 Un seul serveur pour tout le script : chaque vérification voit les écritures des précédentes (ordre important).
 Sort avec un code non nul si une vérification échoue.
@@ -29,12 +29,12 @@ import urllib.request
 
 from playwright.sync_api import expect, sync_playwright
 
-BASE = os.environ.get('STRATA_BASE_URL', '').rstrip('/')
-CALLS_URL = os.environ.get('STRATA_CALLS_URL')
-MAIN_PR = os.environ.get('STRATA_PR', 'acme/demo-repo/42')
-FAKE_PRS = json.loads(os.environ.get('STRATA_FAKE_PRS', '{}'))
-FAKE_TOKEN = os.environ.get('STRATA_FAKE_TOKEN', '')
-SHOTS = os.environ.get('STRATA_SHOTS_DIR') or os.path.join(tempfile.gettempdir(), 'strata-shots')
+BASE = os.environ.get('REVSPAN_BASE_URL', '').rstrip('/')
+CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
+MAIN_PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/42')
+FAKE_PRS = json.loads(os.environ.get('REVSPAN_FAKE_PRS', '{}'))
+FAKE_TOKEN = os.environ.get('REVSPAN_FAKE_TOKEN', '')
+SHOTS = os.environ.get('REVSPAN_SHOTS_DIR') or os.path.join(tempfile.gettempdir(), 'revspan-shots')
 CHROMIUM_ARGS = ['--use-mock-keychain', '--password-store=basic']
 MINUS = '−'
 
@@ -56,7 +56,7 @@ def check(name):
             except Exception as error:  # noqa: BLE001 — on veut tout journaliser
                 results.append((name, False))
                 log(f'FAIL  {name}\n      {str(error).splitlines()[0] if str(error) else repr(error)}')
-                if os.environ.get('STRATA_DEBUG'):
+                if os.environ.get('REVSPAN_DEBUG'):
                     traceback.print_exc()
                 try:
                     os.makedirs(SHOTS, exist_ok=True)
@@ -676,12 +676,12 @@ def run_checks(page):
 
 def main():
     if not BASE:
-        log('STRATA_BASE_URL manquant : lancer « node test/e2e/run-against-fake.ts » (après « npx --no-install vite build »).')
+        log('REVSPAN_BASE_URL manquant : lancer « node test/e2e/run-against-fake.ts » (après « npx --no-install vite build »).')
         sys.exit(2)
-    log(f'Strata UI test — {BASE} — PR {MAIN_PR}')
+    log(f'Revspan UI test — {BASE} — PR {MAIN_PR}')
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(args=CHROMIUM_ARGS, headless=not os.environ.get('STRATA_HEADED'))
-        fixed_time = os.environ.get('STRATA_FIXED_TIME')
+        browser = pw.chromium.launch(args=CHROMIUM_ARGS, headless=not os.environ.get('REVSPAN_HEADED'))
+        fixed_time = os.environ.get('REVSPAN_FIXED_TIME')
         try:
             screenshots(browser, fixed_time)
         except Exception as error:  # noqa: BLE001

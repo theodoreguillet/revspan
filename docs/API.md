@@ -1,4 +1,4 @@
-# Strata — API locale
+# Revspan — API locale
 
 Le contrat (types des requêtes et réponses) est défini une seule fois, en TypeScript, dans
 [`src/shared/api.ts`](../src/shared/api.ts) : le serveur et la page l'importent tous les deux.
@@ -7,7 +7,7 @@ Les entrées sont validées côté serveur par zod ([`src/server/http/schemas.ts
 Règles communes :
 
 - toutes les routes sont sous `/api`, en JSON ;
-- toute requête autre que GET porte l'en-tête `X-Strata: 1` (sinon 403) ; une origine étrangère est refusée ;
+- toute requête autre que GET porte l'en-tête `X-Revspan: 1` (sinon 403) ; une origine étrangère est refusée ;
 - l'en-tête `Host` doit être `127.0.0.1:<port>` ou `localhost:<port>` ;
 - erreur : statut ≠ 2xx et corps `ApiErrorBody` = `{ error: { code, message } }` (message en français).
   Codes notables : `NO_TOKEN` (409), `BB_UNAUTHORIZED` (401), `BB_FORBIDDEN` (403), `BB_NOT_FOUND` (404), `BAD_REQUEST` (400).

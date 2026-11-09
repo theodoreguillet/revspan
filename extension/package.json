@@ -1,19 +1,19 @@
 {
-    "name": "strata",
-    "displayName": "Strata",
-    "description": "Relire les PR Bitbucket couche par couche, malgré les amends et les rebases, dans VS Code",
+    "name": "revspan",
+    "displayName": "Revspan for Bitbucket",
+    "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push, dans VS Code",
     "version": "2.0.0",
     "publisher": "theodoreguillet",
     "license": "MIT",
     "icon": "media/icon.png",
     "repository": {
         "type": "git",
-        "url": "https://github.com/theodoreguillet/strata.git"
+        "url": "https://github.com/theodoreguillet/revspan.git"
     },
     "bugs": {
-        "url": "https://github.com/theodoreguillet/strata/issues"
+        "url": "https://github.com/theodoreguillet/revspan/issues"
     },
-    "homepage": "https://github.com/theodoreguillet/strata#readme",
+    "homepage": "https://github.com/theodoreguillet/revspan#readme",
     "pricing": "Free",
     "engines": {
         "vscode": "^1.95.0"
@@ -37,50 +37,50 @@
     "main": "./dist/extension.cjs",
     "contributes": {
         "commands": [
-            { "command": "strata.openHome", "title": "Ouvrir l'accueil", "category": "Strata", "icon": "$(home)" },
-            { "command": "strata.openPr", "title": "Ouvrir une PR (URL)", "category": "Strata", "icon": "$(link-external)" },
-            { "command": "strata.openSettings", "title": "Réglages (jeton, dépôts)", "category": "Strata", "icon": "$(gear)" },
-            { "command": "strata.refresh", "title": "Actualiser", "category": "Strata", "icon": "$(refresh)" }
+            { "command": "revspan.openHome", "title": "Ouvrir l'accueil", "category": "Revspan", "icon": "$(home)" },
+            { "command": "revspan.openPr", "title": "Ouvrir une PR (URL)", "category": "Revspan", "icon": "$(link-external)" },
+            { "command": "revspan.openSettings", "title": "Réglages (jeton, dépôts)", "category": "Revspan", "icon": "$(gear)" },
+            { "command": "revspan.refresh", "title": "Actualiser", "category": "Revspan", "icon": "$(refresh)" }
         ],
         "configuration": {
-            "title": "Strata",
+            "title": "Revspan",
             "properties": {
-                "strata.repositories": {
+                "revspan.repositories": {
                     "type": "array",
                     "items": { "type": "string" },
                     "default": [],
-                    "markdownDescription": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Strata."
+                    "markdownDescription": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Revspan."
                 }
             }
         },
         "viewsContainers": {
             "activitybar": [
-                { "id": "strata", "title": "Strata", "icon": "media/icon.svg" }
+                { "id": "revspan", "title": "Revspan", "icon": "media/icon.svg" }
             ]
         },
         "views": {
-            "strata": [
-                { "id": "strata.home", "name": "Mes PR" }
+            "revspan": [
+                { "id": "revspan.home", "name": "Mes PR" }
             ]
         },
         "viewsWelcome": [
             {
-                "view": "strata.home",
-                "contents": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:strata.openSettings)",
-                "when": "strata.needsToken"
+                "view": "revspan.home",
+                "contents": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:revspan.openSettings)",
+                "when": "revspan.needsToken"
             },
             {
-                "view": "strata.home",
-                "contents": "Aucun dépôt suivi.\n[Choisir les dépôts](command:strata.openSettings)",
-                "when": "strata.noRepos && !strata.needsToken"
+                "view": "revspan.home",
+                "contents": "Aucun dépôt suivi.\n[Choisir les dépôts](command:revspan.openSettings)",
+                "when": "revspan.noRepos && !revspan.needsToken"
             }
         ],
         "menus": {
             "view/title": [
-                { "command": "strata.refresh", "when": "view == strata.home", "group": "navigation@1" },
-                { "command": "strata.openPr", "when": "view == strata.home", "group": "navigation@2" },
-                { "command": "strata.openHome", "when": "view == strata.home", "group": "navigation@3" },
-                { "command": "strata.openSettings", "when": "view == strata.home", "group": "navigation@4" }
+                { "command": "revspan.refresh", "when": "view == revspan.home", "group": "navigation@1" },
+                { "command": "revspan.openPr", "when": "view == revspan.home", "group": "navigation@2" },
+                { "command": "revspan.openHome", "when": "view == revspan.home", "group": "navigation@3" },
+                { "command": "revspan.openSettings", "when": "view == revspan.home", "group": "navigation@4" }
             ]
         }
     }

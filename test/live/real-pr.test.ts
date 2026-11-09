@@ -1,6 +1,6 @@
 // Test réel en LECTURE SEULE sur une PR Bitbucket de ton choix (uniquement des GET, aucune écriture).
-// Lancement : STRATA_LIVE_PR=<URL de la PR> STRATA_LIVE_EMAIL=<e-mail Atlassian> npm run test:live
-// (STRATA_KEYCHAIN_SERVICE si le jeton est rangé sous un autre service du trousseau).
+// Lancement : REVSPAN_LIVE_PR=<URL de la PR> REVSPAN_LIVE_EMAIL=<e-mail Atlassian> npm run test:live
+// (REVSPAN_KEYCHAIN_SERVICE si le jeton est rangé sous un autre service du trousseau).
 // Invariants valables pour toute PR ; le diff complet doit être identique au diffstat calculé par Bitbucket.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,9 +12,9 @@ import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { DEFAULT_BASE_URL } from '../../src/server/bitbucket/client.ts';
 import { createSecretStore } from '../../src/server/infra/secrets.ts';
 
-const ref = parsePrUrl(process.env.STRATA_LIVE_PR);
-const email = process.env.STRATA_LIVE_EMAIL ?? '';
-const enabled = process.env.STRATA_LIVE === '1' && email !== '' && ref !== null;
+const ref = parsePrUrl(process.env.REVSPAN_LIVE_PR);
+const email = process.env.REVSPAN_LIVE_EMAIL ?? '';
+const enabled = process.env.REVSPAN_LIVE === '1' && email !== '' && ref !== null;
 const KINDS: readonly VersionKind[] = ['creation', 'code', 'deps', 'rebase-only', 'message-only', 'none', 'unavailable'];
 const route = ref ? `/api/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '';
 let app: RunningApp | null = null;
@@ -52,9 +52,9 @@ beforeAll(async () => {
     if (!enabled) {
         return;
     }
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-live-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-live-'));
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ email, repos: [`${ref!.workspace}/${ref!.repo}`] }));
-    app = await startApp({ port: 0, env: { ...process.env, STRATA_CONFIG_DIR: dir } });
+    app = await startApp({ port: 0, env: { ...process.env, REVSPAN_CONFIG_DIR: dir } });
 });
 
 afterAll(async () => {

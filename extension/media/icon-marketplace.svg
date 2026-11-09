@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Source de icon.png (Marketplace) : trois couches empilées, la plus récente en clair. -->
+  <!-- Source de icon.png (Marketplace) : frise de quatre versions, un arc relie les deux versions comparées. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1f2b46"/>
@@ -7,10 +7,11 @@
     </linearGradient>
   </defs>
   <rect width="128" height="128" rx="26" fill="url(#bg)"/>
-  <g stroke="#111827" stroke-width="4" stroke-linejoin="round">
-    <path d="M64 69 L104 88 L64 107 L24 88 Z" fill="#2f4f80"/>
-    <path d="M64 51 L104 70 L64 89 L24 70 Z" fill="#4a7cc4"/>
-    <path d="M64 33 L104 52 L64 71 L24 52 Z" fill="#9ccaff"/>
-  </g>
-  <path d="M64 33 L104 52 L64 71 L24 52 Z" fill="none" stroke="#e6f2ff" stroke-width="2" stroke-linejoin="round" opacity="0.7"/>
+  <path d="M22 84 H106" stroke="#2f4f80" stroke-width="6" stroke-linecap="round"/>
+  <path d="M48 84 H102" stroke="#4a7cc4" stroke-width="6"/>
+  <path d="M48 70 Q75 22 102 70" fill="none" stroke="#9ccaff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="24" cy="84" r="7" fill="#2f4f80" stroke="#111827" stroke-width="4"/>
+  <circle cx="75" cy="84" r="7" fill="#4a7cc4" stroke="#111827" stroke-width="4"/>
+  <circle cx="48" cy="84" r="10" fill="#9ccaff" stroke="#111827" stroke-width="4"/>
+  <circle cx="102" cy="84" r="10" fill="#e6f2ff" stroke="#111827" stroke-width="4"/>
 </svg>

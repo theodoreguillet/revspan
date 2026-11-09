@@ -1,7 +1,7 @@
 // Préférence locale mémorisée dans localStorage (confort seulement : indisponible en navigation privée).
 import { ref, watch, type Ref } from 'vue';
 
-const PREFIX = 'strata:';
+const PREFIX = 'revspan:';
 
 function read<T>(key: string, fallback: T, isValid: (value: unknown) => value is T): T {
     try {

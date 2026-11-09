@@ -1,5 +1,5 @@
 // Application HTTP (Hono) : API JSON sous /api + page construite (dist/web).
-// Sécurité locale : en-tête Host vérifié (anti DNS-rebinding), écritures soumises à X-Strata et à l'origine,
+// Sécurité locale : en-tête Host vérifié (anti DNS-rebinding), écritures soumises à X-Revspan et à l'origine,
 // en-têtes CSP. Le jeton ne quitte jamais le serveur.
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -94,13 +94,13 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
         if (error instanceof AppError) {
             return errorResponse(c, error.status, error.code, error.message);
         }
-        console.error('strata:', error);
+        console.error('revspan:', error);
         return errorResponse(c, 500, 'INTERNAL', `Erreur interne : ${error.message}`);
     });
 
     // ---------- API ----------
 
-    app.get('/api/health', (c) => c.json<Health>({ app: 'strata', version }));
+    app.get('/api/health', (c) => c.json<Health>({ app: 'revspan', version }));
 
     app.get('/api/settings', async (c) => c.json(await settings.get()));
     app.put('/api/settings', async (c) => c.json(await settings.update(parse(settingsUpdateSchema, await jsonBody(c)))));

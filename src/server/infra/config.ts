@@ -21,13 +21,13 @@ interface StateFile {
 }
 
 export function configDir(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string {
-    if (env.STRATA_CONFIG_DIR) {
-        return env.STRATA_CONFIG_DIR;
+    if (env.REVSPAN_CONFIG_DIR) {
+        return env.REVSPAN_CONFIG_DIR;
     }
     if (platform === 'win32') {
-        return path.join(env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'strata');
+        return path.join(env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'revspan');
     }
-    return path.join(env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'strata');
+    return path.join(env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'revspan');
 }
 
 /** Dépôts valides (« workspace/dépôt »), sans doublon. */
@@ -46,7 +46,7 @@ function readJson<T>(file: string, fallback: T): T {
         return JSON.parse(fs.readFileSync(file, 'utf8')) as T;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            console.warn(`strata: ${file} illisible, valeurs par défaut utilisées (${(error as Error).message})`);
+            console.warn(`revspan: ${file} illisible, valeurs par défaut utilisées (${(error as Error).message})`);
         }
         return fallback;
     }
@@ -54,7 +54,7 @@ function readJson<T>(file: string, fallback: T): T {
 
 const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: state.viewed ?? {}, kinds: state.kinds ?? {} });
 
-/** Liste des dépôts tenue ailleurs que dans config.json (extension VS Code : réglage strata.repositories). */
+/** Liste des dépôts tenue ailleurs que dans config.json (extension VS Code : réglage revspan.repositories). */
 export interface RepoSource {
     get(): readonly string[];
     set(repos: string[]): Promise<void>;

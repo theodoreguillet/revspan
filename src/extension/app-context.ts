@@ -1,5 +1,5 @@
 // Assemblage côté extension : les mêmes services et la même application HTTP que le serveur local,
-// avec le jeton dans le stockage sécurisé de VS Code, les dépôts suivis dans le réglage strata.repositories
+// avec le jeton dans le stockage sécurisé de VS Code, les dépôts suivis dans le réglage revspan.repositories
 // et les autres données dans le stockage global de l'extension.
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -18,9 +18,9 @@ export interface ExtensionApp {
 }
 
 /** Réglage VS Code des dépôts suivis : visible dans les Réglages, synchronisé par Settings Sync, propre au profil. */
-export const REPOS_SETTING = { section: 'strata', key: 'repositories', id: 'strata.repositories' } as const;
+export const REPOS_SETTING = { section: 'revspan', key: 'repositories', id: 'revspan.repositories' } as const;
 
-const TOKEN_KEY_PREFIX = 'strata.bitbucket-token:';
+const TOKEN_KEY_PREFIX = 'revspan.bitbucket-token:';
 
 function vscodeRepoSource(): RepoSource {
     const config = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(REPOS_SETTING.section);
@@ -60,10 +60,10 @@ function testOverrides(mode: vscode.ExtensionMode): { baseUrl?: string; email?: 
     }
     const env = process.env;
     return {
-        baseUrl: env.STRATA_BITBUCKET_API || undefined,
-        email: env.STRATA_TEST_EMAIL || undefined,
-        token: env.STRATA_TEST_TOKEN || undefined,
-        repos: env.STRATA_TEST_REPOS ? env.STRATA_TEST_REPOS.split(',') : undefined,
+        baseUrl: env.REVSPAN_BITBUCKET_API || undefined,
+        email: env.REVSPAN_TEST_EMAIL || undefined,
+        token: env.REVSPAN_TEST_TOKEN || undefined,
+        repos: env.REVSPAN_TEST_REPOS ? env.REVSPAN_TEST_REPOS.split(',') : undefined,
     };
 }
 

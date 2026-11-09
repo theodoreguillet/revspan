@@ -20,7 +20,7 @@ if (!fs.existsSync(path.join(extensionDir, 'dist', 'extension.cjs'))) {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-vscode-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-vscode-'));
 const userData = path.join(tmp, 'user');
 const workspace = path.join(tmp, 'workspace');
 const fake = await startFakeBitbucket();
@@ -55,10 +55,10 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 // Variables de la session VS Code courante retirées : sinon le nouveau processus se rattacherait à elle.
 const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VSCODE_') && key !== 'ELECTRON_RUN_AS_NODE'));
 Object.assign(env, {
-    STRATA_BITBUCKET_API: fake.url,
-    STRATA_TEST_EMAIL: FAKE_EMAIL,
-    STRATA_TEST_TOKEN: FAKE_TOKEN,
-    STRATA_TEST_REPOS: `${WS}/${REPO}`,
+    REVSPAN_BITBUCKET_API: fake.url,
+    REVSPAN_TEST_EMAIL: FAKE_EMAIL,
+    REVSPAN_TEST_TOKEN: FAKE_TOKEN,
+    REVSPAN_TEST_REPOS: `${WS}/${REPO}`,
 });
 
 const port = 9300 + Math.floor(Math.random() * 600);
@@ -105,16 +105,16 @@ try {
                 ...process.env,
                 CDP_URL: `http://127.0.0.1:${port}`,
                 PR_TITLE: main.pr.title ?? '',
-                STRATA_CALLS_URL: `http://127.0.0.1:${fake.port}/__calls`,
-                SHOTS_DIR: process.env.STRATA_SHOTS_DIR ?? path.join(tmp, 'shots'),
+                REVSPAN_CALLS_URL: `http://127.0.0.1:${fake.port}/__calls`,
+                SHOTS_DIR: process.env.REVSPAN_SHOTS_DIR ?? path.join(tmp, 'shots'),
             },
         });
         child.on('close', (exitCode) => resolve(exitCode ?? 1));
     });
-    // Les dépôts suivis sont rangés dans le réglage VS Code strata.repositories (réglages utilisateur du profil).
+    // Les dépôts suivis sont rangés dans le réglage VS Code revspan.repositories (réglages utilisateur du profil).
     const userSettings = JSON.parse(fs.readFileSync(path.join(userData, 'User', 'settings.json'), 'utf8')) as Record<string, unknown>;
-    const reposSaved = JSON.stringify(userSettings['strata.repositories']) === JSON.stringify([`${WS}/${REPO}`]);
-    console.log(`${reposSaved ? 'PASS' : 'FAIL'}  réglage VS Code strata.repositories écrit`);
+    const reposSaved = JSON.stringify(userSettings['revspan.repositories']) === JSON.stringify([`${WS}/${REPO}`]);
+    console.log(`${reposSaved ? 'PASS' : 'FAIL'}  réglage VS Code revspan.repositories écrit`);
     if (!reposSaved) {
         status = 1;
     }

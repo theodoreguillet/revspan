@@ -19,7 +19,7 @@ const page = providePrPage(props.prRef, props.detail);
 useKeyboard((key) => page.handleKey(key));
 
 watchEffect(() => {
-    document.title = `#${page.detail.pr.id} ${page.detail.pr.title} · Strata`;
+    document.title = `#${page.detail.pr.id} ${page.detail.pr.title} · Revspan`;
 });
 
 // fichier courant = dernier fichier dont l'en-tête est passé sous la frise

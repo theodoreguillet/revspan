@@ -64,7 +64,7 @@ export class Cache {
             fs.writeFileSync(tmp, JSON.stringify({ k: key, v: value }), { mode: 0o600 });
             fs.renameSync(tmp, file);
         } catch (error) {
-            console.warn(`strata: écriture du cache impossible (${(error as Error).message})`);
+            console.warn(`revspan: écriture du cache impossible (${(error as Error).message})`);
         }
     }
 

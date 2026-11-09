@@ -19,10 +19,10 @@ let services: Services;
 let http: Hono;
 
 beforeEach(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-ext-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-ext-'));
     fake = await startFakeBitbucket();
     const store = new Store(dir);
-    const secrets = await createSecretStore({ dir, env: { STRATA_TOKEN_STORE: 'file' } });
+    const secrets = await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
     services = createServices({ store, secrets, cache: new Cache(path.join(dir, 'cache')), baseUrl: fake.url });
     await services.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN, repos: [`${WS}/${REPO}`] });
     http = createHttpApp({ version: 'test', settings: services.settings, home: services.home, prs: services.prs, allowedHosts: () => [IN_MEMORY_HOST] });

@@ -1,24 +1,24 @@
 {
-    "name": "strata",
+    "name": "revspan",
     "version": "2.0.0",
     "private": true,
-    "description": "Relire les PR Bitbucket couche par couche, malgré les amends et les rebases — outil local et extension VS Code",
+    "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push — outil local et extension VS Code",
     "license": "MIT",
     "author": "Théodore Guillet",
     "repository": {
         "type": "git",
-        "url": "https://github.com/theodoreguillet/strata.git"
+        "url": "https://github.com/theodoreguillet/revspan.git"
     },
     "bugs": {
-        "url": "https://github.com/theodoreguillet/strata/issues"
+        "url": "https://github.com/theodoreguillet/revspan/issues"
     },
-    "homepage": "https://github.com/theodoreguillet/strata#readme",
+    "homepage": "https://github.com/theodoreguillet/revspan#readme",
     "type": "module",
     "engines": {
         "node": ">=22.18"
     },
     "bin": {
-        "strata": "bin/strata.js"
+        "revspan": "bin/revspan.js"
     },
     "scripts": {
         "dev": "node --disable-warning=ExperimentalWarning scripts/dev.ts",
@@ -29,10 +29,10 @@
         "build:web": "vite build",
         "build:server": "tsc -p tsconfig.build.json",
         "build:extension": "npm run build:web && node --disable-warning=ExperimentalWarning scripts/build-extension.ts",
-        "start": "node bin/strata.js",
+        "start": "node bin/revspan.js",
         "extension:dev": "npm run build:extension && code --new-window --extensionDevelopmentPath=\"$PWD/extension\"",
-        "package:extension": "npm run build:extension && cd extension && vsce package --no-dependencies --out ../dist/strata.vsix",
-        "extension:install": "npm run package:extension && code --install-extension dist/strata.vsix --force",
+        "package:extension": "npm run build:extension && cd extension && vsce package --no-dependencies --out ../dist/revspan.vsix",
+        "extension:install": "npm run package:extension && code --install-extension dist/revspan.vsix --force",
         "lint": "eslint --max-warnings=0 .",
         "lint:fix": "eslint --fix .",
         "typecheck": "vue-tsc --build",
@@ -41,7 +41,7 @@
         "test:watch": "vitest",
         "test:e2e": "npm run build && node --disable-warning=ExperimentalWarning test/e2e/run-against-fake.ts",
         "test:extension": "npm run build:extension && node --disable-warning=ExperimentalWarning test/extension/run-smoke.ts",
-        "test:live": "STRATA_LIVE=1 vitest run --project live",
+        "test:live": "REVSPAN_LIVE=1 vitest run --project live",
         "clean": "node -e \"for (const dir of ['dist', 'extension/dist']) require('fs').rmSync(dir, { recursive: true, force: true })\""
     },
     "dependencies": {

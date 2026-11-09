@@ -115,7 +115,7 @@ describe('hors VS Code', () => {
         vi.unstubAllGlobals();
     });
 
-    it('requêtes HTTP, en-tête X-Strata sur les écritures seulement', async () => {
+    it('requêtes HTTP, en-tête X-Revspan sur les écritures seulement', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
         const { isVsCode } = await import('../../src/web/services/host.ts');
@@ -124,10 +124,10 @@ describe('hors VS Code', () => {
         await api.approve(ref, true);
         await api.home();
         expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/pr/acme/demo-repo/42/approve', expect.objectContaining({
-            method: 'POST', body: '{}', headers: expect.objectContaining({ 'X-Strata': '1', 'Content-Type': 'application/json' }),
+            method: 'POST', body: '{}', headers: expect.objectContaining({ 'X-Revspan': '1', 'Content-Type': 'application/json' }),
         }));
         const [, homeInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
-        expect(homeInit.headers).not.toHaveProperty('X-Strata');
+        expect(homeInit.headers).not.toHaveProperty('X-Revspan');
         expect(homeInit.body).toBeUndefined();
     });
 
@@ -136,7 +136,7 @@ describe('hors VS Code', () => {
             throw new TypeError('Failed to fetch');
         }));
         const { api } = await import('../../src/web/services/api.ts');
-        await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Serveur Strata') });
+        await expect(api.home()).rejects.toMatchObject({ status: 0, code: 'NETWORK', message: expect.stringContaining('Serveur Revspan') });
     });
 
     it('le relais par l\'extension refuse de partir', async () => {
@@ -148,18 +148,18 @@ describe('hors VS Code', () => {
 describe('readInitialRoute', () => {
     const doc = (head: string): Document => new DOMParser().parseFromString(`<html><head>${head}</head><body></body></html>`, 'text/html');
 
-    it('route de la balise <meta name="strata-route">', async () => {
+    it('route de la balise <meta name="revspan-route">', async () => {
         const { readInitialRoute } = await import('../../src/web/services/host.ts');
-        expect(readInitialRoute(doc('<meta name="strata-route" content="/pr/acme/demo-repo/42">'))).toBe('/pr/acme/demo-repo/42');
-        expect(readInitialRoute(doc('<meta name="strata-route" content="  /settings ">'))).toBe('/settings');
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="/pr/acme/demo-repo/42">'))).toBe('/pr/acme/demo-repo/42');
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="  /settings ">'))).toBe('/settings');
     });
 
     it('absente, vide ou qui n\'est pas un chemin de la page : null', async () => {
         const { readInitialRoute } = await import('../../src/web/services/host.ts');
         expect(readInitialRoute(doc(''))).toBeNull();
-        expect(readInitialRoute(doc('<meta name="strata-route" content="">'))).toBeNull();
-        expect(readInitialRoute(doc('<meta name="strata-route" content="https://evil.example/">'))).toBeNull();
-        expect(readInitialRoute(doc('<meta name="strata-route" content="//evil.example/x">'))).toBeNull();
-        expect(readInitialRoute(doc('<meta name="strata-route" content="settings">'))).toBeNull();
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="">'))).toBeNull();
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="https://evil.example/">'))).toBeNull();
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="//evil.example/x">'))).toBeNull();
+        expect(readInitialRoute(doc('<meta name="revspan-route" content="settings">'))).toBeNull();
     });
 });

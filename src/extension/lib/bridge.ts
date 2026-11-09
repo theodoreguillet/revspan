@@ -3,7 +3,7 @@
 import { MUTATION_HEADER } from '../../shared/api.ts';
 
 /** Hôte fictif des appels en mémoire (doit faire partie des hôtes acceptés par l'application HTTP). */
-export const IN_MEMORY_HOST = 'strata.vscode';
+export const IN_MEMORY_HOST = 'revspan.vscode';
 
 /** Ce dont le pont a besoin de l'application Hono. */
 export interface InMemoryApp {

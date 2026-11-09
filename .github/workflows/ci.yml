@@ -31,8 +31,8 @@ jobs:
       - run: npm run package:extension
       - uses: actions/upload-artifact@v7
         with:
-          name: strata-vsix
-          path: dist/strata.vsix
+          name: revspan-vsix
+          path: dist/revspan.vsix
           if-no-files-found: error
 
   e2e:
@@ -67,9 +67,9 @@ jobs:
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - uses: actions/download-artifact@v8
         with:
-          name: strata-vsix
+          name: revspan-vsix
           path: dist
       - name: Release avec le .vsix
-        run: gh release create "$GITHUB_REF_NAME" dist/strata.vsix --title "Strata $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/revspan.vsix --title "Revspan $GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

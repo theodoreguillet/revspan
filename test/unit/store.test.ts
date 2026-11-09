@@ -6,13 +6,13 @@ import { Store, type RepoSource } from '../../src/server/infra/config.ts';
 
 const dirs: string[] = [];
 const tempDir = (): string => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'strata-store-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-store-'));
     dirs.push(dir);
     return dir;
 };
 const configFile = (dir: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
 
-/** Source de dépôts en mémoire (comme le réglage VS Code strata.repositories). */
+/** Source de dépôts en mémoire (comme le réglage VS Code revspan.repositories). */
 function memorySource(initial: string[]): RepoSource & { value: string[] } {
     return {
         value: initial,

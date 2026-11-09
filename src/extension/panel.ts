@@ -1,4 +1,4 @@
-// Panneau Strata : la page Vue dans un webview ; ses appels d'API et ses actions passent par messages.
+// Panneau Revspan : la page Vue dans un webview ; ses appels d'API et ses actions passent par messages.
 import fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { HostToWebview, WebviewToHost } from '../shared/webview-protocol.ts';
@@ -12,10 +12,10 @@ const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
 
 function titleFor(route: string): string {
     const match = PR_ROUTE.exec(route);
-    return match ? `PR #${match[3]} · ${match[2]}` : route.startsWith('/settings') ? 'Strata · Réglages' : 'Strata';
+    return match ? `PR #${match[3]} · ${match[2]}` : route.startsWith('/settings') ? 'Revspan · Réglages' : 'Revspan';
 }
 
-export class StrataPanel {
+export class RevspanPanel {
     private readonly context: vscode.ExtensionContext;
     private readonly app: ExtensionApp;
     private readonly diffs: DiffDocuments;
@@ -38,7 +38,7 @@ export class StrataPanel {
             return;
         }
         const webDir = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'web');
-        const panel = vscode.window.createWebviewPanel('strata', titleFor(route), vscode.ViewColumn.Active, {
+        const panel = vscode.window.createWebviewPanel('revspan', titleFor(route), vscode.ViewColumn.Active, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [webDir],
@@ -85,7 +85,7 @@ export class StrataPanel {
             if (message.type === 'request') {
                 await this.post({ type: 'response', id: message.id, status: 500, body: { error: { code: 'INTERNAL', message: (error as Error).message } } });
             } else {
-                void vscode.window.showErrorMessage(`Strata : ${(error as Error).message}`);
+                void vscode.window.showErrorMessage(`Revspan : ${(error as Error).message}`);
             }
         }
     }

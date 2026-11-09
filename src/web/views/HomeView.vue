@@ -13,7 +13,7 @@ const home = shallowRef<Home | null>(null);
 const error = shallowRef<unknown>(null);
 const loading = ref(false);
 
-document.title = 'Mes PR · Strata';
+document.title = 'Mes PR · Revspan';
 
 async function load(): Promise<void> {
     if (loading.value) {

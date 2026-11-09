@@ -1,5 +1,5 @@
-// Point d'entrée : lance Strata et ouvre le navigateur.
-// Usage : strata [URL de PR Bitbucket] [--port 7420] [--no-open]
+// Point d'entrée : lance Revspan et ouvre le navigateur.
+// Usage : revspan [URL de PR Bitbucket] [--port 7420] [--no-open]
 import { spawn } from 'node:child_process';
 import { parsePrUrl } from '../shared/pr-url.ts';
 import { startApp } from './app.ts';
@@ -11,7 +11,7 @@ interface CliArgs {
     help: boolean;
 }
 
-const USAGE = 'Usage : strata [URL de PR Bitbucket] [--port 7420] [--no-open]';
+const USAGE = 'Usage : revspan [URL de PR Bitbucket] [--port 7420] [--no-open]';
 
 function parseArgs(argv: readonly string[]): CliArgs {
     const args: CliArgs = { port: 7420, open: true, url: null, help: false };
@@ -44,7 +44,7 @@ function openBrowser(url: string): void {
 async function alreadyRunning(port: number): Promise<boolean> {
     try {
         const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
-        return ((await response.json()) as { app?: string }).app === 'strata';
+        return ((await response.json()) as { app?: string }).app === 'revspan';
     } catch {
         return false;
     }
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
 
     if (args.port !== 0 && await alreadyRunning(args.port)) {
         const url = `http://127.0.0.1:${args.port}/${hash}`;
-        console.log(`Strata tourne déjà : ${url}`);
+        console.log(`Revspan tourne déjà : ${url}`);
         if (args.open) {
             openBrowser(url);
         }
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
 
     const app = await startApp({ port: args.port });
     const url = `${app.url}/${hash}`;
-    console.log(`Strata : ${url}`);
+    console.log(`Revspan : ${url}`);
     console.log(`Configuration : ${app.dir}  —  Ctrl+C pour arrêter.`);
     if (args.open) {
         openBrowser(url);

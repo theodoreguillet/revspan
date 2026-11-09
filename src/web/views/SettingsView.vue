@@ -21,7 +21,7 @@ const status = ref<{ text: string; tone: '' | 'ok' | 'err' }>({ text: '', tone: 
 const saving = ref(false);
 const testing = ref(false);
 
-document.title = 'Réglages · Strata';
+document.title = 'Réglages · Revspan';
 
 const tokenPlaceholder = computed(() => (loaded.value?.hasToken
     ? `Jeton enregistré (${TOKEN_STORE_LABELS[loaded.value.tokenStore]})`
@@ -138,12 +138,12 @@ onMounted(async () => {
                             v-if="loaded.hasToken"
                             class="rv-btn"
                             label="Supprimer le jeton"
-                            question="Supprimer le jeton enregistré ? Strata ne pourra plus lire Bitbucket."
+                            question="Supprimer le jeton enregistré ? Revspan ne pourra plus lire Bitbucket."
                             @confirm="deleteToken()"
                         />
                     </div>
                     <div class="help">
-                        {{ loaded.hasToken ? 'Laisser vide pour garder le jeton enregistré.' : 'Aucun jeton enregistré : Strata ne peut pas lire Bitbucket.' }}
+                        {{ loaded.hasToken ? 'Laisser vide pour garder le jeton enregistré.' : 'Aucun jeton enregistré : Revspan ne peut pas lire Bitbucket.' }}
                     </div>
                 </div>
                 <div class="rv-field">
@@ -151,7 +151,7 @@ onMounted(async () => {
                     <textarea id="set-repos" v-model="repos" spellcheck="false" placeholder="mon-workspace/mon-depot&#10;mon-workspace/autre-depot" />
                     <div class="help">
                         Un « workspace/dépôt » par ligne, ou l'adresse Bitbucket du dépôt. Leurs PR ouvertes apparaissent sur l'accueil.
-                        <template v-if="isVsCode">Enregistrés dans le réglage VS Code <code>strata.repositories</code>.</template>
+                        <template v-if="isVsCode">Enregistrés dans le réglage VS Code <code>revspan.repositories</code>.</template>
                     </div>
                 </div>
                 <div class="rv-form-acts">

@@ -24,12 +24,12 @@ describe('manifeste de l\'extension', () => {
 });
 
 describe('HTML du panneau', () => {
-    const index = '<!doctype html><html><head>\n<title>Strata</title><script type="module" src="./assets/a.js"></script></head><body></body></html>';
+    const index = '<!doctype html><html><head>\n<title>Revspan</title><script type="module" src="./assets/a.js"></script></head><body></body></html>';
 
     it('ajoute la politique de sécurité et la route initiale, réécrit les fichiers en adresses du panneau (sans <base>)', () => {
         const html = buildWebviewHtml(index, { assetsBaseUri: 'https://file.vscode-cdn.net/ext/dist/web/', cspSource: 'https://*.vscode-cdn.net', initialRoute: '/pr/ws/repo/42' });
         expect(html).toMatch(/<head>\n {4}<meta http-equiv="Content-Security-Policy"/);
-        expect(html).toContain('<meta name="strata-route" content="/pr/ws/repo/42">');
+        expect(html).toContain('<meta name="revspan-route" content="/pr/ws/repo/42">');
         expect(html).toContain('src="https://file.vscode-cdn.net/ext/dist/web/assets/a.js"');
         expect(html).not.toContain('<base');
     });

@@ -1,4 +1,4 @@
-"""Test de fumée de l'extension Strata dans un VS Code isolé (lancé par run-smoke.ts).
+"""Test de fumée de l'extension Revspan dans un VS Code isolé (lancé par run-smoke.ts).
 
 Pilote VS Code par son port de débogage (Playwright connect_over_cdp) : vue « Mes PR », panneau de la PR,
 « Diff VS Code » (éditeur de diff natif) et « Ouvrir le fichier » (dépôt local).
@@ -13,8 +13,8 @@ from playwright.sync_api import Frame, Page, sync_playwright
 
 CDP_URL = os.environ['CDP_URL']
 PR_TITLE = os.environ['PR_TITLE']
-CALLS_URL = os.environ.get('STRATA_CALLS_URL')
-SHOTS = os.environ.get('SHOTS_DIR', '/tmp/strata-vscode-shots')
+CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
+SHOTS = os.environ.get('SHOTS_DIR', '/tmp/revspan-vscode-shots')
 os.makedirs(SHOTS, exist_ok=True)
 
 results: list[tuple[str, bool, str]] = []
@@ -49,7 +49,7 @@ def workbench(browser) -> Page:
 
 
 def app_frame(page: Page) -> Frame | None:
-    """Le cadre du panneau qui contient la page Strata (iframe du webview)."""
+    """Le cadre du panneau qui contient la page Revspan (iframe du webview)."""
     for frame in page.frames:
         try:
             if frame.query_selector('#app .rv, #app .rv-pr, #app main, .rv-tl'):
@@ -71,7 +71,7 @@ def run() -> None:
         page.screenshot(path=f'{SHOTS}/01-workbench.png')
 
         # Vue « Mes PR » dans la barre d'activité.
-        icon = page.locator('.activitybar .action-item a[aria-label^="Strata"], .activitybar .action-item [aria-label^="Strata"]').first
+        icon = page.locator('.activitybar .action-item a[aria-label^="Revspan"], .activitybar .action-item [aria-label^="Revspan"]').first
         icon.wait_for(timeout=60000)
         icon.click()
         row = page.locator('.monaco-list-row', has_text=PR_TITLE).first

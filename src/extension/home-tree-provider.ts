@@ -7,8 +7,8 @@ import { buildHomeTree, type GroupNode, type PrNode } from './lib/home-tree.ts';
 type Node = { kind: 'group'; group: GroupNode } | { kind: 'pr'; pr: PrNode } | { kind: 'message'; text: string };
 
 /** Clés de contexte des messages d'accueil de la vue (viewsWelcome) : jeton à configurer, aucun dépôt suivi. */
-export const NEEDS_TOKEN_CONTEXT = 'strata.needsToken';
-export const NO_REPOS_CONTEXT = 'strata.noRepos';
+export const NEEDS_TOKEN_CONTEXT = 'revspan.needsToken';
+export const NO_REPOS_CONTEXT = 'revspan.noRepos';
 
 export class HomeTreeProvider implements vscode.TreeDataProvider<Node> {
     private readonly home: HomeService;
@@ -42,7 +42,7 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node> {
         item.id = `pr:${node.pr.ref.workspace}/${node.pr.ref.repo}/${node.pr.ref.id}`;
         item.description = node.pr.description;
         item.tooltip = node.pr.tooltip;
-        item.command = { command: 'strata.openPr', title: 'Ouvrir la PR', arguments: [node.pr.ref] };
+        item.command = { command: 'revspan.openPr', title: 'Ouvrir la PR', arguments: [node.pr.ref] };
         return item;
     }
 

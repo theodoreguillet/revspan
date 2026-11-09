@@ -1,7 +1,7 @@
 // Stockage du jeton Bitbucket.
 // macOS : trousseau (commande `security`, jeton transmis par stdin, jamais en argument).
 // Linux : `secret-tool` (libsecret) s'il est installé.
-// Sinon (ou STRATA_TOKEN_STORE=file) : fichier token.json en 0600 dans le dossier de config.
+// Sinon (ou REVSPAN_TOKEN_STORE=file) : fichier token.json en 0600 dans le dossier de config.
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,8 +15,8 @@ export interface SecretStore {
     remove(account: string): Promise<void>;
 }
 
-const DEFAULT_SERVICE = 'strata-bitbucket';
-const LABEL = 'Strata (Bitbucket)';
+const DEFAULT_SERVICE = 'revspan-bitbucket';
+const LABEL = 'Revspan (Bitbucket)';
 const SAFE_VALUE = /^[^"\\\r\n]+$/;
 
 interface RunResult {
@@ -138,8 +138,8 @@ export async function createSecretStore({ dir, env = process.env, platform = pro
     env?: NodeJS.ProcessEnv;
     platform?: NodeJS.Platform;
 }): Promise<SecretStore> {
-    const service = env.STRATA_KEYCHAIN_SERVICE || DEFAULT_SERVICE;
-    const forced = env.STRATA_TOKEN_STORE;
+    const service = env.REVSPAN_KEYCHAIN_SERVICE || DEFAULT_SERVICE;
+    const forced = env.REVSPAN_TOKEN_STORE;
     if (forced === 'file') {
         return fileStore(dir);
     }

@@ -61,7 +61,7 @@ export async function startApp({ env = process.env, port = 7420, maxPortTries = 
     const store = new Store(dir);
     const secrets = await createSecretStore({ dir, env });
     const cache = new Cache(path.join(dir, 'cache'));
-    const { settings, home, prs } = createServices({ store, secrets, cache, baseUrl: env.STRATA_BITBUCKET_API ?? DEFAULT_BASE_URL, fetchImpl });
+    const { settings, home, prs } = createServices({ store, secrets, cache, baseUrl: env.REVSPAN_BITBUCKET_API ?? DEFAULT_BASE_URL, fetchImpl });
 
     let bound = 0;
     const http = createHttpApp({ version: APP_VERSION, settings, home, prs, webDir, allowedHosts: () => [`${HOST}:${bound}`, `localhost:${bound}`] });
