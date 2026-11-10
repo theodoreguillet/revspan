@@ -615,7 +615,10 @@ describe('request budget', () => {
     const ME = { uuid: '{me}', display_name: 'Thomas Girard', nickname: 'tgirard' };
     const MASTER_HEAD = (): string => env?.fake.data.branchHeads.get('master') ?? '';
 
-    /** "list", "user", "refs" or the PR sub-resource ("activity", "statuses"...), with the PR id when there is one. */
+    /**
+     * "list", "user", "refs" or the PR sub-resource ("activity"...), with the PR id when there is one; the statuses of a
+     * PR's head commit are "statuses #id".
+     */
     function label({ path: route, page }: RecordedRequest): string {
         const rest = route.replace(/^\/2\.0\/repositories\/[^/]+\/[^/]+/, '');
         if (route === '/2.0/user') {
@@ -623,6 +626,11 @@ describe('request budget', () => {
         }
         if (rest === '/pullrequests') {
             return `list p${page}`;
+        }
+        const statuses = /^\/commit\/([0-9a-f]+)\/statuses$/.exec(rest);
+        if (statuses) {
+            const owner = [...env?.fake.data.prs.values() ?? []].find((p) => p.pr.source?.commit?.hash === statuses[1]);
+            return `statuses #${owner?.pr.id ?? statuses[1]}`;
         }
         const pr = /^\/pullrequests\/(\d+)(?:\/([a-z-]+))?/.exec(rest);
         if (pr) {
@@ -691,7 +699,7 @@ describe('request budget', () => {
         });
         const others = spent.filter((r) => !label(r).startsWith('list '));
         expect(others.length).toBeGreaterThan(0);
-        expect(others.every((r) => r.path.includes(`/pullrequests/${FAKE_PRS.purged}/`))).toBe(true);
+        expect(labels(others).filter((l) => !new RegExp(`#${FAKE_PRS.purged}( p\\d+)?$`).test(l))).toEqual([]);
         expect(labels(others)).toContain(`statuses #${FAKE_PRS.purged}`);
         expect(cardOf(after!, FAKE_PRS.purged)).toMatchObject({ versionsCount: 4, head: fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash });
     });

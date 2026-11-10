@@ -24,6 +24,16 @@ describe('fake Bitbucket: build statuses and branch heads', () => {
         expect((await buildOf(FAKE_PRS.neverReviewed)).state).toBe('none');
     });
 
+    it('serves the statuses of one commit on the commit route, whichever PR they were attached to', async () => {
+        const head = (await client.pullRequest(WS, REPO, FAKE_PRS.main)).source?.commit?.hash ?? '';
+        const response = await fetch(`${fake.url}/repositories/${WS}/${REPO}/commit/${head}/statuses`, {
+            headers: { Authorization: `Basic ${Buffer.from(`${FAKE_EMAIL}:${FAKE_TOKEN}`).toString('base64')}` },
+        });
+        const body = await response.json() as { values: { key: string; commit: { hash: string } }[] };
+        expect(body.values.map((s) => s.key).sort()).toEqual(['pipeline', 'scan']);
+        expect(body.values.every((s) => s.commit.hash.startsWith(head))).toBe(true);
+    });
+
     it('has a master that moved past the base of a PR but not of another', async () => {
         const head = await client.branchHead(WS, REPO, 'master');
         const base = async (id: number) => (await client.pullRequest(WS, REPO, id)).destination?.commit?.hash ?? '';

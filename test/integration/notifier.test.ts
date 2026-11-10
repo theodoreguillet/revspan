@@ -33,7 +33,7 @@ const nextInterval = (): void => {
     vi.setSystemTime(new Date(Date.now() + 5 * 60_000 + 1000));
 };
 
-/** Requests sent to the fake Bitbucket while `run` ran, as "list", "user", "diffstat"... */
+/** Requests sent to the fake Bitbucket while `run` ran, as "list", "user", "statuses", "diffstat"... */
 async function requestsOf(run: () => Promise<unknown>): Promise<string[]> {
     const start = fake.requests.length;
     await run();
@@ -41,6 +41,9 @@ async function requestsOf(run: () => Promise<unknown>): Promise<string[]> {
         const rest = r.path.replace(/^\/2\.0\/repositories\/[^/]+\/[^/]+/, '');
         if (rest === '/pullrequests') {
             return 'list';
+        }
+        if (/^\/commit\/[0-9a-f]+\/statuses$/.test(rest)) {
+            return 'statuses';
         }
         const pr = /^\/pullrequests\/\d+(?:\/([a-z-]+))?/.exec(rest);
         return pr ? pr[1] ?? 'pr' : rest.split('/')[1] ?? rest;

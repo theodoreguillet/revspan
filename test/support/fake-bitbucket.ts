@@ -59,7 +59,7 @@ export interface FakeData {
     /** "version..master" -> real base. */
     mergeBases: Map<string, string>;
     prs: Map<number, FakePr>;
-    /** PR id -> build statuses (several commits, like the real list). */
+    /** PR id -> build statuses of its commits (served per commit on /commit/{hash}/statuses, like Bitbucket). */
     statuses: Map<number, BbStatus[]>;
     /** HTTP status the statuses route answers instead of the list (simulates an unreadable CI integration). */
     statusesFailure?: number;
@@ -464,6 +464,14 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             const hash = data.branchHeads.get(name);
             return hash ? send(res, 200, { name, target: { hash } }) : send(res, 404, { error: { message: 'no branch' } });
         }
+        if ((m = /^\/commit\/([0-9a-f]+)\/statuses$/.exec(rest)) && req.method === 'GET') {
+            if (data.statusesFailure) {
+                return send(res, data.statusesFailure, { error: { message: 'statuses unavailable' } });
+            }
+            const prefix = m[1] ?? '';
+            const ofCommit = [...data.statuses.values()].flat().filter((s) => s.commit?.hash.startsWith(prefix));
+            return send(res, 200, page(req, ofCommit, 50));
+        }
         if ((m = /^\/commit\/([0-9a-f]+)$/.exec(rest))) {
             const hash = fullHash(m[1] ?? '');
             const commit = hash ? data.repo.get(hash) : undefined;
@@ -502,12 +510,6 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         }
         if ((m = /^\/pullrequests\/(\d+)(\/.*)?$/.exec(rest))) {
             const fake = data.prs.get(Number(m[1]));
-            if (fake && m[2] === '/statuses' && req.method === 'GET') {
-                if (data.statusesFailure) {
-                    return send(res, data.statusesFailure, { error: { message: 'statuses unavailable' } });
-                }
-                return send(res, 200, page(req, data.statuses.get(fake.pr.id) ?? [], 50));
-            }
             return fake ? handlePr(req, res, fake, m[2] ?? '', body) : send(res, 404, { error: { message: 'no pr' } });
         }
         return send(res, 404, { error: { message: `no route ${req.method} ${rest}` } });

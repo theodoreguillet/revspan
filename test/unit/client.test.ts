@@ -181,8 +181,8 @@ describe('BitbucketClient: build statuses and branch heads', () => {
     const HEAD = 'a'.repeat(40);
     const status = (key: string, state: string, hash = HEAD): Record<string, unknown> => ({ key, state, commit: { hash }, updated_on: '2026-10-01T00:00:00Z' });
 
-    it('reads the head\'s checks with a page length of 50, following pagination, other commits left out', async () => {
-        const next = `${BASE}/repositories/acme/records-api/pullrequests/7/statuses?page=2`;
+    it('reads the head commit\'s statuses (not every status of the PR), page length 50, following pagination, other commits left out', async () => {
+        const next = `${BASE}/repositories/acme/records-api/commit/${HEAD.slice(0, 12)}/statuses?page=2`;
         const fetchImpl = mockFetch(
             jsonResponse(200, { values: [status('ci', 'FAILED'), status('old', 'SUCCESSFUL', 'b'.repeat(40))], next }),
             jsonResponse(200, { values: [status('scan', 'SUCCESSFUL')] }),
@@ -190,7 +190,7 @@ describe('BitbucketClient: build statuses and branch heads', () => {
         const checks = await makeClient(fetchImpl).headChecks('acme', 'records-api', 7, HEAD.slice(0, 12));
         expect(checks.map((c) => `${c.key}:${c.state}`)).toEqual(['ci:failed', 'scan:success']);
         const first = new URL(String(fetchImpl.mock.calls[0]?.[0]));
-        expect(first.pathname).toBe('/2.0/repositories/acme/records-api/pullrequests/7/statuses');
+        expect(first.pathname).toBe(`/2.0/repositories/acme/records-api/commit/${HEAD.slice(0, 12)}/statuses`);
         expect(first.searchParams.get('pagelen')).toBe('50');
     });
 

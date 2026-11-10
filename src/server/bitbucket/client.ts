@@ -297,9 +297,10 @@ export class BitbucketClient {
         if (settled) {
             return settled;
         }
-        // The statuses route lists every commit of the PR; the key holds the head, so a new push is always read.
+        // The head commit's own statuses (one request, where the PR route pages through every commit of the PR); the key
+        // holds the head, so a new push is always read.
         const statuses = await this.cache.getLive(`live:statuses:${ws}/${repo}#${id}:${short}`, maxAgeMs,
-            () => this.getAllPages<BbStatus>(`${this.prPath(ws, repo, id)}/statuses`, { pagelen: 50 }));
+            () => this.getAllPages<BbStatus>(`${this.repoPath(ws, repo)}/commit/${encodeURIComponent(head)}/statuses`, { pagelen: 50 }));
         const checks = toBuildChecks(statuses, short);
         const pushedMs = Date.parse(pushedAt);
         const noCi = checks.length === 0 && !Number.isNaN(pushedMs) && Date.now() - pushedMs > NO_STATUS_SETTLED_MS;
