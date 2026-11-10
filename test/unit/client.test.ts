@@ -258,6 +258,38 @@ describe('BitbucketClient: build statuses and branch heads', () => {
         }
     });
 
+    it('no status at all on a head pushed more than an hour ago: settled as none, never asked again', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));
+        try {
+            const fetchImpl = mockFetch(jsonResponse(200, { values: [] }), jsonResponse(200, { values: [] }));
+            const client = makeClient(fetchImpl);
+            expect(await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000, pushedAt: '2026-11-10T10:00:00Z' })).toEqual([]);
+            vi.advanceTimersByTime(24 * 3600_000);
+            expect(await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000, pushedAt: '2026-11-10T10:00:00Z' })).toEqual([]);
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('no status yet on a head pushed 10 minutes ago: asked again past maxAgeMs; a new head is always asked', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));
+        try {
+            const fetchImpl = mockFetch(...[1, 2, 3].map(() => jsonResponse(200, { values: [] })));
+            const client = makeClient(fetchImpl);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000, pushedAt: '2026-11-10T11:50:00Z' });
+            vi.advanceTimersByTime(61_000);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000, pushedAt: '2026-11-10T11:50:00Z' });
+            expect(fetchImpl).toHaveBeenCalledTimes(2);
+            await client.headChecks('acme', 'records-api', 7, 'd'.repeat(40), { maxAgeMs: 60_000, pushedAt: '2026-11-10T09:00:00Z' });
+            expect(fetchImpl).toHaveBeenCalledTimes(3);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('branch heads are reused for maxAgeMs, then asked again; forgetLiveHealth drops them', async () => {
         vi.useFakeTimers();
         try {

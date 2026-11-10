@@ -216,7 +216,7 @@ export class PrService {
         // The PR page reads the checks even when settled (a re-run shows there, and the home learns it).
         const [build, needsRebase] = health
             ? await Promise.all([
-                loadBuildChecks(client, ref, head, { recheck: true }),
+                loadBuildChecks(client, ref, head, { recheck: true, pushedAt: versions[versions.length - 1]?.pushedAt ?? '' }),
                 isMine ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
             ])
             : [null, null];

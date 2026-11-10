@@ -63,6 +63,8 @@ export interface FakeData {
     statuses: Map<number, BbStatus[]>;
     /** HTTP status the statuses route answers instead of the list (simulates an unreadable CI integration). */
     statusesFailure?: number;
+    /** When set, the PR list is answered only once it resolves (built before: a read that lags behind a write). */
+    holdList?: Promise<void>;
     /** Branch name -> full head hash. master moved past the base of every PR but #44 (see buildFakeData). */
     branchHeads: Map<string, string>;
     nextId(): number;
@@ -162,6 +164,10 @@ class FakeBuilder {
                 links: { html: { href: `https://bitbucket.org/${WS}/${REPO}/pull-requests/${id}` } },
             },
             activity: [
+                // Like Bitbucket, every approval of a participant has its event (here: on the last push, if not given).
+                ...participants.flatMap((p): BbActivity[] => (p.approved && p.user && !events.some((e) => e.approval?.user?.uuid === p.user?.uuid)
+                    ? [{ approval: { date: last.date, user: p.user } }]
+                    : [])),
                 ...plan.map((step): BbActivity => ({
                     update: { date: step.date, author, source: { commit: { hash: hex(step.commit).slice(0, 12) } }, destination: { commit: { hash: hex(step.base).slice(0, 12) } } },
                 })),
@@ -449,7 +455,9 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         const rest = path.slice(repoBase.length);
         let m: RegExpExecArray | null;
         if (rest === '/pullrequests' && req.method === 'GET') {
-            return send(res, 200, page(req, [...data.prs.values()].map((p) => p.pr), 50));
+            const list = JSON.parse(JSON.stringify(page(req, [...data.prs.values()].map((p) => p.pr), 50))) as unknown;
+            await data.holdList;
+            return send(res, 200, list);
         }
         if ((m = /^\/refs\/branches\/(.+)$/.exec(rest))) {
             const name = m[1] ?? '';

@@ -81,6 +81,8 @@ const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).
 
 /** Abbreviation of a head hash in build keys: the PR list gives 12 characters, the activity sometimes the full hash. */
 const HEAD_PREFIX = 12;
+/** A head still without any status this long after its push is taken as built by no CI. */
+const NO_STATUS_SETTLED_MS = 3600_000;
 /** A check whose state can no longer change on that commit. */
 const SETTLED_STATES: ReadonlySet<BuildCheck['state']> = new Set(['success', 'failed', 'stopped']);
 
@@ -280,10 +282,15 @@ export class BitbucketClient {
 
     /**
      * Build checks of the PR's head commit. Once every check is settled (success, failed or stopped), they are kept on
-     * disk for that head and never asked again; unsettled or missing checks are asked again once older than maxAgeMs.
+     * disk for that head and never asked again; so is "no status at all" once the head was pushed (pushedAt) more than an
+     * hour ago. Running or missing checks are asked again once older than maxAgeMs.
      * recheck: asks even settled checks (the PR page, where a re-run shows) and updates what is kept for that head.
      */
-    async headChecks(ws: string, repo: string, id: number, head: string, { maxAgeMs = BUILD_TTL_MS, recheck = false } = {}): Promise<BuildCheck[]> {
+    async headChecks(ws: string, repo: string, id: number, head: string, { maxAgeMs = BUILD_TTL_MS, recheck = false, pushedAt = '' }: {
+        maxAgeMs?: number;
+        recheck?: boolean;
+        pushedAt?: string;
+    } = {}): Promise<BuildCheck[]> {
         const short = head.slice(0, HEAD_PREFIX);
         const settledKey = `build:${ws}/${repo}#${id}:${short}`;
         const settled = recheck ? undefined : this.cache.get<BuildCheck[]>(settledKey);
@@ -294,7 +301,9 @@ export class BitbucketClient {
         const statuses = await this.cache.getLive(`live:statuses:${ws}/${repo}#${id}:${short}`, maxAgeMs,
             () => this.getAllPages<BbStatus>(`${this.prPath(ws, repo, id)}/statuses`, { pagelen: 50 }));
         const checks = toBuildChecks(statuses, short);
-        if (checks.length > 0 && checks.every((check) => SETTLED_STATES.has(check.state))) {
+        const pushedMs = Date.parse(pushedAt);
+        const noCi = checks.length === 0 && !Number.isNaN(pushedMs) && Date.now() - pushedMs > NO_STATUS_SETTLED_MS;
+        if (noCi || (checks.length > 0 && checks.every((check) => SETTLED_STATES.has(check.state)))) {
             this.cache.set(settledKey, checks);
         } else if (recheck) {
             // A re-run started on a head whose checks were settled: the home reads them again.

@@ -6,7 +6,7 @@ import type { BitbucketClient } from '../bitbucket/client.ts';
  * Checks of the PR's head commit; null when the head is unknown (an empty prefix would match every status) or the read
  * failed. Settled checks are kept per head (see BitbucketClient.headChecks).
  */
-export async function loadBuildChecks(client: BitbucketClient, ref: PrRef, headHash: string, options: { maxAgeMs?: number; recheck?: boolean } = {}): Promise<BuildCheck[] | null> {
+export async function loadBuildChecks(client: BitbucketClient, ref: PrRef, headHash: string, options: { maxAgeMs?: number; recheck?: boolean; pushedAt?: string } = {}): Promise<BuildCheck[] | null> {
     if (!headHash) {
         return null;
     }

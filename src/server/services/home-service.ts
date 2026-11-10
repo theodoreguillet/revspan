@@ -27,7 +27,9 @@ const LEASE_MS = 60_000;
 /** Pause between two looks at the home another window is computing. */
 const WAIT_STEP_MS = 100;
 /** To increment if the activity kept for the home changes shape (invalidates the disk cache). */
-const ACTIVITY_FORMAT = 1;
+const ACTIVITY_FORMAT = 2;
+/** To increment if the shared home changes shape (a window running an older version then ignores it). */
+const HOME_FORMAT = 1;
 
 /** Group order of the home page and the VS Code tree (each translates the key into its title). */
 const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'mine', 'waiting', 'others'];
@@ -49,8 +51,11 @@ const recheckAgeMs = (refreshMinutes: number): number => Math.max(refreshMinutes
  * What the home depends on besides Bitbucket (account, repositories, approval rule, followed contributors, local marks):
  * a change shows at once instead of waiting for the shared home to expire.
  */
-function homeKey(email: string, repos: readonly string[], review: ReviewSettings, local: string): string {
+function homeKey(email: string, repos: readonly string[], review: ReviewSettings, local: string, generation: number): string {
     return JSON.stringify({
+        format: HOME_FORMAT,
+        // Bumped by every write on a PR: a read after a write never joins a computation started before it.
+        generation,
         email,
         repos,
         approvals: review.requiredApprovals,
@@ -82,6 +87,31 @@ function trimActivity(activity: readonly BbActivity[]): BbActivity[] {
     });
 }
 
+const sameCommit = (a: string, b: string): boolean => a.startsWith(b) || b.startsWith(a);
+
+/**
+ * Whether an activity is at least as recent as the list that led to reading it: its last push is the list's head, every
+ * approval or change request of the list has its event, and it has all the comments the list counts. A read lagging behind
+ * (replica) is used once, never kept.
+ */
+function consistentWithList(activity: readonly BbActivity[], raw: BbPullRequest): boolean {
+    const pushes = activity.flatMap((e) => (e.update?.source?.commit?.hash ? [{ date: e.update.date, hash: e.update.source.commit.hash }] : []));
+    const last = pushes.reduce<{ date: string; hash: string } | null>((latest, push) => (!latest || push.date >= latest.date ? push : latest), null);
+    const head = raw.source?.commit?.hash ?? '';
+    if (last && head && !sameCommit(last.hash, head)) {
+        return false;
+    }
+    const hasEvent = (kind: 'approval' | 'changes_requested', uuid: string | undefined): boolean => activity.some((e) => e[kind]?.user?.uuid === uuid);
+    for (const participant of raw.participants ?? []) {
+        const uuid = participant.user?.uuid;
+        if ((participant.approved && !hasEvent('approval', uuid)) || (participant.state === 'changes_requested' && !hasEvent('changes_requested', uuid))) {
+            return false;
+        }
+    }
+    const comments = activity.filter((e) => e.comment && !e.comment.deleted).length;
+    return comments >= (raw.comment_count ?? 0);
+}
+
 export class HomeService {
     private readonly session: BitbucketSession;
     private readonly store: Store;
@@ -103,8 +133,9 @@ export class HomeService {
         // No network here: the token is read, the profile is only fetched by a computation.
         const client = await this.session.getClient();
         const { email, repos, review } = this.store.config;
-        const key = homeKey(email, repos, review, this.store.localSignature());
-        const compute = (): Promise<Home> => this.compute(client, key, repos, review, fresh);
+        const generation = this.store.homeGeneration();
+        const key = homeKey(email, repos, review, this.store.localSignature(), generation);
+        const compute = (): Promise<Home> => this.compute(client, key, generation, repos, review, fresh);
         if (fresh) {
             return compute();
         }
@@ -149,7 +180,7 @@ export class HomeService {
         }
     }
 
-    private async compute(client: BitbucketClient, key: string, repos: readonly string[], review: ReviewSettings, fresh: boolean): Promise<Home> {
+    private async compute(client: BitbucketClient, key: string, generation: number, repos: readonly string[], review: ReviewSettings, fresh: boolean): Promise<Home> {
         const startedAt = Date.now();
         const me = await this.session.me();
         const recheckMs = recheckAgeMs(review.refreshMinutes);
@@ -188,7 +219,10 @@ export class HomeService {
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
         const home: Home = { me, repos: [...repos], groups, errors };
-        this.store.saveHomeSnapshot({ at: startedAt, key, home });
+        // An incomplete home (unreadable repository, unknown profile) is not shared: the other windows try for themselves.
+        if (errors.length === 0 && me !== null) {
+            this.store.saveHomeSnapshot({ at: startedAt, key, home }, generation);
+        }
         return home;
     }
 
@@ -198,7 +232,8 @@ export class HomeService {
             return;
         }
         const [checks, needsRebase] = await Promise.all([
-            loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs }),
+            // lastPushAt: the last push, or the PR's last update for a light card (never earlier than the push).
+            loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs, pushedAt: card.data.lastPushAt }),
             card.group === 'mine' ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
         ]);
         card.data.build = checks ? summarizeBuild(checks) : null;
@@ -206,11 +241,11 @@ export class HomeService {
     }
 
     /**
-     * Activity of a PR as the home reads it, kept on disk while the PR's head, last update, comment count and approvals
-     * (all from the list) are unchanged: a PR nobody touched costs no request. The comment count does not rely on
-     * updated_on following every comment.
+     * Activity of a PR as the home reads it, kept on disk (one entry per PR) while the PR's head, last update, comment
+     * count and approvals (all from the list) are unchanged: a PR nobody touched costs no request. The comment count does
+     * not rely on updated_on following every comment.
      */
-    private activityOf(client: BitbucketClient, ref: PrRef, raw: BbPullRequest): Promise<BbActivity[]> {
+    private async activityOf(client: BitbucketClient, ref: PrRef, raw: BbPullRequest): Promise<BbActivity[]> {
         // Always asked again when the key changed: a cached answer might predate the change and would be kept for good.
         const read = async (): Promise<BbActivity[]> => trimActivity(await client.activity(ref.workspace, ref.repo, ref.id, 0));
         const head = raw.source?.commit?.hash;
@@ -218,7 +253,17 @@ export class HomeService {
             return read();
         }
         const approvals = (raw.participants ?? []).map((p) => `${p.user?.uuid ?? ''}:${p.approved ? 1 : 0}:${p.state ?? ''}`).sort().join(',');
-        return this.cache.getOrCompute(`home-activity:${ACTIVITY_FORMAT}:${prKeyOf(ref)}:${head}:${raw.updated_on}:${raw.comment_count ?? ''}:${approvals}`, read);
+        const key = `${head}:${raw.updated_on}:${raw.comment_count ?? ''}:${approvals}`;
+        const entry = `home-activity:${ACTIVITY_FORMAT}:${prKeyOf(ref)}`;
+        const kept = this.cache.get<{ key: string; activity: BbActivity[] }>(entry);
+        if (kept?.key === key) {
+            return kept.activity;
+        }
+        const activity = await read();
+        if (consistentWithList(activity, raw)) {
+            this.cache.set(entry, { key, activity });
+        }
+        return activity;
     }
 
     private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest, settings: ReviewSettings): Promise<Card> {

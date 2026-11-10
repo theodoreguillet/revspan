@@ -302,7 +302,7 @@ describe('home shared between windows (Store)', () => {
         const a = new Store(dir);
         const b = new Store(dir);
         expect(b.homeSnapshot()).toBeNull();
-        a.saveHomeSnapshot({ at: 1000, key: 'k', home });
+        a.saveHomeSnapshot({ at: 1000, key: 'k', home }, a.homeGeneration());
         expect(b.homeSnapshot()).toEqual({ at: 1000, key: 'k', home });
         b.dropHomeSnapshot();
         expect(a.homeSnapshot()).toBeNull();
@@ -334,6 +334,29 @@ describe('home shared between windows (Store)', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('a home computed before a drop (a write in any window) is refused', () => {
+        const dir = tempDir();
+        const a = new Store(dir);
+        const b = new Store(dir);
+        const generation = a.homeGeneration();
+        b.dropHomeSnapshot();
+        expect(a.homeGeneration()).not.toBe(generation);
+        expect(a.saveHomeSnapshot({ at: 1000, key: 'k', home }, generation)).toBe(false);
+        expect(b.homeSnapshot()).toBeNull();
+        expect(a.saveHomeSnapshot({ at: 2000, key: 'k', home }, a.homeGeneration())).toBe(true);
+    });
+
+    it('a stale lease that cannot be removed: the caller computes anyway, nothing thrown', () => {
+        const dir = tempDir();
+        const lock = path.join(dir, 'home.lock');
+        fs.mkdirSync(path.join(lock, 'inside'), { recursive: true });
+        const past = new Date(Date.now() - 3600_000);
+        fs.utimesSync(lock, past, past);
+        const release = new Store(dir).claimHomeLease(60_000);
+        expect(typeof release).toBe('function');
+        expect(() => release?.()).not.toThrow();
     });
 
     it('local signature: changed by a "reviewed" mark or a version type, not by seen files', () => {

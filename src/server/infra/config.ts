@@ -193,6 +193,8 @@ export class Store {
     private readonly configFile: JsonFile<AppConfig>;
     private readonly stateFile: JsonFile<StateFile>;
     private readonly homeFile: JsonFile<HomeSnapshot | null>;
+    /** Count of drops of the shared home (home.drop), so a computation started before one is never shared. */
+    private readonly dropFile: JsonFile<{ generation: number }>;
     private readonly leaseFile: string;
     private localSig: { of: StateFile['prs']; value: string } | null = null;
 
@@ -207,6 +209,10 @@ export class Store {
         });
         this.stateFile = new JsonFile(path.join(dir, 'state.json'), (raw) => ({ prs: {}, ...(raw as Partial<StateFile>) }));
         this.homeFile = new JsonFile(path.join(dir, 'home.json'), homeSnapshotOf);
+        this.dropFile = new JsonFile(path.join(dir, 'home.drop'), (raw) => {
+            const generation = (raw as { generation?: unknown } | null)?.generation;
+            return { generation: typeof generation === 'number' && Number.isInteger(generation) ? generation : 0 };
+        });
         this.leaseFile = path.join(dir, 'home.lock');
     }
 
@@ -289,16 +295,35 @@ export class Store {
         return this.homeFile.read();
     }
 
-    saveHomeSnapshot(snapshot: HomeSnapshot): void {
+    /** Drops of the shared home so far (any window): read before a computation, checked when saving it. */
+    homeGeneration(): number {
+        return this.dropFile.read().generation;
+    }
+
+    /**
+     * Shares a computed home with the other windows, unless the shared home was dropped since `generation` was read (a
+     * write during the computation: its home may predate the write). Returns whether it was saved.
+     */
+    saveHomeSnapshot(snapshot: HomeSnapshot, generation: number): boolean {
+        if (this.homeGeneration() !== generation) {
+            return false;
+        }
         try {
             this.homeFile.write(snapshot);
+            return true;
         } catch (error) {
             console.warn(`revspan: cannot share the home (${(error as Error).message})`);
+            return false;
         }
     }
 
     /** Forgets the shared home (a write on a PR, a change of account or token): the next read computes it again. */
     dropHomeSnapshot(): void {
+        try {
+            this.dropFile.write({ generation: this.homeGeneration() + 1 });
+        } catch (error) {
+            console.warn(`revspan: cannot record the home drop (${(error as Error).message})`);
+        }
         this.homeFile.remove();
     }
 
@@ -330,7 +355,12 @@ export class Store {
                 if (age >= 0 && age < staleMs) {
                     return null;
                 }
-                fs.rmSync(this.leaseFile, { force: true });
+                try {
+                    fs.rmSync(this.leaseFile, { force: true });
+                } catch {
+                    // Stale but impossible to remove: compute without the lease rather than never.
+                    return () => undefined;
+                }
             }
         }
         return null;

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiErrorBody, Comparison, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
+import { Cache } from '../../src/server/infra/cache.ts';
 import {
     FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall, type RecordedRequest,
 } from '../support/fake-bitbucket.ts';
@@ -648,7 +649,7 @@ describe('request budget', () => {
         vi.setSystemTime(new Date('2026-11-10T09:00:00Z'));
     };
 
-    it('(a) steady state: nothing changed, every 60 s TTL expired: one list request per repository page, nothing else', async () => {
+    it('(a) steady state within the interval: nothing changed, every 60 s TTL expired: one list request per repository page', async () => {
         fakeTime();
         await setup();
         const first = await home();
@@ -659,6 +660,20 @@ describe('request budget', () => {
             second = await home();
         });
         expect(labels(spent)).toEqual(['list p1']);
+        expect(second).toEqual(first);
+    });
+
+    it('(a) steady state at the next interval: the lists, one branch head per repository with my PRs, the running build only', async () => {
+        fakeTime();
+        await setup();
+        const first = await home();
+        elapse(INTERVAL_MS + 1000);
+        let second: Home | null = null;
+        const spent = await requestsOf(async () => {
+            second = await home();
+        });
+        // Old heads without any status (#43, #44, #46, #48) and the failed build (#42) are settled: not read again.
+        expect(labels(spent)).toEqual(['list p1', 'refs', `statuses #${FAKE_PRS.mine}`]);
         expect(second).toEqual(first);
     });
 
@@ -691,7 +706,8 @@ describe('request budget', () => {
         elapse(INTERVAL_MS + 1000);
         const spent = labels(await requestsOf(home)).filter((l) => l.startsWith('statuses'));
         expect(spent).toContain(`statuses #${FAKE_PRS.mine}`);
-        expect(spent).toContain(`statuses #${FAKE_PRS.long}`);
+        // No status at all on a head pushed more than an hour ago: settled as none.
+        expect(spent).not.toContain(`statuses #${FAKE_PRS.long}`);
         expect(spent).not.toContain(`statuses #${FAKE_PRS.main}`);
         expect(spent).not.toContain(`statuses #${FAKE_PRS.neverReviewed}`);
         // Once the running check finished, the next cycle sees it; then it is settled for good.
@@ -772,6 +788,67 @@ describe('request budget', () => {
         pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
         elapse(INTERVAL_MS / 2 + 1000);
         expect(cardOf(await home(), FAKE_PRS.purged)?.versionsCount).toBe(4);
+    });
+
+    it('a write while a computation is in flight: its pre-write home is not shared, the next read computes again', async () => {
+        fakeTime();
+        const { fake, app } = await setup();
+        await home();
+        elapse(INTERVAL_MS + 1000);
+        let release = (): void => undefined;
+        fake.data.holdList = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const inFlight = home();
+        await vi.waitFor(() => expect(fake.requests.filter((r) => r.path.endsWith('/pullrequests'))).toHaveLength(2));
+        await api('DELETE', `${prPath(FAKE_PRS.waiting)}/approve`);
+        delete fake.data.holdList;
+        release();
+        expect(cardOf(await inFlight, FAKE_PRS.waiting)?.myApproval).toBe(true);
+        expect(app.store.homeSnapshot()).toBeNull();
+        expect(cardOf(await home(), FAKE_PRS.waiting)?.myApproval).toBe(false);
+    });
+
+    it('an activity lagging behind the list (my approval missing) is not kept: the next computation reads it again', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        await home();
+        const me = fake.data.prs.get(FAKE_PRS.neverReviewed)!.pr.participants.find((p) => p.user?.uuid === '{me}');
+        Object.assign(me!, { approved: true, state: 'approved' });
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
+        // Once the activity has the approval, it is kept.
+        fake.data.prs.get(FAKE_PRS.neverReviewed)!.activity.push({ approval: { date: '2026-11-01T09:00:00Z', user: { uuid: '{me}' } } });
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.neverReviewed}`);
+    });
+
+    it('one kept activity per PR: a new push replaces it', async () => {
+        fakeTime();
+        const { fake, dir } = await setup();
+        await home();
+        pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
+        elapse(3 * MINUTE_MS);
+        await home();
+        const kept = new Cache(path.join(dir, 'cache')).get<{ key: string }>(`home-activity:2:${WS}/${REPO}#${FAKE_PRS.purged}`);
+        expect(kept?.key).toContain(fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash);
+    });
+
+    it('a home with a repository error or without my profile is not shared with the other windows', async () => {
+        fakeTime();
+        const current = await setup();
+        await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/missing-repo`] });
+        expect((await home()).errors).toHaveLength(1);
+        expect(current.app.store.homeSnapshot()).toBeNull();
+        await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`] });
+        await restart(current);
+        await fetch(`http://127.0.0.1:${current.fake.port}/__fail-next?status=403`);
+        expect((await home()).me).toBeNull();
+        expect(current.app.store.homeSnapshot()).toBeNull();
     });
 
     it('a write on a PR drops the shared home: the next read shows it at once', async () => {
