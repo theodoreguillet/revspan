@@ -13,6 +13,8 @@ export interface QueueInput {
     needsReview: boolean;
     /** I am among the reviewers designated on Bitbucket. */
     designatedReviewer: boolean;
+    /** My current review state on Bitbucket is "changes requested". */
+    changesRequested: boolean;
     /** My approval is on the latest version. */
     myApprovalCurrent: boolean;
     /** My approval is still active and only neutral versions arrived since (approvalHoldsSince). */
@@ -32,6 +34,10 @@ export function classifyPr(input: QueueInput): HomeGroupKey {
         return 'mine';
     }
     if (input.myApprovalCurrent || input.approvalHolds) {
+        return 'waiting';
+    }
+    // I asked for changes and nothing but neutral versions arrived since: the next move is the author's.
+    if (input.designatedReviewer && input.changesRequested && input.reviewedOrApproved && input.newCodeVersions === 0) {
         return 'waiting';
     }
     if (input.designatedReviewer) {

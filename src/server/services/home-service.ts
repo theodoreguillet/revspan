@@ -350,6 +350,7 @@ export class HomeService {
             meKnown: meUuid !== null,
             needsReview: base.needsReview,
             designatedReviewer,
+            changesRequested: participants.some((p) => p.state === 'changes_requested' && isMe(p.user?.uuid)),
             myApprovalCurrent: false,
             approvalHolds: false,
             reviewedOrApproved: false,

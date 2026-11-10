@@ -7,6 +7,7 @@ const input = (over: Partial<QueueInput>): QueueInput => ({
     meKnown: true,
     needsReview: false,
     designatedReviewer: false,
+    changesRequested: false,
     myApprovalCurrent: false,
     approvalHolds: false,
     reviewedOrApproved: false,
@@ -39,6 +40,15 @@ describe('classifyPr', () => {
 
     it('designated reviewer who has not approved: "to-do", even when the minimum is reached', () => {
         expect(classifyPr(input({ designatedReviewer: true, needsReview: false }))).toBe('to-do');
+        expect(classifyPr(input({ designatedReviewer: true, reviewedOrApproved: true, newCodeVersions: 0 }))).toBe('to-do');
+    });
+
+    it('M8: designated reviewer who requested changes, then only neutral versions: "waiting" on the author', () => {
+        expect(classifyPr(input({ designatedReviewer: true, changesRequested: true, reviewedOrApproved: true, needsReview: true, newCodeVersions: 0 }))).toBe('waiting');
+        // New code (or types not computed yet) since the change request: back to "to-do".
+        expect(classifyPr(input({ designatedReviewer: true, changesRequested: true, reviewedOrApproved: true, newCodeVersions: 1 }))).toBe('to-do');
+        expect(classifyPr(input({ designatedReviewer: true, changesRequested: true, reviewedOrApproved: true, newCodeVersions: null }))).toBe('to-do');
+        // A designated reviewer who only commented stays in "to-do" (Bitbucket asks for the approval).
         expect(classifyPr(input({ designatedReviewer: true, reviewedOrApproved: true, newCodeVersions: 0 }))).toBe('to-do');
     });
 

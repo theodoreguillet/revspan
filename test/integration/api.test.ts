@@ -507,6 +507,16 @@ describe('home', () => {
         expect(groupsOf(body)[FAKE_PRS.main]).toBe('to-do');
     });
 
+    it('M8: designated reviewer who requested changes: "waiting" on the author until new code arrives', async () => {
+        const { fake } = await setup();
+        await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/request-changes`);
+        expect(groupsOf((await api<Home>('GET', '/api/home')).body)[FAKE_PRS.neverReviewed]).toBe('waiting');
+        pushVersion(fake.data, FAKE_PRS.neverReviewed, {
+            commit: 'never:v3', from: 'never:v2', base: 'never:m0', changes: { 'src/never.ts': 'x\ny1\ny2\ny3\n' }, date: new Date(Date.now() + 60_000).toISOString(),
+        });
+        expect(groupsOf((await api<Home>('GET', '/api/home?fresh=1')).body)[FAKE_PRS.neverReviewed]).toBe('to-do');
+    });
+
     it('only rebases since my approval, which Bitbucket kept: "waiting", no re-approval', async () => {
         const { fake } = await setup();
         const me = fake.data.prs.get(FAKE_PRS.rebaseOnly)?.pr.participants.find((p) => p.user?.uuid === '{me}');
