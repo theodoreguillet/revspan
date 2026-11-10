@@ -180,6 +180,8 @@ describe('BitbucketClient: commit erased after being cached', () => {
 describe('BitbucketClient: build statuses and branch heads', () => {
     const HEAD = 'a'.repeat(40);
     const status = (key: string, state: string, hash = HEAD): Record<string, unknown> => ({ key, state, commit: { hash }, updated_on: '2026-10-01T00:00:00Z' });
+    /** A push long before the clock of these tests (2026-11-10T12:00:00Z): past the grace period of settled checks. */
+    const OLD_PUSH = '2026-11-01T09:00:00Z';
 
     it('reads the head commit\'s statuses (not every status of the PR), page length 50, following pagination, other commits left out', async () => {
         const next = `${BASE}/repositories/acme/records-api/commit/${HEAD.slice(0, 12)}/statuses?page=2`;
@@ -194,16 +196,63 @@ describe('BitbucketClient: build statuses and branch heads', () => {
         expect(first.searchParams.get('pagelen')).toBe('50');
     });
 
-    it('settled checks (success, failed, stopped) are kept for their head and never asked again', async () => {
+    it('settled checks (success, failed, stopped) on a head pushed more than an hour ago are kept and never asked again', async () => {
         vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));
         try {
             const fetchImpl = mockFetch(jsonResponse(200, { values: [status('ci', 'FAILED'), status('scan', 'STOPPED'), status('lint', 'SUCCESSFUL')] }));
             const client = makeClient(fetchImpl);
-            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 1000 });
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 1000, pushedAt: OLD_PUSH });
             vi.advanceTimersByTime(24 * 3600_000);
-            expect((await client.headChecks('acme', 'records-api', 7, HEAD.slice(0, 12), { maxAgeMs: 1000 })).map((c) => c.state))
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD.slice(0, 12), { maxAgeMs: 1000, pushedAt: OLD_PUSH })).map((c) => c.state))
                 .toEqual(['failed', 'stopped', 'success']);
             expect(fetchImpl).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('I2: settled checks on a head pushed less than an hour ago are re-read past maxAgeMs (another CI may not have posted yet), kept once older', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));
+        try {
+            const fetchImpl = mockFetch(
+                jsonResponse(200, { values: [status('lint', 'SUCCESSFUL')] }),
+                jsonResponse(200, { values: [status('lint', 'SUCCESSFUL'), status('ci', 'INPROGRESS')] }),
+                jsonResponse(200, { values: [status('lint', 'SUCCESSFUL'), status('ci', 'FAILED')] }),
+                jsonResponse(200, { values: [status('lint', 'SUCCESSFUL'), status('ci', 'FAILED')] }),
+            );
+            const client = makeClient(fetchImpl);
+            const read = async (): Promise<string[]> => (await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000, pushedAt: '2026-11-10T11:58:00Z' }))
+                .map((c) => `${c.key}:${c.state}`);
+            expect(await read()).toEqual(['lint:success']);
+            vi.advanceTimersByTime(61_000);
+            expect(await read()).toEqual(['lint:success', 'ci:running']);
+            vi.advanceTimersByTime(61_000);
+            expect(await read()).toEqual(['lint:success', 'ci:failed']);
+            // Within maxAgeMs: the read is reused.
+            expect(await read()).toEqual(['lint:success', 'ci:failed']);
+            expect(fetchImpl).toHaveBeenCalledTimes(3);
+            // Past the hour: read once more, then kept for good.
+            vi.advanceTimersByTime(3600_000);
+            expect(await read()).toEqual(['lint:success', 'ci:failed']);
+            vi.advanceTimersByTime(24 * 3600_000);
+            expect(await read()).toEqual(['lint:success', 'ci:failed']);
+            expect(fetchImpl).toHaveBeenCalledTimes(4);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('I2: settled checks of a head whose push date is unknown are not kept: re-read past maxAgeMs', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(jsonResponse(200, { values: [status('ci', 'SUCCESSFUL')] }), jsonResponse(200, { values: [status('ci', 'SUCCESSFUL')] }));
+            const client = makeClient(fetchImpl);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000 });
+            vi.advanceTimersByTime(61_000);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000 });
+            expect(fetchImpl).toHaveBeenCalledTimes(2);
         } finally {
             vi.useRealTimers();
         }
@@ -240,6 +289,7 @@ describe('BitbucketClient: build statuses and branch heads', () => {
 
     it('recheck asks even settled checks; a re-run drops what was kept, so the next read asks again', async () => {
         vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));
         try {
             const fetchImpl = mockFetch(
                 jsonResponse(200, { values: [status('ci', 'FAILED')] }),
@@ -247,11 +297,11 @@ describe('BitbucketClient: build statuses and branch heads', () => {
                 jsonResponse(200, { values: [status('ci', 'SUCCESSFUL')] }),
             );
             const client = makeClient(fetchImpl);
-            await client.headChecks('acme', 'records-api', 7, HEAD);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { pushedAt: OLD_PUSH });
             vi.advanceTimersByTime(61_000);
-            expect((await client.headChecks('acme', 'records-api', 7, HEAD, { recheck: true })).map((c) => c.state)).toEqual(['running']);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD, { recheck: true, pushedAt: OLD_PUSH })).map((c) => c.state)).toEqual(['running']);
             vi.advanceTimersByTime(61_000);
-            expect((await client.headChecks('acme', 'records-api', 7, HEAD)).map((c) => c.state)).toEqual(['success']);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD, { pushedAt: OLD_PUSH })).map((c) => c.state)).toEqual(['success']);
             expect(fetchImpl).toHaveBeenCalledTimes(3);
         } finally {
             vi.useRealTimers();

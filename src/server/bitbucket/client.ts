@@ -81,8 +81,12 @@ const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).
 
 /** Abbreviation of a head hash in build keys: the PR list gives 12 characters, the activity sometimes the full hash. */
 const HEAD_PREFIX = 12;
-/** A head still without any status this long after its push is taken as built by no CI. */
-const NO_STATUS_SETTLED_MS = 3600_000;
+/**
+ * Grace period after a push: until then a CI may still post its first status on the head, so even settled checks (or no
+ * check at all) are read again once per interval. Past it, settled checks are final for that head, and no status at all
+ * means no CI.
+ */
+const CHECKS_GRACE_MS = 3600_000;
 /** A check whose state can no longer change on that commit. */
 const SETTLED_STATES: ReadonlySet<BuildCheck['state']> = new Set(['success', 'failed', 'stopped']);
 
@@ -281,10 +285,12 @@ export class BitbucketClient {
     }
 
     /**
-     * Build checks of the PR's head commit. Once every check is settled (success, failed or stopped), they are kept on
-     * disk for that head and never asked again; so is "no status at all" once the head was pushed (pushedAt) more than an
-     * hour ago. Running or missing checks are asked again once older than maxAgeMs.
-     * recheck: asks even settled checks (the PR page, where a re-run shows) and updates what is kept for that head.
+     * Build checks of the PR's head commit. Once the head was pushed (pushedAt) more than an hour ago and every check is
+     * settled (success, failed or stopped), or there is none at all, they are kept on disk for that head and never asked
+     * again. Before that (another CI may not have posted yet), with an unknown push date, or while a check runs, they are
+     * asked again once older than maxAgeMs.
+     * recheck: asks even kept checks (the PR page and the explicit Refresh, where a re-run shows) and updates what is
+     * kept for that head.
      */
     async headChecks(ws: string, repo: string, id: number, head: string, { maxAgeMs = BUILD_TTL_MS, recheck = false, pushedAt = '' }: {
         maxAgeMs?: number;
@@ -303,11 +309,12 @@ export class BitbucketClient {
             () => this.getAllPages<BbStatus>(`${this.repoPath(ws, repo)}/commit/${encodeURIComponent(head)}/statuses`, { pagelen: 50 }));
         const checks = toBuildChecks(statuses, short);
         const pushedMs = Date.parse(pushedAt);
-        const noCi = checks.length === 0 && !Number.isNaN(pushedMs) && Date.now() - pushedMs > NO_STATUS_SETTLED_MS;
-        if (noCi || (checks.length > 0 && checks.every((check) => SETTLED_STATES.has(check.state)))) {
+        const pastGrace = !Number.isNaN(pushedMs) && Date.now() - pushedMs > CHECKS_GRACE_MS;
+        // No check at all past the grace period: no CI for that head.
+        if (pastGrace && checks.every((check) => SETTLED_STATES.has(check.state))) {
             this.cache.set(settledKey, checks);
         } else if (recheck) {
-            // A re-run started on a head whose checks were settled: the home reads them again.
+            // A re-run started on a head whose checks were kept: the home reads them again.
             this.cache.delete(settledKey);
         }
         return checks;

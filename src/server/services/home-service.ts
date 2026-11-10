@@ -3,8 +3,8 @@
 // Request budget (the background poll runs every review.refreshMinutes in every VS Code window):
 // - a home computed by any window of the profile is shared on disk and reused for half an interval;
 // - only the PR lists are always read; a PR's activity is kept on disk while its head, last update, comment count and
-//   approvals are unchanged; settled build checks are kept per head; unsettled checks and branch heads are read at most
-//   once per interval; merge bases are immutable.
+//   approvals are unchanged; settled build checks are kept per head once it is an hour old; other checks and branch heads
+//   are read at most once per interval; merge bases are immutable.
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import { approvalHoldsSince } from '../../shared/approval.ts';
 import { requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
@@ -133,8 +133,9 @@ export class HomeService {
     }
 
     /**
-     * fresh: the explicit Refresh. Reads the lists, unsettled build checks and branch heads again, and ignores the home
-     * shared by the windows; what is kept per head (activity, settled checks, merge bases) stays.
+     * fresh: the explicit Refresh. Reads the lists, unsettled build checks, my PRs' kept checks and branch heads again, and
+     * ignores the home shared by the windows; the rest of what is kept per head (activity, others' settled checks, merge
+     * bases) stays.
      */
     async get({ fresh = false }: { fresh?: boolean } = {}): Promise<Home> {
         // No network here: the token is read, the profile is only fetched by a computation.
@@ -219,7 +220,7 @@ export class HomeService {
                 }
                 return head;
             };
-            await Promise.all(repoCards.map((card) => this.withHealth(client, card, recheckMs, branchHead)));
+            await Promise.all(repoCards.map((card) => this.withHealth(client, card, recheckMs, branchHead, fresh)));
             cards.push(...repoCards);
         }));
 
@@ -237,14 +238,18 @@ export class HomeService {
         return home;
     }
 
-    /** Build state for "to-do" and "mine" cards, needs-rebase for "mine" only. Failures leave null. */
-    private async withHealth(client: BitbucketClient, card: Card, recheckMs: number, branchHead: BranchHeadReader): Promise<void> {
+    /**
+     * Build state for "to-do" and "mine" cards, needs-rebase for "mine" only. Failures leave null. fresh (explicit Refresh)
+     * also re-reads the kept checks of my own PRs, where a re-run on the same commit matters.
+     */
+    private async withHealth(client: BitbucketClient, card: Card, recheckMs: number, branchHead: BranchHeadReader, fresh: boolean): Promise<void> {
         if (card.group !== 'to-do' && card.group !== 'mine') {
             return;
         }
+        const recheck = fresh && card.group === 'mine';
         const [checks, needsRebase] = await Promise.all([
             // lastPushAt: the last push, or the PR's last update for a light card (never earlier than the push).
-            loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs, pushedAt: card.data.lastPushAt }),
+            loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs, pushedAt: card.data.lastPushAt, recheck }),
             card.group === 'mine' ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
         ]);
         card.data.build = checks ? summarizeBuild(checks) : null;

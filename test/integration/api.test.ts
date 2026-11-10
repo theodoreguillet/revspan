@@ -789,6 +789,24 @@ describe('request budget', () => {
         expect(spent).toEqual(expect.arrayContaining(['list p1', 'refs', `statuses #${FAKE_PRS.mine}`]));
     });
 
+    it('I2: explicit Refresh re-reads the settled checks of my PRs (a re-run on the same commit), not those of the others', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        const success = (fake.data.statuses.get(FAKE_PRS.mine) ?? []).map((s) => ({ ...s, state: 'SUCCESSFUL' as const }));
+        fake.data.statuses.set(FAKE_PRS.mine, success);
+        expect(cardOf(await home(), FAKE_PRS.mine)?.build?.state).toBe('success');
+        // A re-run on the same (old) commit: the settled checks are kept by a normal computation.
+        fake.data.statuses.set(FAKE_PRS.mine, success.map((s) => ({ ...s, state: 'INPROGRESS' as const })));
+        elapse(INTERVAL_MS + 1000);
+        expect(cardOf(await home(), FAKE_PRS.mine)?.build?.state).toBe('success');
+        let refreshed: Home | null = null;
+        const spent = labels(await requestsOf(async () => {
+            refreshed = await home('/api/home?fresh=1');
+        }));
+        expect(cardOf(refreshed!, FAKE_PRS.mine)?.build?.state).toBe('running');
+        expect(spent).not.toContain(`statuses #${FAKE_PRS.main}`);
+    });
+
     it('a new push is seen by the next computation after the shared reuse, without Refresh', async () => {
         fakeTime();
         const { fake } = await setup();

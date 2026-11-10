@@ -137,6 +137,31 @@ describe('background refresh and notifications', () => {
         expect(recorded.infos).toEqual([]);
     });
 
+    it('I2: on a fresh push, lint passes, then the CI starts and fails, all within the hour: the home ends failed and the warning shows', async () => {
+        const { store, notifier, services } = await openWindow();
+        await store.saveConfig({ review: { ...store.config.review, notifications: { newPullRequest: true, newVersion: true, buildFailed: true } } });
+        await notifier.poll();
+        pushVersion(fake.data, FAKE_PRS.mine, { commit: 'mine:v3', from: 'mine:v2', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: new Date().toISOString() });
+        const head = fake.data.prs.get(FAKE_PRS.mine)?.pr.source?.commit?.hash ?? '-';
+        const fullHead = [...fake.data.repo.commits.keys()].find((hash) => hash.startsWith(head)) ?? head;
+        const check = (key: string, state: 'SUCCESSFUL' | 'INPROGRESS' | 'FAILED') => ({ key, name: key, state, commit: { hash: fullHead }, updated_on: new Date().toISOString() });
+        const buildOfMine = async (): Promise<string | undefined> => (await services.home.get()).groups.flatMap((g) => g.prs).find((p) => p.id === FAKE_PRS.mine)?.build?.state;
+
+        fake.data.statuses.set(FAKE_PRS.mine, [check('lint', 'SUCCESSFUL')]);
+        nextInterval();
+        await notifier.poll();
+        expect(await buildOfMine()).toBe('success');
+        fake.data.statuses.set(FAKE_PRS.mine, [check('lint', 'SUCCESSFUL'), check('ci', 'INPROGRESS')]);
+        nextInterval();
+        await notifier.poll();
+        expect(await buildOfMine()).toBe('running');
+        fake.data.statuses.set(FAKE_PRS.mine, [check('lint', 'SUCCESSFUL'), check('ci', 'FAILED')]);
+        nextInterval();
+        await notifier.poll();
+        expect(await buildOfMine()).toBe('failed');
+        expect(recorded.warnings).toEqual(['Build failed on your PR: DEMO-45 - feat(mine): my own pull request']);
+    });
+
     it('a push with no change since the previous head (neutral version) on a PR I reviewed: nothing shown, head recorded', async () => {
         const { store, notifier } = await openWindow();
         await notifier.poll();
