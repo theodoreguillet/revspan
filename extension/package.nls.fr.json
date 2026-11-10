@@ -1,7 +1,7 @@
 {
     "displayName": "Revspan for Bitbucket",
     "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push, dans VS Code",
-    "capabilities.untrustedWorkspaces": "Dans un espace de travail non approuvé, la liste des dépôts suivis définie par l'espace de travail est ignorée.",
+    "capabilities.untrustedWorkspaces": "Dans un espace de travail non approuvé, les dépôts suivis, les contributeurs suivis et les approbations par dépôt définis par l'espace de travail sont ignorés.",
     "capabilities.virtualWorkspaces": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne.",
     "command.openHome": "Ouvrir l'accueil",
     "command.category": "Revspan",
@@ -9,6 +9,13 @@
     "command.openSettings": "Réglages (jeton, dépôts)",
     "command.refresh": "Actualiser",
     "configuration.repositories": "Dépôts Bitbucket dont les PR ouvertes apparaissent dans « Mes PR » : un `workspace/dépôt` (ou l'adresse du dépôt) par entrée. Aussi modifiable depuis ⚙ Réglages du panneau Revspan.",
+    "configuration.requiredApprovals": "Approbations dont une PR a besoin (de participants autres que son auteur) avant de quitter votre file de relecture. De 1 à 20, 2 par défaut.",
+    "configuration.requiredApprovalsByRepository": "Approbations requises pour certains dépôts, qui remplacent `revspan.review.requiredApprovals` : `{ \"workspace/dépôt\": 3 }`.",
+    "configuration.followedContributors": "Contributeurs dont vous voulez relire les nouvelles PR : une liste de `{ \"uuid\": \"…\", \"displayName\": \"…\" }`.",
+    "configuration.notifications.newPullRequest": "Notifier quand un contributeur suivi, ou quelqu'un qui vous a désigné relecteur, ouvre une PR à relire.",
+    "configuration.notifications.newVersion": "Notifier quand une PR que vous avez relue ou approuvée reçoit une nouvelle version.",
+    "configuration.notifications.buildFailed": "Notifier quand le build d'une de vos propres PR échoue.",
+    "configuration.refreshIntervalMinutes": "Minutes entre deux actualisations automatiques de « Mes PR », de 1 à 120.",
     "view.home": "Mes PR",
     "welcome.noToken": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:revspan.openSettings)",
     "welcome.noRepos": "Aucun dépôt suivi.\n[Choisir les dépôts](command:revspan.openSettings)"

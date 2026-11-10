@@ -1,7 +1,8 @@
 // Settings: Atlassian e-mail, token (secure storage), home repositories.
+import { normalizeReviewSettings } from '../../shared/review-settings.ts';
 import type { ConnectionTest, Settings, SettingsUpdate } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
-import { normalizeRepos, type Store } from '../infra/config.ts';
+import { normalizeRepos, type AppConfig, type Store } from '../infra/config.ts';
 import type { SecretStore } from '../infra/secrets.ts';
 import type { BitbucketSession } from './session.ts';
 
@@ -21,13 +22,13 @@ export class SettingsService {
     async get(): Promise<Settings> {
         const hasToken = await this.session.hasToken();
         const me = hasToken ? await this.session.me().catch(() => null) : null;
-        return { email: this.store.config.email, hasToken, tokenStore: this.secrets.kind, repos: [...this.store.config.repos], me };
+        return { email: this.store.config.email, hasToken, tokenStore: this.secrets.kind, repos: [...this.store.config.repos], review: this.store.config.review, me };
     }
 
     async update(patch: SettingsUpdate): Promise<Settings> {
         const { store, secrets } = this;
         const previousEmail = store.config.email;
-        const next: { email?: string; repos?: string[] } = {};
+        const next: Partial<AppConfig> = {};
 
         if (patch.email !== undefined) {
             const email = patch.email.trim();
@@ -48,6 +49,14 @@ export class SettingsService {
         }
         if (patch.repos !== undefined) {
             next.repos = normalizeRepos(patch.repos);
+        }
+        if (patch.review !== undefined) {
+            const current = store.config.review;
+            next.review = normalizeReviewSettings({
+                ...current,
+                ...patch.review,
+                notifications: { ...current.notifications, ...patch.review.notifications },
+            });
         }
         await store.saveConfig(next);
 

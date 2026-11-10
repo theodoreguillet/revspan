@@ -22,6 +22,14 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     email: z.string().max(320).optional(),
     token: z.string().max(4096).optional(),
     repos: z.array(z.string().max(300)).max(200).optional(),
+    // Values are checked by normalizeReviewSettings (an invalid value gets its default, not a 400).
+    review: z.object({
+        requiredApprovals: z.any(),
+        requiredApprovalsByRepo: z.any(),
+        followed: z.any(),
+        notifications: z.record(z.string(), z.any()).optional(),
+        refreshMinutes: z.any(),
+    }).partial().optional(),
 });
 
 export const newCommentSchema: z.ZodType<NewComment> = z.object({

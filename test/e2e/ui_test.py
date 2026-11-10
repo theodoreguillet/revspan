@@ -716,6 +716,40 @@ def run_checks(page):
         expect(page.locator('.rv-status')).to_have_text('Réglages enregistrés.')
     settings(page)
 
+    @check('settings: review section (overrides table, invalid input, disabled notifications) saved and restored')
+    def review_settings(page):
+        page.goto(url('settings'))
+        before = api('/settings')['review']
+        headers = page.locator('.rv-overrides th')
+        expect(page.locator('#set-approvals')).to_have_value(str(before['requiredApprovals']))
+        for toggle in page.locator('.rv-toggles input[type="checkbox"]').all():
+            expect(toggle).to_be_disabled()
+        expect(page.locator('.rv-toggles .help')).to_have_text('Les notifications ne sont disponibles que dans l’extension VS Code.')
+        page.click('text=Ajouter un dépôt')
+        expect(headers.nth(0)).to_have_text('Dépôt')
+        expect(headers.nth(1)).to_have_text('Approbations requises')
+        row = page.locator('.rv-overrides tbody tr').first
+        row.locator('input[type="text"]').fill('not a repo')
+        page.click('.rv-settings button[type="submit"]')
+        expect(page.locator('.rv-status')).to_contain_text('Ligne invalide')
+        assert api('/settings')['review'] == before, 'an invalid row must not be saved'
+        row.locator('input[type="text"]').fill('acme/e2e-test-repo')
+        row.locator('input[type="number"]').fill('3')
+        page.fill('#set-approvals', '1')
+        page.click('.rv-settings button[type="submit"]')
+        expect(page.locator('.rv-status')).to_have_text('Réglages enregistrés.')
+        saved = api('/settings')['review']
+        assert saved['requiredApprovals'] == 1 and saved['requiredApprovalsByRepo'] == {'acme/e2e-test-repo': 3}, saved
+        page.reload()
+        expect(page.locator('.rv-overrides tbody tr')).to_have_count(1)
+        page.click('.rv-overrides tbody tr >> text=Retirer')
+        expect(page.locator('.rv-overrides')).to_have_count(0)
+        page.fill('#set-approvals', str(before['requiredApprovals']))
+        page.click('.rv-settings button[type="submit"]')
+        expect(page.locator('.rv-status')).to_have_text('Réglages enregistrés.')
+        assert api('/settings')['review'] == before
+    review_settings(page)
+
     if FAKE_TOKEN:
         @check('token deleted: the home page points to the settings, then token put back')
         def no_token(page):

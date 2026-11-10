@@ -4,11 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import type { PrRef, VersionKind } from '../../shared/api.ts';
 import { parseRepoList } from '../../shared/repos.ts';
+import { normalizeReviewSettings, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { LocalReview } from '../core/model.ts';
 
 export interface AppConfig {
     email: string;
     repos: string[];
+    review: ReviewSettings;
 }
 
 /** Local state of a PR: "reviewed" mark, seen files, type of each version (key = hash abbreviated to 12). */
@@ -101,30 +103,52 @@ export interface RepoSource {
     set(repos: string[]): Promise<void>;
 }
 
+/** Review settings kept somewhere other than config.json (VS Code extension: revspan.review.* settings). */
+export interface ReviewSource {
+    /** Raw value, normalized by the Store. */
+    get(): unknown;
+    set(review: ReviewSettings): Promise<void>;
+}
+
 export class Store {
     readonly dir: string;
     private readonly repoSource: RepoSource | null;
+    private readonly reviewSource: ReviewSource | null;
     private readonly configFile: JsonFile<AppConfig>;
     private readonly stateFile: JsonFile<StateFile>;
 
-    constructor(dir: string, { repoSource = null }: { repoSource?: RepoSource | null } = {}) {
+    constructor(dir: string, { repoSource = null, reviewSource = null }: { repoSource?: RepoSource | null; reviewSource?: ReviewSource | null } = {}) {
         this.dir = dir;
         this.repoSource = repoSource;
+        this.reviewSource = reviewSource;
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-        this.configFile = new JsonFile(path.join(dir, 'config.json'), (raw) => ({ email: '', repos: [], ...(raw as Partial<AppConfig>) }));
+        this.configFile = new JsonFile(path.join(dir, 'config.json'), (raw) => {
+            const value = { email: '', repos: [], ...(raw as Partial<AppConfig>) };
+            return { ...value, review: normalizeReviewSettings(value.review) };
+        });
         this.stateFile = new JsonFile(path.join(dir, 'state.json'), (raw) => ({ prs: {}, ...(raw as Partial<StateFile>) }));
     }
 
     get config(): Readonly<AppConfig> {
         const value = this.configFile.read();
-        return this.repoSource ? { ...value, repos: normalizeRepos(this.repoSource.get()) } : value;
+        return {
+            ...value,
+            ...(this.repoSource ? { repos: normalizeRepos(this.repoSource.get()) } : {}),
+            ...(this.reviewSource ? { review: normalizeReviewSettings(this.reviewSource.get()) } : {}),
+        };
     }
 
-    async saveConfig({ repos, ...rest }: Partial<AppConfig>): Promise<AppConfig> {
+    async saveConfig({ repos, review, ...rest }: Partial<AppConfig>): Promise<AppConfig> {
         if (repos !== undefined && this.repoSource) {
             await this.repoSource.set(repos);
         }
+        if (review !== undefined && this.reviewSource) {
+            await this.reviewSource.set(review);
+        }
         const next = { ...this.configFile.read(), ...rest };
+        if (review !== undefined && !this.reviewSource) {
+            next.review = review;
+        }
         if (repos !== undefined && !this.repoSource) {
             next.repos = repos;
         }

@@ -1,7 +1,7 @@
 {
     "displayName": "Revspan for Bitbucket",
     "description": "Review Bitbucket PRs version by version, despite amend, rebase and force-push, in VS Code",
-    "capabilities.untrustedWorkspaces": "In an untrusted workspace, the list of followed repositories defined by the workspace is ignored.",
+    "capabilities.untrustedWorkspaces": "In an untrusted workspace, the followed repositories, the followed contributors and the per-repository approvals defined by the workspace are ignored.",
     "capabilities.virtualWorkspaces": "“Open file” needs a repository cloned on disk; everything else works.",
     "command.openHome": "Open Home",
     "command.category": "Revspan",
@@ -9,6 +9,13 @@
     "command.openSettings": "Settings (token, repositories)",
     "command.refresh": "Refresh",
     "configuration.repositories": "Bitbucket repositories whose open PRs appear in “My PRs”: one `workspace/repository` (or the repository URL) per entry. Can also be edited from ⚙ Settings in the Revspan panel.",
+    "configuration.requiredApprovals": "Approvals a PR needs (from participants other than its author) before it leaves your review queue. From 1 to 20, default 2.",
+    "configuration.requiredApprovalsByRepository": "Required approvals for specific repositories, which replace `revspan.review.requiredApprovals`: `{ \"workspace/repository\": 3 }`.",
+    "configuration.followedContributors": "Contributors whose new PRs you want to review: a list of `{ \"uuid\": \"…\", \"displayName\": \"…\" }`.",
+    "configuration.notifications.newPullRequest": "Notify when a followed contributor, or someone who designated you as a reviewer, opens a PR that needs review.",
+    "configuration.notifications.newVersion": "Notify when a PR you reviewed or approved receives a new version.",
+    "configuration.notifications.buildFailed": "Notify when the build of one of your own PRs fails.",
+    "configuration.refreshIntervalMinutes": "Minutes between two automatic refreshes of “My PRs”, from 1 to 120.",
     "view.home": "My PRs",
     "welcome.noToken": "No valid Bitbucket token.\n[Set up the token](command:revspan.openSettings)",
     "welcome.noRepos": "No repositories followed.\n[Choose repositories](command:revspan.openSettings)"

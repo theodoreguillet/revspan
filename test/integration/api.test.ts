@@ -117,6 +117,56 @@ describe('settings and security', () => {
         expect(JSON.stringify((await api('GET', '/api/settings')).body)).not.toContain(FAKE_TOKEN);
     });
 
+    it('review settings: defaults, round trip, merge of a partial update, invalid values normalized', async () => {
+        await setup();
+        const defaults = (await api<Settings>('GET', '/api/settings')).body.review;
+        expect(defaults).toEqual({
+            requiredApprovals: 2,
+            requiredApprovalsByRepo: {},
+            followed: [],
+            notifications: { newPullRequest: true, newVersion: true, buildFailed: false },
+            refreshMinutes: 5,
+        });
+
+        const saved = await api<Settings>('PUT', '/api/settings', {
+            review: { requiredApprovals: 3, requiredApprovalsByRepo: { [`${WS}/${REPO}`]: 1 }, followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }], refreshMinutes: 10 },
+        });
+        expect(saved.body.review).toMatchObject({ requiredApprovals: 3, requiredApprovalsByRepo: { [`${WS}/${REPO}`]: 1 }, followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }], refreshMinutes: 10 });
+        expect((await api<Settings>('GET', '/api/settings')).body.review).toEqual(saved.body.review);
+
+        // A partial update keeps the rest, the notifications are merged key by key.
+        const partial = await api<Settings>('PUT', '/api/settings', { review: { notifications: { buildFailed: true } } });
+        expect(partial.body.review).toMatchObject({ requiredApprovals: 3, refreshMinutes: 10, notifications: { newPullRequest: true, newVersion: true, buildFailed: true } });
+
+        const invalid = await api<Settings>('PUT', '/api/settings', {
+            review: { requiredApprovals: 0, requiredApprovalsByRepo: { [`${WS}/${REPO}`]: -2, 'acme/untracked': 0 }, refreshMinutes: 2.5 },
+        });
+        expect(invalid.status).toBe(200);
+        expect(invalid.body.review).toMatchObject({ requiredApprovals: 2, requiredApprovalsByRepo: {}, refreshMinutes: 5 });
+        expect((await api('PUT', '/api/settings', { review: 'nope' })).status).toBe(400);
+    });
+
+    it('invalid approval settings never move the whole queue: the default minimum of 2 applies', async () => {
+        await setup();
+        await api('PUT', '/api/settings', { review: { requiredApprovals: 0, requiredApprovalsByRepo: { [`${WS}/${REPO}`]: -1, 'acme/untracked': 5 } } });
+        const { body } = await api<Home>('GET', '/api/home');
+        expect(body.groups.flatMap((g) => g.prs).every((p) => p.requiredApprovals === 2)).toBe(true);
+        expect(groupsOf(body)[FAKE_PRS.others]).toBe('others');
+        expect(groupsOf(body)[FAKE_PRS.main]).toBe('to-do');
+    });
+
+    it('the minimum comes from the settings: a repository override changes the groups at once', async () => {
+        await setup();
+        expect(groupsOf((await api<Home>('GET', '/api/home')).body)[FAKE_PRS.others]).toBe('others');
+        await api('PUT', '/api/settings', { review: { requiredApprovalsByRepo: { [`${WS}/${REPO}`]: 3 } } });
+        let { body } = await api<Home>('GET', '/api/home');
+        expect(groupsOf(body)[FAKE_PRS.others]).toBe('to-do');
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ approvals: 2, requiredApprovals: 3, needsReview: true });
+        await api('PUT', '/api/settings', { review: { requiredApprovalsByRepo: {}, requiredApprovals: 1 } });
+        ({ body } = await api<Home>('GET', '/api/home'));
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ requiredApprovals: 1, needsReview: false });
+    });
+
     it('input validation (400) and unknown routes (404)', async () => {
         const { app } = await setup();
         expect((await api('PUT', '/api/settings', { repos: 'pas une liste' })).status).toBe(400);

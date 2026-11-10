@@ -1,6 +1,7 @@
 // "My PRs" home: open PRs of the configured repositories, grouped by the review queue (core/review-queue.ts).
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import { approvalHoldsSince } from '../../shared/approval.ts';
+import { requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
 import { buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
@@ -14,9 +15,6 @@ const HOME_TTL_MS = 60000;
 
 /** Group order of the home page and the VS Code tree (each translates the key into its title). */
 const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'mine', 'waiting', 'others'];
-
-/** Approvals a PR needs (Bitbucket does not expose the merge checks without admin rights). */
-const REQUIRED_APPROVALS = 2;
 
 interface Card {
     group: HomeGroupKey;
@@ -41,18 +39,19 @@ export class HomeService {
         }
         const client = await this.session.getClient();
         const me = await this.session.me();
-        const { repos } = this.store.config;
-        return this.cache.getLive(`live:home:${repos.join(',')}`, HOME_TTL_MS, () => this.compute(client, me, repos));
+        const { repos, review } = this.store.config;
+        // The settings are part of the key: a change of minimum shows at once.
+        return this.cache.getLive(`live:home:${repos.join(',')}:${JSON.stringify(review)}`, HOME_TTL_MS, () => this.compute(client, me, repos, review));
     }
 
-    private async compute(client: BitbucketClient, me: User | null, repos: readonly string[]): Promise<Home> {
+    private async compute(client: BitbucketClient, me: User | null, repos: readonly string[], review: ReviewSettings): Promise<Home> {
         const errors: Home['errors'] = [];
         const cards: Card[] = [];
         await Promise.all(repos.map(async (fullName) => {
             const [workspace = '', repo = ''] = fullName.split('/');
             try {
                 const list = await client.openPullRequests(workspace, repo);
-                cards.push(...await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw))));
+                cards.push(...await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw, requiredApprovalsFor(review, fullName)))));
             } catch (error) {
                 errors.push({ repo: fullName, ...errorPayload(error) });
             }
@@ -66,7 +65,7 @@ export class HomeService {
         return { me, repos: [...repos], groups, errors };
     }
 
-    private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest): Promise<Card> {
+    private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest, requiredApprovals: number): Promise<Card> {
         const meUuid = me?.uuid ?? null;
         const isMe = (uuid: string | undefined): boolean => meUuid !== null && uuid === meUuid;
         const participants = raw.participants ?? [];
@@ -75,7 +74,6 @@ export class HomeService {
         const involved = designatedReviewer || participants.some((p) => isMe(p.user?.uuid));
         const local = this.store.prState(prKeyOf(ref));
         const approvals = participants.filter((p) => p.approved && p.user?.uuid !== raw.author?.uuid).length;
-        const requiredApprovals = REQUIRED_APPROVALS;
         const base: PrCard = {
             ...ref,
             title: raw.title ?? '',

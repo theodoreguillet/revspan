@@ -1,5 +1,5 @@
 // Extension-side assembly: the same services and the same HTTP application as the local server,
-// with the token in VS Code's secure storage, the tracked repositories in the revspan.repositories setting
+// with the token in VS Code's secure storage, the tracked repositories and the review settings in the revspan.* settings
 // and the other data in the extension's global storage.
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -8,7 +8,7 @@ import type { SecretStore } from '../server/infra/secrets.ts';
 import { DEFAULT_BASE_URL } from '../server/bitbucket/client.ts';
 import { createHttpApp } from '../server/http/app.ts';
 import { Cache } from '../server/infra/cache.ts';
-import { Store, type RepoSource } from '../server/infra/config.ts';
+import { Store, type RepoSource, type ReviewSource } from '../server/infra/config.ts';
 import { createServices, type Services } from '../server/services/index.ts';
 import { IN_MEMORY_HOST } from './lib/bridge.ts';
 import { settingTarget } from './lib/setting-target.ts';
@@ -23,6 +23,15 @@ export const REPOS_SETTING = { section: 'revspan', key: 'repositories', id: 'rev
 
 const TOKEN_KEY_PREFIX = 'revspan.bitbucket-token:';
 
+/** Writes a revspan.* setting at the level that gives the effective value (otherwise a .vscode/settings.json would mask the save). */
+async function writeSetting(key: string, value: unknown): Promise<void> {
+    const config = vscode.workspace.getConfiguration(REPOS_SETTING.section);
+    const target = settingTarget(config.inspect(key), vscode.workspace.isTrusted) === 'workspace'
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
+    await config.update(key, value, target);
+}
+
 function vscodeRepoSource(): RepoSource {
     const config = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(REPOS_SETTING.section);
     return {
@@ -30,12 +39,52 @@ function vscodeRepoSource(): RepoSource {
             const value = config().get<unknown>(REPOS_SETTING.key);
             return Array.isArray(value) ? value.filter((repo): repo is string => typeof repo === 'string') : [];
         },
-        async set(repos) {
-            // Written at the level that gives the effective value (otherwise a .vscode/settings.json would mask the save).
-            const target = settingTarget(config().inspect(REPOS_SETTING.key), vscode.workspace.isTrusted) === 'workspace'
-                ? vscode.ConfigurationTarget.Workspace
-                : vscode.ConfigurationTarget.Global;
-            await config().update(REPOS_SETTING.key, repos, target);
+        set: (repos) => writeSetting(REPOS_SETTING.key, repos),
+    };
+}
+
+/** VS Code settings behind each field of the review settings (keys under "revspan."). */
+export const REVIEW_SETTING_KEYS = {
+    requiredApprovals: 'review.requiredApprovals',
+    requiredApprovalsByRepo: 'review.requiredApprovalsByRepository',
+    followed: 'review.followedContributors',
+    newPullRequest: 'notifications.newPullRequest',
+    newVersion: 'notifications.newVersion',
+    buildFailed: 'notifications.buildFailed',
+    refreshMinutes: 'refreshIntervalMinutes',
+} as const;
+
+/** Review queue, notification and refresh settings kept in the VS Code settings (the Store normalizes what is read). */
+export function vscodeReviewSource(): ReviewSource {
+    const config = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(REPOS_SETTING.section);
+    const read = (key: string): unknown => config().get<unknown>(key);
+    const keys = REVIEW_SETTING_KEYS;
+    return {
+        get() {
+            return {
+                requiredApprovals: read(keys.requiredApprovals),
+                requiredApprovalsByRepo: read(keys.requiredApprovalsByRepo),
+                followed: read(keys.followed),
+                notifications: { newPullRequest: read(keys.newPullRequest), newVersion: read(keys.newVersion), buildFailed: read(keys.buildFailed) },
+                refreshMinutes: read(keys.refreshMinutes),
+            };
+        },
+        async set(review) {
+            const values: [string, unknown][] = [
+                [keys.requiredApprovals, review.requiredApprovals],
+                [keys.requiredApprovalsByRepo, review.requiredApprovalsByRepo],
+                [keys.followed, review.followed],
+                [keys.newPullRequest, review.notifications.newPullRequest],
+                [keys.newVersion, review.notifications.newVersion],
+                [keys.buildFailed, review.notifications.buildFailed],
+                [keys.refreshMinutes, review.refreshMinutes],
+            ];
+            for (const [key, value] of values) {
+                // Only what changed: an untouched setting stays absent from the user's settings.json.
+                if (JSON.stringify(read(key)) !== JSON.stringify(value)) {
+                    await writeSetting(key, value);
+                }
+            }
         },
     };
 }
@@ -74,7 +123,7 @@ function testOverrides(mode: vscode.ExtensionMode): { baseUrl?: string; email?: 
 
 export async function createExtensionApp(context: vscode.ExtensionContext): Promise<ExtensionApp> {
     const dir = context.globalStorageUri.fsPath;
-    const store = new Store(dir, { repoSource: vscodeRepoSource() });
+    const store = new Store(dir, { repoSource: vscodeRepoSource(), reviewSource: vscodeReviewSource() });
     const cache = new Cache(path.join(dir, 'cache'));
     const overrides = testOverrides(context.extensionMode);
     const services = createServices({ store, secrets: vscodeSecretStore(context.secrets), cache, baseUrl: overrides.baseUrl ?? DEFAULT_BASE_URL });

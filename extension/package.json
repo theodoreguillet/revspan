@@ -29,7 +29,7 @@
         "untrustedWorkspaces": {
             "supported": "limited",
             "description": "%capabilities.untrustedWorkspaces%",
-            "restrictedConfigurations": ["revspan.repositories"]
+            "restrictedConfigurations": ["revspan.repositories", "revspan.review.requiredApprovalsByRepository", "revspan.review.followedContributors"]
         },
         "virtualWorkspaces": {
             "supported": "limited",
@@ -54,6 +54,54 @@
                     "items": { "type": "string" },
                     "default": [],
                     "markdownDescription": "%configuration.repositories%"
+                },
+                "revspan.review.requiredApprovals": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "default": 2,
+                    "markdownDescription": "%configuration.requiredApprovals%"
+                },
+                "revspan.review.requiredApprovalsByRepository": {
+                    "type": "object",
+                    "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 20 },
+                    "default": {},
+                    "markdownDescription": "%configuration.requiredApprovalsByRepository%"
+                },
+                "revspan.review.followedContributors": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "uuid": { "type": "string" },
+                            "displayName": { "type": "string" }
+                        },
+                        "required": ["uuid"]
+                    },
+                    "default": [],
+                    "markdownDescription": "%configuration.followedContributors%"
+                },
+                "revspan.notifications.newPullRequest": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "%configuration.notifications.newPullRequest%"
+                },
+                "revspan.notifications.newVersion": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "%configuration.notifications.newVersion%"
+                },
+                "revspan.notifications.buildFailed": {
+                    "type": "boolean",
+                    "default": false,
+                    "markdownDescription": "%configuration.notifications.buildFailed%"
+                },
+                "revspan.refreshIntervalMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 120,
+                    "default": 5,
+                    "markdownDescription": "%configuration.refreshIntervalMinutes%"
                 }
             }
         },

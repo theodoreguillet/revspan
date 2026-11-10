@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Store, type RepoSource } from '../../src/server/infra/config.ts';
+import { Store, type RepoSource, type ReviewSource } from '../../src/server/infra/config.ts';
+import { DEFAULT_REVIEW_SETTINGS, normalizeReviewSettings, type ReviewSettings } from '../../src/shared/review-settings.ts';
 
 const dirs: string[] = [];
 const tempDir = (): string => {
@@ -34,13 +35,13 @@ describe('local settings (Store)', () => {
     it('without an external source: repositories and e-mail in config.json', async () => {
         const dir = tempDir();
         const store = new Store(dir);
-        expect(store.config).toEqual({ email: '', repos: [] });
+        expect(store.config).toEqual({ email: '', repos: [], review: DEFAULT_REVIEW_SETTINGS });
         await store.saveConfig({ email: 'a@b.c', repos: ['ws/a'] });
-        expect(configFile(dir)).toEqual({ email: 'a@b.c', repos: ['ws/a'] });
+        expect(configFile(dir)).toMatchObject({ email: 'a@b.c', repos: ['ws/a'] });
         expect(new Store(dir).config.repos).toEqual(['ws/a']);
     });
 
-    it('with an external source: repositories read and written in the source, normalized, never in config.json', async () => {
+    it('with an external source: repositories read and written in the source, normalized, the saved value never reaches config.json', async () => {
         const dir = tempDir();
         const source = memorySource(['https://bitbucket.org/ws/a/src/main/', 'not a repo', 'ws/a', 'ws/b']);
         const store = new Store(dir, { repoSource: source });
@@ -48,11 +49,57 @@ describe('local settings (Store)', () => {
 
         const saved = await store.saveConfig({ email: 'a@b.c', repos: ['ws/c'] });
         expect(source.value).toEqual(['ws/c']);
-        expect(saved).toEqual({ email: 'a@b.c', repos: ['ws/c'] });
-        expect(configFile(dir)).toEqual({ email: 'a@b.c', repos: [] });
+        expect(saved).toMatchObject({ email: 'a@b.c', repos: ['ws/c'] });
+        expect(configFile(dir)).toMatchObject({ email: 'a@b.c', repos: [] });
 
         source.value = ['ws/d'];
         expect(store.config.repos).toEqual(['ws/d']);
+    });
+});
+
+/** In-memory review settings source (like the VS Code revspan.review.* settings). */
+function memoryReviewSource(initial: unknown): ReviewSource & { value: unknown } {
+    return {
+        value: initial,
+        get() {
+            return this.value;
+        },
+        async set(review: ReviewSettings) {
+            this.value = review;
+        },
+    };
+}
+
+describe('review settings (Store)', () => {
+    it('without an external source: defaults, then saved in config.json and normalized', async () => {
+        const dir = tempDir();
+        const store = new Store(dir);
+        expect(store.config.review).toEqual(DEFAULT_REVIEW_SETTINGS);
+        const review = normalizeReviewSettings({ requiredApprovals: 3, requiredApprovalsByRepo: { 'acme/records-api': 1 } });
+        await store.saveConfig({ review });
+        expect(configFile(dir).review).toEqual(review);
+        expect(new Store(dir).config.review).toEqual(review);
+    });
+
+    it('config.json with invalid review values: defaults for those values', () => {
+        const dir = tempDir();
+        fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ email: 'a@b.c', review: { requiredApprovals: 0, refreshMinutes: 10 } }));
+        expect(new Store(dir).config.review).toEqual({ ...DEFAULT_REVIEW_SETTINGS, refreshMinutes: 10 });
+    });
+
+    it('with an external source: read and written in the source (re-read every time), the saved value never reaches config.json', async () => {
+        const dir = tempDir();
+        const source = memoryReviewSource({ requiredApprovals: 4 });
+        const store = new Store(dir, { reviewSource: source });
+        expect(store.config.review.requiredApprovals).toBe(4);
+
+        const review = normalizeReviewSettings({ requiredApprovals: 3 });
+        await store.saveConfig({ review });
+        expect(source.value).toEqual(review);
+        expect(configFile(dir).review).toEqual(DEFAULT_REVIEW_SETTINGS);
+
+        source.value = { requiredApprovals: 0 };
+        expect(store.config.review).toEqual(DEFAULT_REVIEW_SETTINGS);
     });
 });
 
@@ -114,7 +161,7 @@ describe('state shared between several windows (two Stores, same folder)', () =>
         const c = new Store(dir);
         await a.saveConfig({ repos: ['acme/records-api', 'acme/billing'] });
         await c.saveConfig({ email: 'rev@example.com' });
-        expect(configFile(dir)).toEqual({ email: 'rev@example.com', repos: ['acme/records-api', 'acme/billing'] });
+        expect(configFile(dir)).toEqual({ email: 'rev@example.com', repos: ['acme/records-api', 'acme/billing'], review: DEFAULT_REVIEW_SETTINGS });
     });
 
     it('deleted or corrupt file: default values', () => {

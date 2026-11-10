@@ -6,18 +6,19 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Hono } from 'hono';
 import type * as vscode from 'vscode';
-import type { PrDetail } from '../../src/shared/api.ts';
+import type { PrDetail, Settings } from '../../src/shared/api.ts';
 import { createHttpApp } from '../../src/server/http/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import { Store } from '../../src/server/infra/config.ts';
 import { createSecretStore } from '../../src/server/infra/secrets.ts';
 import { createServices, type Services } from '../../src/server/services/index.ts';
+import { vscodeReviewSource } from '../../src/extension/app-context.ts';
 import { IN_MEMORY_HOST, callApi, isSuccessfulWrite } from '../../src/extension/lib/bridge.ts';
 import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
 import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
-import { FakeWebviewPanel, Uri, env, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
+import { ConfigurationTarget, FakeWebviewPanel, Uri, env, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
 
 vi.mock('vscode', () => import('../support/fake-vscode.ts'));
 
@@ -76,6 +77,63 @@ describe('extension bridge (in-memory HTTP application)', () => {
         const sides = await services.prs.fileSides({ workspace: WS, repo: REPO, id: FAKE_PRS.main }, 2, 4, { path: 'package-lock.json', oldPath: null });
         expect(sides.oldText).toContain('1.0.0-rc.1');
         expect(sides.newText).toContain('1.0.0-rc.2');
+    });
+});
+
+describe('review settings in the VS Code configuration', () => {
+    const settings = (): vscode.WorkspaceConfiguration => workspace.getConfiguration('revspan') as unknown as vscode.WorkspaceConfiguration;
+
+    /** The same assembly as the extension's, on the fake VS Code settings. */
+    async function bridge(): Promise<{ http: Hono; store: Store }> {
+        const store = new Store(path.join(dir, 'vscode-store'), { reviewSource: vscodeReviewSource() });
+        const wired = createServices({ store, secrets: await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } }), cache: new Cache(path.join(dir, 'vscode-cache')), baseUrl: fake.url });
+        return { store, http: createHttpApp({ version: 'test', settings: wired.settings, home: wired.home, prs: wired.prs, allowedHosts: () => [IN_MEMORY_HOST] }) };
+    }
+
+    beforeEach(() => resetFakeVscode());
+
+    it('read from the settings (manifest defaults when untouched), invalid values normalized', async () => {
+        const { http: app, store } = await bridge();
+        expect(store.config.review).toMatchObject({ requiredApprovals: 2, refreshMinutes: 5, notifications: { newPullRequest: true, newVersion: true, buildFailed: false } });
+        await settings().update('review.requiredApprovals', 0, ConfigurationTarget.Global);
+        await settings().update('review.requiredApprovalsByRepository', { 'acme/records-api': 3, 'acme/bad': -1 }, ConfigurationTarget.Global);
+        await settings().update('review.followedContributors', [{ uuid: '{cam}', displayName: 'Camille Durand' }, { uuid: '{cam}', displayName: 'Dup' }], ConfigurationTarget.Global);
+        await settings().update('refreshIntervalMinutes', 15, ConfigurationTarget.Global);
+        const result = await callApi(app, { method: 'GET', path: '/api/settings' });
+        expect((result.body as Settings).review).toMatchObject({
+            requiredApprovals: 2,
+            requiredApprovalsByRepo: { 'acme/records-api': 3 },
+            followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }],
+            refreshMinutes: 15,
+        });
+    });
+
+    it('written to the settings, at the level that gives the effective value, only what changed', async () => {
+        const { http: app } = await bridge();
+        await settings().update('review.requiredApprovals', 4, ConfigurationTarget.Workspace);
+        const put = await callApi(app, {
+            method: 'PUT',
+            path: '/api/settings',
+            body: { review: { requiredApprovalsByRepo: { 'acme/records-api': 1 }, notifications: { buildFailed: true } } },
+        });
+        expect(put.status).toBe(200);
+        expect((put.body as Settings).review).toMatchObject({ requiredApprovals: 4, requiredApprovalsByRepo: { 'acme/records-api': 1 }, notifications: { buildFailed: true, newVersion: true } });
+        expect(settings().inspect('review.requiredApprovalsByRepository')?.globalValue).toEqual({ 'acme/records-api': 1 });
+        expect(settings().inspect('notifications.buildFailed')?.globalValue).toBe(true);
+        // Untouched settings are not written, and the workspace value was left alone.
+        expect(settings().inspect('notifications.newVersion')?.globalValue).toBeUndefined();
+        expect(settings().inspect('review.requiredApprovals')).toMatchObject({ workspaceValue: 4, globalValue: undefined });
+
+        await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { requiredApprovals: 3 } } });
+        expect(settings().inspect('review.requiredApprovals')).toMatchObject({ workspaceValue: 3, globalValue: undefined });
+    });
+
+    it('untrusted workspace: written at the user level', async () => {
+        const { http: app } = await bridge();
+        await settings().update('refreshIntervalMinutes', 30, ConfigurationTarget.Workspace);
+        workspace.isTrusted = false;
+        await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { refreshMinutes: 10 } } });
+        expect(settings().inspect('refreshIntervalMinutes')).toMatchObject({ workspaceValue: 30, globalValue: 10 });
     });
 });
 

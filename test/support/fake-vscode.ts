@@ -134,8 +134,42 @@ export const recorded = {
     opened: [] as string[],
 };
 
+export const ConfigurationTarget = { Global: 1, Workspace: 2 };
+
+interface SettingLevels {
+    global?: unknown;
+    workspace?: unknown;
+}
+
+/** Settings written by the extension, per level; defaults come from the manifest (as VS Code does). */
+const settingLevels = new Map<string, SettingLevels>();
+const manifest = JSON.parse(fs.readFileSync(new URL('../../extension/package.json', import.meta.url), 'utf8')) as {
+    contributes: { configuration: { properties: Record<string, { default?: unknown }> } };
+};
+const settingDefault = (id: string): unknown => manifest.contributes.configuration.properties[id]?.default;
+
 export const workspace = {
     workspaceFolders: [] as { uri: Uri }[],
+    isTrusted: true,
+    /** Reads and writes the fake settings of a section (get, inspect, update). */
+    getConfiguration(section: string) {
+        const id = (key: string): string => `${section}.${key}`;
+        return {
+            get<T>(key: string): T | undefined {
+                const levels = settingLevels.get(id(key));
+                return (levels?.workspace ?? levels?.global ?? settingDefault(id(key))) as T | undefined;
+            },
+            inspect(key: string): { globalValue?: unknown; workspaceValue?: unknown } {
+                const levels = settingLevels.get(id(key));
+                return { globalValue: levels?.global, workspaceValue: levels?.workspace };
+            },
+            async update(key: string, value: unknown, target: number): Promise<void> {
+                const levels = settingLevels.get(id(key)) ?? {};
+                levels[target === ConfigurationTarget.Workspace ? 'workspace' : 'global'] = value;
+                settingLevels.set(id(key), levels);
+            },
+        };
+    },
 };
 
 export const window = {
@@ -179,5 +213,7 @@ export function resetFakeVscode(): void {
         list.length = 0;
     }
     workspace.workspaceFolders = [];
+    workspace.isTrusted = true;
+    settingLevels.clear();
     env.language = 'en';
 }

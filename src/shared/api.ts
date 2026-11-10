@@ -1,6 +1,8 @@
 // Local API contract, shared by the server (src/server) and the page (src/web).
 // All routes are under /api; any request other than GET carries the X-Revspan: 1 header.
 
+import type { NotificationPrefs, ReviewSettings } from './review-settings.ts';
+
 export const MUTATION_HEADER = 'X-Revspan';
 
 export type ErrorCode =
@@ -65,6 +67,7 @@ export interface Settings {
     hasToken: boolean;
     tokenStore: TokenStoreKind;
     repos: string[];
+    review: ReviewSettings;
     me: User | null;
 }
 
@@ -73,6 +76,8 @@ export interface SettingsUpdate {
     email?: string;
     token?: string;
     repos?: string[];
+    /** Merged into the current values (notifications key by key); invalid values are replaced by their default. */
+    review?: Partial<Omit<ReviewSettings, 'notifications'>> & { notifications?: Partial<NotificationPrefs> };
 }
 
 export type ConnectionTest = { ok: true; me: User } | { ok: false; error: ApiErrorBody['error'] };
