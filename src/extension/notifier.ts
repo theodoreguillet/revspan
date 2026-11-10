@@ -7,7 +7,7 @@ import type { PrService } from '../server/services/pr-service.ts';
 import type { BitbucketSession } from '../server/services/session.ts';
 import { hostL10n } from './host-l10n.ts';
 import {
-    capNotifications, codeChangedSince, planNotifications, versionCandidates, type CodeChanges, type PendingNotification, type VersionCandidate,
+    capNotifications, codeChangedSince, forgetRepositories, planNotifications, versionCandidates, type CodeChanges, type PendingNotification, type VersionCandidate,
 } from './lib/notifications.ts';
 
 /** First poll after activation: late enough not to slow VS Code's startup. */
@@ -58,6 +58,8 @@ export class Notifier implements vscode.Disposable {
     private disposed = false;
     /** This window skipped polls (nothing to notify or show): its next poll records what it sees without notifying. */
     private needsBaseline = false;
+    /** Repositories of this window's settings when last looked at: the ones removed since are forgotten. */
+    private repos: readonly string[];
 
     /**
      * onPolled: called after each completed poll (the home was just read, the tree can show it).
@@ -77,6 +79,7 @@ export class Notifier implements vscode.Disposable {
         this.prs = prs;
         this.onPolled = onPolled;
         this.isVisible = isVisible;
+        this.repos = store.config.repos;
     }
 
     /** One poll shortly after startup, then one every revspan.refreshIntervalMinutes. */
@@ -120,6 +123,21 @@ export class Notifier implements vscode.Disposable {
             console.warn(`revspan: background refresh failed (${(error as Error).message})`);
         } finally {
             this.polling = false;
+        }
+    }
+
+    /**
+     * Called when revspan.repositories changes: forgets what was recorded for the repositories this window no longer
+     * tracks. Another window still tracking one records a silent baseline for it on its next poll.
+     */
+    repositoriesChanged(): void {
+        const current = this.store.config.repos;
+        const removed = this.repos.filter((repo) => !current.includes(repo));
+        this.repos = current;
+        if (removed.length > 0) {
+            this.store.updateNotified((state) => {
+                state.seen = forgetRepositories(state, removed).seen;
+            });
         }
     }
 

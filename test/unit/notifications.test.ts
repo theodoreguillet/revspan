@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Home, HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
 import type { NotificationPrefs } from '../../src/shared/review-settings.ts';
 import type { NotifiedState } from '../../src/server/infra/config.ts';
-import { capNotifications, codeChangedSince, planNotifications, versionCandidates, type PendingNotification } from '../../src/extension/lib/notifications.ts';
+import {
+    capNotifications, codeChangedSince, forgetRepositories, planNotifications, versionCandidates, type PendingNotification,
+} from '../../src/extension/lib/notifications.ts';
 
 const ME: User = { uuid: '{me}', displayName: 'Robin Martin' };
 const CAM: User = { uuid: '{cam}', displayName: 'Camille Durand' };
@@ -259,10 +261,38 @@ describe('notification planner', () => {
             expect(run(back, first.next).sent).toEqual([]);
         });
 
-        it('closed PRs and untracked repositories are forgotten', () => {
+        it('closed PRs of a repository read without error are forgotten; repositories this home does not track are kept', () => {
             const baseline = baselineOf(homeOf({ 'to-do': [card(58), card(59), other(60)] }, { repos: [REPO, OTHER] }));
             const { next } = run(homeOf({ 'to-do': [card(58)] }), baseline);
-            expect(Object.keys(next.seen).filter((key) => key.includes('#')).sort()).toEqual([`${REPO}#58`]);
+            expect(Object.keys(next.seen).filter((key) => key.includes('#')).sort()).toEqual([`${REPO}#58`, `${OTHER}#60`]);
+            expect(next.seen[OTHER]).toBe(baseline.seen[OTHER]);
+        });
+
+        it('I1: two windows tracking different repositories, polling in turn: each new followed "to-do" PR notifies once', () => {
+            // Window A tracks records-api, window B records-web (workspace-level settings), one shared state.json.
+            const windowA = (...ids: number[]): Home => homeOf({ 'to-do': ids.map((id) => card(id, { followed: true })) });
+            const windowB = (...ids: number[]): Home => homeOf({ 'to-do': ids.map((id) => other(id, { followed: true })) }, { repos: [OTHER] });
+            let state = EMPTY;
+            const poll = (home: Home): string[] => {
+                const result = run(home, state);
+                state = result.next;
+                return result.sent;
+            };
+            expect(poll(windowA(1))).toEqual([]);
+            expect(poll(windowB(101))).toEqual([]);
+            expect(poll(windowA(1, 2))).toEqual(['newPullRequest #2']);
+            expect(poll(windowB(101, 102))).toEqual(['newPullRequest #102']);
+            expect(poll(windowA(1, 2, 3))).toEqual(['newPullRequest #3']);
+            expect(poll(windowB(101, 102))).toEqual([]);
+            expect(poll(windowA(1, 2, 3))).toEqual([]);
+        });
+
+        it('forgetRepositories drops every entry of the given repositories and keeps the others', () => {
+            const baseline = baselineOf(homeOf({ 'to-do': [card(61, { designatedReviewer: true })], mine: [other(62, { author: ME, build: failedBuild })] }, { repos: [REPO, OTHER] }));
+            const next = forgetRepositories(baseline, [OTHER]);
+            expect(Object.keys(next.seen).sort()).toEqual([REPO, `${REPO}#61`, `${REPO}#61#reviewer`]);
+            expect(next.initialized).toBe(true);
+            expect(forgetRepositories(baseline, [])).toEqual(baseline);
         });
     });
 

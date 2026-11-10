@@ -112,8 +112,10 @@ function kindsOf(group: HomeGroupKey, card: PrCard, state: NotifiedState, codeCh
 /**
  * Notifications for this home given what was already covered, and the state to record instead. Every head is recorded
  * whatever the preferences, so switching one on later notifies nothing old. Nothing is notified on the first run, nor
- * for the PRs of a repository seen for the first time (newly tracked, or unreadable until now). Closed PRs and
- * untracked repositories are forgotten. At most one notification per PR.
+ * for the PRs of a repository seen for the first time (newly tracked, or unreadable until now). Only the closed PRs of
+ * the repositories this home read in full are forgotten: another window of the profile may track other repositories,
+ * whose records stay (the notifier forgets a repository removed from the settings, see forgetRepositories). At most one
+ * notification per PR.
  */
 export function planNotifications(home: Home, prefs: NotificationPrefs, state: NotifiedState, codeChanged: CodeChanges = {}): { notifications: PendingNotification[]; next: NotifiedState } {
     const tracked = new Set(home.repos);
@@ -126,10 +128,11 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
             seen[key] = value;
         }
     };
-    // An unreadable repository keeps its records: its PRs are out of sight for this run, not closed.
+    // Records of a repository this home did not read are kept: untracked here (another window's), or unreadable for this
+    // run (its PRs are out of sight, not closed).
     for (const key of Object.keys(state.seen)) {
         const repo = repoOfKey(key);
-        if (tracked.has(repo) && unreadable.has(repo)) {
+        if (!tracked.has(repo) || unreadable.has(repo)) {
             keep(key);
         }
     }
@@ -168,6 +171,15 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
         }
     }
     return { notifications, next: { initialized: true, seen } };
+}
+
+/**
+ * State without any record of these repositories (removed from the settings): tracked again later, a repository records
+ * a silent baseline instead of notifying what happened meanwhile.
+ */
+export function forgetRepositories(state: NotifiedState, repos: readonly string[]): NotifiedState {
+    const removed = new Set(repos);
+    return { initialized: state.initialized, seen: Object.fromEntries(Object.entries(state.seen).filter(([key]) => !removed.has(repoOfKey(key)))) };
 }
 
 /** The notifications to show one by one (most important first), and the others, gathered in one summary. */

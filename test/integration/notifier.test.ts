@@ -361,6 +361,27 @@ describe('cycles on stubbed services', () => {
         });
     });
 
+    it('a repository removed from the settings is forgotten, so tracking it again records a silent baseline', async () => {
+        const web = `${WS}/records-web`;
+        const both = (...prs: PrCard[]): Home => ({ ...todo(...prs), repos: [`${WS}/${REPO}`, web] });
+        const webCard = (id: number): PrCard => card(id, { repo: 'records-web', followed: true });
+        let current = both(card(1, { followed: true }), webCard(2));
+        const { notifier, store } = await stubbed({ repos: [`${WS}/${REPO}`, web], get: async () => current });
+        await notifier.poll();
+        expect(store.notified().seen[web]).toBeDefined();
+
+        await store.saveConfig({ repos: [`${WS}/${REPO}`] });
+        notifier.repositoriesChanged();
+        expect(Object.keys(store.notified().seen).filter((key) => key.startsWith(web))).toEqual([]);
+        expect(store.notified().seen[`${WS}/${REPO}#1`]).toBeDefined();
+
+        await store.saveConfig({ repos: [`${WS}/${REPO}`, web] });
+        notifier.repositoriesChanged();
+        current = both(card(1, { followed: true }), webCard(2), webCard(3));
+        await notifier.poll();
+        expect(recorded.infos).toEqual([]);
+    });
+
     it('burst: at most 3 toasts, then one summary whose "Show" focuses the Revspan view; everything recorded', async () => {
         let current = todo();
         const { notifier, store } = await stubbed({ get: async () => current });
