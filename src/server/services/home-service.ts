@@ -29,7 +29,7 @@ const WAIT_STEP_MS = 100;
 /** To increment if the activity kept for the home changes shape (invalidates the disk cache). */
 const ACTIVITY_FORMAT = 2;
 /** To increment if the shared home changes shape (a window running an older version then ignores it). */
-const HOME_FORMAT = 1;
+const HOME_FORMAT = 2;
 
 /** Group order of the home page and the VS Code tree (each translates the key into its title). */
 const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'mine', 'waiting', 'others'];
@@ -196,6 +196,7 @@ export class HomeService {
         const me = await this.session.me();
         const recheckMs = recheckAgeMs(review.refreshMinutes);
         const errors: Home['errors'] = [];
+        const truncated: Home['truncated'] = [];
         const cards: Card[] = [];
         await Promise.all(repos.map(async (fullName) => {
             const [workspace = '', repo = ''] = fullName.split('/');
@@ -205,7 +206,10 @@ export class HomeService {
             let repoCards: Card[];
             try {
                 const list = await client.openPullRequests(workspace, repo);
-                repoCards = await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw, review)));
+                if (list.truncated) {
+                    truncated.push({ repo: fullName, count: list.prs.length });
+                }
+                repoCards = await Promise.all(list.prs.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw, review)));
             } catch (error) {
                 errors.push({ repo: fullName, ...errorPayload(error) });
                 return;
@@ -229,7 +233,8 @@ export class HomeService {
             prs: cards.filter((c) => c.group === group).map((c) => c.data).sort((a, b) => b.lastPushAt.localeCompare(a.lastPushAt)),
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
-        const home: Home = { me, repos: [...repos], groups, errors };
+        truncated.sort((a, b) => a.repo.localeCompare(b.repo));
+        const home: Home = { me, repos: [...repos], groups, errors, truncated };
         this.last = { key, at: startedAt, home };
         // An incomplete home (unreadable repository, unknown profile) is not shared: the other windows try for themselves.
         if (errors.length === 0 && me !== null) {

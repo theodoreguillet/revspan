@@ -177,6 +177,31 @@ describe('BitbucketClient: commit erased after being cached', () => {
     });
 });
 
+describe('BitbucketClient: open PR list', () => {
+    const page = (ids: number[], next?: string): Response => jsonResponse(200, { values: ids.map((id) => ({ id })), ...(next ? { next } : {}) });
+    const nextPage = (n: number): string => `${BASE}/repositories/acme/records-api/pullrequests?page=${n}`;
+
+    it('I5: reads at most 4 pages of 50 and says when the list was cut there (a next page was still announced)', async () => {
+        const fetchImpl = mockFetch(page([1], nextPage(2)), page([2], nextPage(3)), page([3], nextPage(4)), page([4], nextPage(5)));
+        const list = await makeClient(fetchImpl).openPullRequests('acme', 'records-api');
+        expect(list).toEqual({ prs: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }], truncated: true });
+        expect(fetchImpl).toHaveBeenCalledTimes(4);
+        expect(new URL(String(fetchImpl.mock.calls[0]?.[0])).searchParams.get('pagelen')).toBe('50');
+    });
+
+    it('I5: a last page without a next one: complete', async () => {
+        const fetchImpl = mockFetch(page([1, 2], nextPage(2)), page([3]));
+        expect(await makeClient(fetchImpl).openPullRequests('acme', 'records-api')).toEqual({ prs: [{ id: 1 }, { id: 2 }, { id: 3 }], truncated: false });
+    });
+
+    it('I5: the cap can be lowered (tests): page length and number of pages', async () => {
+        const fetchImpl = mockFetch(page([1, 2], nextPage(2)));
+        const client = new BitbucketClient({ baseUrl: BASE, auth: { email: 'a@acme.test', token: TOKEN }, cache: new Cache(null), fetchImpl, prListLimit: { pagelen: 2, pages: 1 } });
+        expect(await client.openPullRequests('acme', 'records-api')).toEqual({ prs: [{ id: 1 }, { id: 2 }], truncated: true });
+        expect(new URL(String(fetchImpl.mock.calls[0]?.[0])).searchParams.get('pagelen')).toBe('2');
+    });
+});
+
 describe('BitbucketClient: build statuses and branch heads', () => {
     const HEAD = 'a'.repeat(40);
     const status = (key: string, state: string, hash = HEAD): Record<string, unknown> => ({ key, state, commit: { hash }, updated_on: '2026-10-01T00:00:00Z' });

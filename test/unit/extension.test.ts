@@ -6,7 +6,7 @@ import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib
 import { bitbucketRepoOfRemote, currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import type { Grouping } from '../../src/shared/home-grouping.ts';
-import { buildHomeTree, repoErrorLabel } from '../../src/extension/lib/home-tree.ts';
+import { buildHomeTree, repoErrorLabel, truncatedLabel } from '../../src/extension/lib/home-tree.ts';
 import { createL10n, pageLocale, type L10n, type Translate } from '../../src/extension/lib/l10n.ts';
 import { errorText as extensionErrorText } from '../../src/extension/lib/error-text.ts';
 import type { ErrorLike } from '../../src/shared/error-text.ts';
@@ -409,6 +409,7 @@ describe('"My PRs" tree', () => {
         me: { uuid: '{me}', displayName: 'Moi' },
         repos: ['acme/records-api'],
         errors: [],
+        truncated: [],
         groups: [
             { key: 'to-do', prs: [card(1)] },
             { key: 'waiting', prs: [] },
@@ -503,6 +504,11 @@ describe('"My PRs" tree', () => {
         expect(repoErrorLabel(enT, error)).toBe('acme/no-such-repo: Not found on Bitbucket: /repositories/acme/no-such-repo');
         expect(repoErrorLabel(frT, error)).toBe('acme/no-such-repo : Introuvable sur Bitbucket : /repositories/acme/no-such-repo');
         expect(repoErrorLabel(frT, { repo: 'acme/x', code: 'BB_ERROR', message: 'Bitbucket redirect refused on /x' })).toBe('acme/x : Bitbucket redirect refused on /x');
+    });
+
+    it('I5: a repository whose open PR list was cut, in English and in French', () => {
+        expect(truncatedLabel(enT, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api: only the first 200 open PRs are listed');
+        expect(truncatedLabel(frT, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api : seules les 200 premières PR ouvertes sont listées');
     });
 });
 

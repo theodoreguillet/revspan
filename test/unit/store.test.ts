@@ -256,7 +256,7 @@ describe('notified state (Store)', () => {
             followed: true, approvalHolds: false, build: null, needsRebase: null, head,
         });
         const home = (prs: PrCard[]): Home => ({
-            me: { uuid: '{me}', displayName: 'Robin' }, repos: ['acme/records-api'], errors: [],
+            me: { uuid: '{me}', displayName: 'Robin' }, repos: ['acme/records-api'], errors: [], truncated: [],
             groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }],
         });
         /** One poll of a window: plan on the state re-read inside the update, as the notifier does. */
@@ -295,7 +295,7 @@ describe('notified state (Store)', () => {
 });
 
 describe('home shared between windows (Store)', () => {
-    const home: Home = { me: null, repos: ['acme/records-api'], groups: [], errors: [] };
+    const home: Home = { me: null, repos: ['acme/records-api'], groups: [], errors: [], truncated: [] };
 
     it('a snapshot saved by one window is read by another; dropped, it is gone for both', () => {
         const dir = tempDir();

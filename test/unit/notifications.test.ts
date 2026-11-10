@@ -26,6 +26,7 @@ const homeOf = (groups: Partial<Record<HomeGroupKey, PrCard[]>>, over: Partial<H
     me: ME,
     repos: [REPO],
     errors: [],
+    truncated: [],
     groups: (['to-do', 'mine', 'waiting', 'others'] as const).map((key) => ({ key, prs: groups[key] ?? [] })),
     ...over,
 });
@@ -285,6 +286,18 @@ describe('notification planner', () => {
             expect(poll(windowA(1, 2, 3))).toEqual(['newPullRequest #3']);
             expect(poll(windowB(101, 102))).toEqual([]);
             expect(poll(windowA(1, 2, 3))).toEqual([]);
+        });
+
+        it('I5: a repository whose list was cut keeps the records of the PRs left out; one listed again is not notified again', () => {
+            const full = homeOf({ 'to-do': [card(63, { followed: true }), card(64, { designatedReviewer: true })] });
+            const baseline = baselineOf(full);
+            const cut = homeOf({ 'to-do': [card(63, { followed: true }), card(65, { followed: true })] }, { truncated: [{ repo: REPO, count: 2 }] });
+            const during = run(cut, baseline);
+            // A new PR within the listed ones still notifies.
+            expect(during.sent).toEqual(['newPullRequest #65']);
+            expect(during.next.seen[`${REPO}#64`]).toBe(headOf(64));
+            expect(during.next.seen[`${REPO}#64#reviewer`]).toBeDefined();
+            expect(run(homeOf({ 'to-do': [card(63, { followed: true }), card(64, { designatedReviewer: true }), card(65, { followed: true })] }), during.next).sent).toEqual([]);
         });
 
         it('forgetRepositories drops every entry of the given repositories and keeps the others', () => {

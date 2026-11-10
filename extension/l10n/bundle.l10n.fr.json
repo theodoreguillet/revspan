@@ -15,6 +15,7 @@
     "Request refused.": "Requête refusée.",
     "Revspan internal error: {detail}": "Erreur interne de Revspan : {detail}",
     "{repo}: {message}": "{repo} : {message}",
+    "{repo}: only the first {count} open PRs are listed": "{repo} : seules les {count} premières PR ouvertes sont listées",
     "To do": "À faire",
     "My PRs": "Mes PR",
     "Waiting on the author": "En attente de l'auteur",

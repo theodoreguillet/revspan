@@ -6,7 +6,7 @@ import { AppError, errorPayload } from '../server/errors.ts';
 import { hostL10n } from './host-l10n.ts';
 import { errorText } from './lib/error-text.ts';
 import type { Grouping } from '../shared/home-grouping.ts';
-import { buildHomeTree, repoErrorLabel, type GroupNode, type PrNode, type SubgroupNode } from './lib/home-tree.ts';
+import { buildHomeTree, repoErrorLabel, truncatedLabel, type GroupNode, type PrNode, type SubgroupNode } from './lib/home-tree.ts';
 
 export type Node =
     | { kind: 'group'; group: GroupNode }
@@ -92,7 +92,8 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
             await vscode.commands.executeCommand('setContext', NO_REPOS_CONTEXT, home.repos.length === 0);
             const l10n = hostL10n();
             const errors = home.errors.map((e): Node => ({ kind: 'message', text: repoErrorLabel(l10n.t, e) }));
-            return [...errors, ...buildHomeTree(home, l10n, this.grouping()).map((group): Node => ({ kind: 'group', group }))];
+            const cut = home.truncated.map((t): Node => ({ kind: 'message', text: truncatedLabel(l10n.t, t) }));
+            return [...errors, ...cut, ...buildHomeTree(home, l10n, this.grouping()).map((group): Node => ({ kind: 'group', group }))];
         } catch (error) {
             if (error instanceof AppError && (error.code === 'NO_TOKEN' || error.code === 'BB_UNAUTHORIZED')) {
                 await vscode.commands.executeCommand('setContext', NEEDS_TOKEN_CONTEXT, true);

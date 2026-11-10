@@ -1,5 +1,5 @@
-// Home: badges and subtitle of a PR card.
-import type { HomeGroupKey, PrCard, User } from '../../shared/api.ts';
+// Home: badges and subtitle of a PR card, notices about the repositories.
+import type { Home, HomeGroupKey, PrCard, User } from '../../shared/api.ts';
 import type { MessageKey, Translator } from '../i18n/index.ts';
 import { ago, displayName, openedSince } from './format.ts';
 
@@ -54,4 +54,9 @@ export function cardSubtitle(tr: Translator, card: PrCard, me: User | null): str
         tr.t('home.approvalsOf', { count: card.approvals, required: card.requiredApprovals }),
     ];
     return parts.join(' · ');
+}
+
+/** A repository with more open PRs than Revspan reads: only the first ones are listed. */
+export function truncatedNotice(tr: Translator, { repo, count }: Home['truncated'][number]): string {
+    return tr.t('home.truncated', { repo, count });
 }

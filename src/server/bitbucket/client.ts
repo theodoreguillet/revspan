@@ -24,6 +24,15 @@ export interface BitbucketAuth {
     token: string;
 }
 
+/** How much of a repository's open PR list is read: `pages` pages of `pagelen` PRs (Bitbucket's maximum is 50). */
+export interface PrListLimit {
+    pagelen: number;
+    pages: number;
+}
+
+/** 200 open PRs per repository. */
+const DEFAULT_PR_LIST_LIMIT: PrListLimit = { pagelen: 50, pages: 4 };
+
 export interface CommitSummary {
     hash: string;
     message: string;
@@ -108,19 +117,23 @@ export class BitbucketClient {
     private readonly cache: Cache;
     private readonly fetchImpl: typeof fetch;
     private readonly limiter: Semaphore;
+    private readonly prListLimit: PrListLimit;
 
-    constructor({ baseUrl = DEFAULT_BASE_URL, auth, cache, concurrency = 6, fetchImpl = fetch }: {
+    /** prListLimit: lowered by the tests to cut a short list. */
+    constructor({ baseUrl = DEFAULT_BASE_URL, auth, cache, concurrency = 6, fetchImpl = fetch, prListLimit = DEFAULT_PR_LIST_LIMIT }: {
         baseUrl?: string;
         auth: BitbucketAuth;
         cache: Cache;
         concurrency?: number;
         fetchImpl?: typeof fetch;
+        prListLimit?: PrListLimit;
     }) {
         this.baseUrl = baseUrl.replace(/\/+$/, '');
         this.auth = auth;
         this.cache = cache;
         this.fetchImpl = fetchImpl;
         this.limiter = new Semaphore(concurrency);
+        this.prListLimit = prListLimit;
     }
 
     private url(path: string, query?: Query): string {
@@ -238,6 +251,11 @@ export class BitbucketClient {
     }
 
     private async getAllPages<T>(path: string, query: Query = {}, maxPages = 40): Promise<T[]> {
+        return (await this.getPages<T>(path, query, maxPages)).values;
+    }
+
+    /** Values of at most maxPages pages; truncated: a next page was still announced at the cap. */
+    private async getPages<T>(path: string, query: Query, maxPages: number): Promise<{ values: T[]; truncated: boolean }> {
         const values: T[] = [];
         let page = await this.getJson<BbPage<T>>(path, query);
         for (let i = 1; ; i++) {
@@ -245,7 +263,7 @@ export class BitbucketClient {
                 values.push(value);
             }
             if (!page.next || i >= maxPages) {
-                return values;
+                return { values, truncated: Boolean(page.next) };
             }
             // The token never follows a pagination URL outside the configured API.
             if (!page.next.startsWith(`${this.baseUrl}/`)) {
@@ -328,12 +346,14 @@ export class BitbucketClient {
         });
     }
 
-    openPullRequests(ws: string, repo: string): Promise<BbPullRequest[]> {
-        return this.getAllPages<BbPullRequest>(`${this.repoPath(ws, repo)}/pullrequests`, {
+    /** Open PRs, up to the list limit (200); truncated: the repository has more, left out. */
+    async openPullRequests(ws: string, repo: string): Promise<{ prs: BbPullRequest[]; truncated: boolean }> {
+        const { values, truncated } = await this.getPages<BbPullRequest>(`${this.repoPath(ws, repo)}/pullrequests`, {
             state: 'OPEN',
-            pagelen: 50,
+            pagelen: this.prListLimit.pagelen,
             fields: '+values.participants,+values.reviewers',
-        }, 4);
+        }, this.prListLimit.pages);
+        return { prs: values, truncated };
     }
 
     /** Forgets the unsettled build checks and the branch heads read for a repository (explicit refresh). */

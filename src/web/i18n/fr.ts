@@ -62,6 +62,7 @@ export const fr: Catalog = {
     'home.refresh': 'Actualiser',
     'home.loading': 'Chargement des PR…',
     'home.repoErrors': 'Certains dépôts n\'ont pas pu être lus :',
+    'home.truncated': '{repo} : seules les {count} premières PR ouvertes sont listées.',
     'home.noProfile': 'Le jeton ne permet pas de savoir qui tu es : tes PR et tes relectures ne peuvent pas être repérées.',
     'home.noProfileFix': 'Ajoute le droit {scope} au jeton ({settings}).',
     'home.settingsLink': 'réglages',

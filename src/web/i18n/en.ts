@@ -63,6 +63,7 @@ export const en = {
     'home.refresh': 'Refresh',
     'home.loading': 'Loading PRs…',
     'home.repoErrors': 'Some repositories couldn’t be read:',
+    'home.truncated': '{repo}: only the first {count} open PRs are listed.',
     'home.noProfile': 'The token doesn’t tell who you are, so your PRs and reviews can’t be identified.',
     'home.noProfileFix': 'Add the {scope} scope to the token ({settings}).',
     'home.settingsLink': 'settings',

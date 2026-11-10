@@ -1,7 +1,7 @@
 // Bitbucket session: client built from the e-mail (config) and the token (secure storage),
 // profile of the token's user kept in memory.
 import type { User } from '../../shared/api.ts';
-import { BitbucketClient, DEFAULT_BASE_URL } from '../bitbucket/client.ts';
+import { BitbucketClient, DEFAULT_BASE_URL, type PrListLimit } from '../bitbucket/client.ts';
 import { AppError } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
 import type { Store } from '../infra/config.ts';
@@ -19,20 +19,24 @@ export class BitbucketSession {
     private readonly cache: Cache;
     private readonly baseUrl: string;
     private readonly fetchImpl: typeof fetch;
+    private readonly prListLimit: PrListLimit | undefined;
     private connection: Connection | null = null;
 
-    constructor({ store, secrets, cache, baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch }: {
+    /** prListLimit: open PRs read per repository (lowered by the tests; the client's default otherwise). */
+    constructor({ store, secrets, cache, baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch, prListLimit }: {
         store: Store;
         secrets: SecretStore;
         cache: Cache;
         baseUrl?: string;
         fetchImpl?: typeof fetch;
+        prListLimit?: PrListLimit;
     }) {
         this.store = store;
         this.secrets = secrets;
         this.cache = cache;
         this.baseUrl = baseUrl;
         this.fetchImpl = fetchImpl;
+        this.prListLimit = prListLimit;
     }
 
     async hasToken(): Promise<boolean> {
@@ -79,7 +83,7 @@ export class BitbucketSession {
         }
         this.connection = {
             email,
-            client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl }),
+            client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl, prListLimit: this.prListLimit }),
         };
         return this.connection;
     }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
-import { cardBadges, cardSubtitle } from '../../src/web/lib/home.ts';
+import { cardBadges, cardSubtitle, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
 import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
 import { prLong } from './fixtures.ts';
@@ -96,6 +96,13 @@ describe('home cards', () => {
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
         expect(cardSubtitle(fr, mine, me)).toMatch(/^toi · /);
         expect(badges(mine)).toEqual(['💬 1 nouveau']);
+    });
+});
+
+describe('home notices', () => {
+    it('I5: a repository whose open PR list was cut', () => {
+        expect(truncatedNotice(en, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api: only the first 200 open PRs are listed.');
+        expect(truncatedNotice(fr, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api : seules les 200 premières PR ouvertes sont listées.');
     });
 });
 

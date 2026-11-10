@@ -439,6 +439,7 @@ describe('home', () => {
         expect(body.me?.displayName).toBe('Thomas Girard');
         expect(body.repos).toEqual([`${WS}/${REPO}`]);
         expect(body.errors).toEqual([]);
+        expect(body.truncated).toEqual([]);
         expect(groupsOf(body)).toEqual({
             // Designated reviewer without a current approval.
             [FAKE_PRS.main]: 'to-do',

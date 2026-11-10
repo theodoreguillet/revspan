@@ -7,7 +7,7 @@ import { useLocalPref } from '../composables/useLocalPref.ts';
 import { t, tr, type MessageKey } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
 import { withFollowedCards } from '../../shared/follow.ts';
-import { GROUP_TITLES } from '../lib/home.ts';
+import { GROUP_TITLES, truncatedNotice } from '../lib/home.ts';
 import { GROUPINGS, groupCards, groupingFor, isGrouping, type Grouping } from '../../shared/home-grouping.ts';
 import { api, ApiError } from '../services/api.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
@@ -103,6 +103,7 @@ onMounted(load);
                     <li v-for="e in home.errors" :key="e.repo"><span class="r">{{ e.repo }}</span> — {{ errorText(tr(), e) }}</li>
                 </ul>
             </div>
+            <p v-for="cut in home.truncated" :key="cut.repo" class="rv-notice" data-testid="truncated">{{ truncatedNotice(tr(), cut) }}</p>
             <p v-if="!home.me" class="rv-notice" data-testid="no-profile">
                 {{ t('home.noProfile') }}
                 <I18nText k="home.noProfileFix">

@@ -124,13 +124,14 @@ function kindsOf(group: HomeGroupKey, card: PrCard, state: NotifiedState, codeCh
  * Notifications for this home given what was already covered, and the state to record instead. Every head is recorded
  * whatever the preferences, so switching one on later notifies nothing old. Nothing is notified on the first run, nor
  * for the PRs of a repository seen for the first time (newly tracked, or unreadable until now). Only the closed PRs of
- * the repositories this home read in full are forgotten: another window of the profile may track other repositories,
- * whose records stay (the notifier forgets a repository removed from the settings, see forgetRepositories). At most one
- * notification per PR.
+ * the repositories this home read in full (no error, list not cut) are forgotten: another window of the profile may
+ * track other repositories, whose records stay (the notifier forgets a repository removed from the settings, see
+ * forgetRepositories). At most one notification per PR.
  */
 export function planNotifications(home: Home, prefs: NotificationPrefs, state: NotifiedState, codeChanged: CodeChanges = {}): { notifications: PendingNotification[]; next: NotifiedState } {
     const tracked = new Set(home.repos);
     const unreadable = new Set(home.errors.map((e) => e.repo));
+    const cut = new Set(home.truncated.map((t) => t.repo));
     const seen: Record<string, string> = {};
     /** Keeps a recorded entry as it is. */
     const keep = (key: string): void => {
@@ -139,11 +140,11 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
             seen[key] = value;
         }
     };
-    // Records of a repository this home did not read are kept: untracked here (another window's), or unreadable for this
-    // run (its PRs are out of sight, not closed).
+    // Records of a repository this home did not read in full are kept: untracked here (another window's), unreadable for
+    // this run, or with a list cut at the limit (the PRs left out are out of sight, not closed).
     for (const key of Object.keys(state.seen)) {
         const repo = repoOfKey(key);
-        if (!tracked.has(repo) || unreadable.has(repo)) {
+        if (!tracked.has(repo) || unreadable.has(repo) || cut.has(repo)) {
             keep(key);
         }
     }

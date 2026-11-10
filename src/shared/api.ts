@@ -162,6 +162,8 @@ export interface Home {
     groups: HomeGroup[];
     /** Repositories that could not be read, with the error (same shape as an API error). */
     errors: ({ repo: string } & ErrorPayload)[];
+    /** Repositories with more open PRs than Revspan reads: only the first `count` are listed. */
+    truncated: { repo: string; count: number }[];
 }
 
 // ---------- PR ----------

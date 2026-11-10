@@ -156,3 +156,8 @@ export function buildHomeTree(home: Home, l10n: L10n, grouping: Grouping = 'none
 export function repoErrorLabel(t: Translate, error: Home['errors'][number]): string {
     return t('{repo}: {message}', { repo: error.repo, message: errorText(t, error) });
 }
+
+/** Tree line of a repository with more open PRs than Revspan reads. */
+export function truncatedLabel(t: Translate, { repo, count }: Home['truncated'][number]): string {
+    return t('{repo}: only the first {count} open PRs are listed', { repo, count });
+}

@@ -51,11 +51,16 @@ async function requestsOf(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 /** One VS Code window: its own Store, services and notifier, on the shared folder. */
-async function openWindow(onPolled = vi.fn(), isVisible = (): boolean => false, reviewSource: ReviewSource | null = null): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
+async function openWindow(
+    onPolled = vi.fn(),
+    isVisible = (): boolean => false,
+    reviewSource: ReviewSource | null = null,
+    prListLimit?: { pagelen: number; pages: number },
+): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
     const store = new Store(dir, { reviewSource });
     const secrets = await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
     const cache = new Cache(path.join(dir, `cache-${notifiers.length}`));
-    const services = createServices({ store, secrets, cache, baseUrl: fake.url, fetchImpl: countingFetch });
+    const services = createServices({ store, secrets, cache, baseUrl: fake.url, fetchImpl: countingFetch, prListLimit });
     const notifier = new Notifier({ store, session: services.session, home: services.home, prs: services.prs, onPolled, isVisible });
     notifiers.push(notifier);
     return { store, services, notifier, onPolled };
@@ -160,6 +165,31 @@ describe('background refresh and notifications', () => {
         await notifier.poll();
         expect(await buildOfMine()).toBe('failed');
         expect(recorded.warnings).toEqual(['Build failed on your PR: DEMO-45 - feat(mine): my own pull request']);
+    });
+
+    it('I5: more open PRs than the list cap: the home says so, and a PR left out then listed again is not notified again', async () => {
+        // 8 open PRs, 7 listed (one page of 7): #49 is left out at first.
+        const { notifier, services } = await openWindow(vi.fn(), () => false, null, { pagelen: 7, pages: 1 });
+        const moveToEnd = (...ids: number[]): void => {
+            for (const id of ids) {
+                const pr = fake.data.prs.get(id);
+                fake.data.prs.delete(id);
+                if (pr) {
+                    fake.data.prs.set(id, pr);
+                }
+            }
+        };
+        await notifier.poll();
+        expect((await services.home.get()).truncated).toEqual([{ repo: `${WS}/${REPO}`, count: 7 }]);
+        // #46 (I am a designated reviewer, to do) drops out of the first page, then comes back.
+        moveToEnd(FAKE_PRS.neverReviewed);
+        nextInterval();
+        await notifier.poll();
+        moveToEnd(FAKE_PRS.others, FAKE_PRS.purged, FAKE_PRS.waiting);
+        nextInterval();
+        await notifier.poll();
+        expect((await services.home.get()).groups.flatMap((g) => g.prs).map((p) => p.id)).toContain(FAKE_PRS.neverReviewed);
+        expect(recorded.infos).toEqual([]);
     });
 
     it('a push with no change since the previous head (neutral version) on a PR I reviewed: nothing shown, head recorded', async () => {
@@ -287,7 +317,7 @@ describe('background refresh and notifications', () => {
 
 describe('cycles on stubbed services', () => {
     const ME: User = { uuid: '{me}', displayName: 'Me' };
-    const home = (over: Partial<Home>): Home => ({ me: ME, repos: [`${WS}/${REPO}`], groups: [], errors: [], ...over });
+    const home = (over: Partial<Home>): Home => ({ me: ME, repos: [`${WS}/${REPO}`], groups: [], errors: [], truncated: [], ...over });
     const card = (id: number, over: Partial<PrCard> = {}): PrCard => ({
         workspace: WS, repo: REPO, id, title: `PR ${id}`, author: { uuid: '{cam}', displayName: 'Camille' }, url: '', createdOn: '', updatedOn: '',
         versionsCount: 2, lastPushAt: '', lastReviewed: null, newVersions: 0, newCodeVersions: null, approvals: 0, requiredApprovals: 2,
