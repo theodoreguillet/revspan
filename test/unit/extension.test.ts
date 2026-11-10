@@ -73,6 +73,15 @@ describe('extension manifest', () => {
             expect(manifest.contributes.configuration.properties).toHaveProperty([id]);
         }
     });
+
+    it('every revspan.* setting declares a default (a missing default is how a not-yet-registered setting is recognized)', () => {
+        const manifest = readJson('extension/package.json') as { contributes: { configuration: { properties: Record<string, { default?: unknown }> } } };
+        const settings = Object.entries(manifest.contributes.configuration.properties).filter(([id]) => id.startsWith('revspan.'));
+        expect(settings.length).toBeGreaterThan(0);
+        for (const [id, schema] of settings) {
+            expect(schema.default, id).not.toBeUndefined();
+        }
+    });
 });
 
 describe('settings change', () => {
