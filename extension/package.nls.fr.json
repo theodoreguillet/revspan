@@ -1,7 +1,7 @@
 {
     "displayName": "Revspan for Bitbucket",
     "description": "Relire les PR Bitbucket version par version, malgré amend, rebase et force-push, dans VS Code",
-    "capabilities.untrustedWorkspaces": "Dans un espace de travail non approuvé, les dépôts suivis, les contributeurs suivis et les approbations par dépôt définis par l'espace de travail sont ignorés.",
+    "capabilities.untrustedWorkspaces": "Dans un espace de travail non approuvé, les dépôts suivis, les contributeurs suivis, les approbations par dépôt, l'intervalle d'actualisation et les trois réglages de notification définis par l'espace de travail sont ignorés.",
     "capabilities.virtualWorkspaces": "« Ouvrir le fichier » a besoin d'un dépôt cloné sur le disque ; le reste fonctionne.",
     "command.openHome": "Ouvrir l'accueil",
     "command.category": "Revspan",

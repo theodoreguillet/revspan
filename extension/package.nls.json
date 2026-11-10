@@ -1,7 +1,7 @@
 {
     "displayName": "Revspan for Bitbucket",
     "description": "Review Bitbucket PRs version by version, despite amend, rebase and force-push, in VS Code",
-    "capabilities.untrustedWorkspaces": "In an untrusted workspace, the followed repositories, the followed contributors and the per-repository approvals defined by the workspace are ignored.",
+    "capabilities.untrustedWorkspaces": "In an untrusted workspace, the followed repositories, the followed contributors, the per-repository approvals, the refresh interval and the three notification settings defined by the workspace are ignored.",
     "capabilities.virtualWorkspaces": "“Open file” needs a repository cloned on disk; everything else works.",
     "command.openHome": "Open Home",
     "command.category": "Revspan",
