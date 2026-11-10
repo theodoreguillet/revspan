@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Home, PrCard, User, VersionKind } from '../../src/shared/api.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
-import { Store } from '../../src/server/infra/config.ts';
+import { Store, type ReviewSource } from '../../src/server/infra/config.ts';
 import { createSecretStore } from '../../src/server/infra/secrets.ts';
 import type { HomeService } from '../../src/server/services/home-service.ts';
 import { createServices, type Services } from '../../src/server/services/index.ts';
@@ -48,8 +48,8 @@ async function requestsOf(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 /** One VS Code window: its own Store, services and notifier, on the shared folder. */
-async function openWindow(onPolled = vi.fn(), isVisible = (): boolean => false): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
-    const store = new Store(dir);
+async function openWindow(onPolled = vi.fn(), isVisible = (): boolean => false, reviewSource: ReviewSource | null = null): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
+    const store = new Store(dir, { reviewSource });
     const secrets = await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
     const cache = new Cache(path.join(dir, `cache-${notifiers.length}`));
     const services = createServices({ store, secrets, cache, baseUrl: fake.url, fetchImpl: countingFetch });
@@ -199,6 +199,21 @@ describe('background refresh and notifications', () => {
         });
         nextInterval();
         await notifier.poll();
+        expect(recorded.infos).toEqual([`New version to review: ${PURGED_TITLE}`]);
+    });
+
+    it('a window with every notification off (window-level settings) never silences another window', async () => {
+        const allOff: ReviewSource = {
+            get: () => ({ notifications: { newPullRequest: false, newVersion: false, buildFailed: false } }),
+            set: async () => undefined,
+        };
+        const quiet = await openWindow(vi.fn(), () => false, allOff);
+        const active = await openWindow();
+        await active.notifier.poll();
+        await quiet.notifier.poll();
+        pushOnPurged();
+        await quiet.notifier.poll();
+        await active.notifier.poll();
         expect(recorded.infos).toEqual([`New version to review: ${PURGED_TITLE}`]);
     });
 

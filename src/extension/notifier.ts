@@ -56,6 +56,8 @@ export class Notifier implements vscode.Disposable {
     private interval: NodeJS.Timeout | undefined;
     private polling = false;
     private disposed = false;
+    /** This window skipped polls (nothing to notify or show): its next poll records what it sees without notifying. */
+    private needsBaseline = false;
 
     /**
      * onPolled: called after each completed poll (the home was just read, the tree can show it).
@@ -131,11 +133,10 @@ export class Notifier implements vscode.Disposable {
     private async collect(): Promise<PendingNotification[] | null> {
         const prefs = this.store.config.review.notifications;
         if (!prefs.newPullRequest && !prefs.newVersion && !prefs.buildFailed && !this.isVisible()) {
-            // Nobody to tell and nothing on screen: no request. The heads are no longer recorded, so the next poll with a
-            // notification on records a new baseline instead of showing what happened meanwhile.
-            this.store.updateNotified((state) => {
-                state.initialized = false;
-            });
+            // Nobody to tell and nothing on screen: no request. The notification settings are per window, so the shared
+            // state is left to the other windows; this one baselines silently on its next poll, so switching a
+            // notification on shows nothing of what happened meanwhile.
+            this.needsBaseline = true;
             return null;
         }
         if (this.store.config.repos.length === 0 || !await this.session.hasToken()) {
@@ -151,7 +152,8 @@ export class Notifier implements vscode.Disposable {
         if (!home.me) {
             return null;
         }
-        const codeChanged = prefs.newVersion ? await this.codeChanges(home) : {};
+        const baseline = this.needsBaseline;
+        const codeChanged = prefs.newVersion && !baseline ? await this.codeChanges(home) : {};
         let pending: PendingNotification[] = [];
         // Planned on the state re-read from disk inside the update: a PR head another window already recorded (and
         // notified) is no longer new here, so each notification is shown by one window only.
@@ -159,8 +161,9 @@ export class Notifier implements vscode.Disposable {
             const plan = planNotifications(home, prefs, state, codeChanged);
             state.initialized = plan.next.initialized;
             state.seen = plan.next.seen;
-            pending = plan.notifications;
+            pending = baseline ? [] : plan.notifications;
         });
+        this.needsBaseline = false;
         return pending;
     }
 
