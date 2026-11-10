@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import type { BbActivity, BbComment, BbParticipant, BbPullRequest, BbUser } from '../../src/server/bitbucket/types.ts';
+import type { BbActivity, BbComment, BbParticipant, BbPullRequest, BbStatus, BbUser } from '../../src/server/bitbucket/types.ts';
 import { FakeRepo, scenario } from './fake-repo.ts';
 
 export const FAKE_EMAIL = 'me@example.test';
@@ -57,6 +57,10 @@ export interface FakeData {
     /** "version..master" -> real base. */
     mergeBases: Map<string, string>;
     prs: Map<number, FakePr>;
+    /** PR id -> build statuses (several commits, like the real list). */
+    statuses: Map<number, BbStatus[]>;
+    /** Branch name -> full head hash. master moved past the base of every PR but #44 (see buildFakeData). */
+    branchHeads: Map<string, string>;
     nextId(): number;
 }
 
@@ -317,7 +321,33 @@ export function buildFakeData(): FakeData {
     simplePr(b, FAKE_PRS.others, 'others', 'DEMO-47 - chore(others): not about me', YAN,
         [{ user: CAM, role: 'REVIEWER', approved: true, state: 'approved' }, { user: AI, role: 'PARTICIPANT', approved: true, state: 'approved' }], 1);
     purgedPr(b);
-    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, nextId: b.nextId };
+    const headOf = (id: number): string => {
+        const prefix = b.prs.get(id)?.pr.source?.commit?.hash ?? '';
+        return [...b.repo.commits.keys()].find((k) => k.startsWith(prefix)) ?? prefix;
+    };
+    const status = (id: number, over: Pick<BbStatus, 'key' | 'state'> & Partial<BbStatus>): BbStatus => ({
+        url: `https://ci.example.test/${over.key}/${id}`,
+        updated_on: '2026-10-21T09:00:00Z',
+        commit: { hash: headOf(id) },
+        ...over,
+    });
+    const statuses = new Map<number, BbStatus[]>([
+        // Failed: a failure and a success on the head, plus a stale success on an older commit.
+        [FAKE_PRS.main, [
+            status(FAKE_PRS.main, { key: 'pipeline', name: 'Pipeline #12', state: 'FAILED' }),
+            status(FAKE_PRS.main, { key: 'scan', name: 'Security scan', state: 'SUCCESSFUL' }),
+            status(FAKE_PRS.main, { key: 'pipeline', name: 'Pipeline #11', state: 'SUCCESSFUL', updated_on: '2026-10-20T09:00:00Z', commit: { hash: hex('main:old-head') } }),
+        ]],
+        // Running: one in-progress check among successful ones.
+        [FAKE_PRS.mine, [
+            status(FAKE_PRS.mine, { key: 'pipeline', name: 'Pipeline #13', state: 'SUCCESSFUL' }),
+            status(FAKE_PRS.mine, { key: 'integration', name: 'Integration tests', state: 'INPROGRESS' }),
+        ]],
+        // PR #46 and the others have no status at all.
+    ]);
+    // master moved past every base (m0 of #45, #46, #47...) except that of #44, whose v2 sits on master.
+    const branchHeads = new Map<string, string>([['master', hex('rebase:m1')]]);
+    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, nextId: b.nextId };
 }
 
 function send(res: ServerResponse, status: number, value: unknown, type = 'application/json'): void {
@@ -391,6 +421,11 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         if (rest === '/pullrequests' && req.method === 'GET') {
             return send(res, 200, page(req, [...data.prs.values()].map((p) => p.pr), 50));
         }
+        if ((m = /^\/refs\/branches\/(.+)$/.exec(rest))) {
+            const name = m[1] ?? '';
+            const hash = data.branchHeads.get(name);
+            return hash ? send(res, 200, { name, target: { hash } }) : send(res, 404, { error: { message: 'no branch' } });
+        }
         if ((m = /^\/commit\/([0-9a-f]+)$/.exec(rest))) {
             const hash = fullHash(m[1] ?? '');
             const commit = hash ? data.repo.get(hash) : undefined;
@@ -429,6 +464,9 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         }
         if ((m = /^\/pullrequests\/(\d+)(\/.*)?$/.exec(rest))) {
             const fake = data.prs.get(Number(m[1]));
+            if (fake && m[2] === '/statuses' && req.method === 'GET') {
+                return send(res, 200, page(req, data.statuses.get(fake.pr.id) ?? [], 50));
+            }
             return fake ? handlePr(req, res, fake, m[2] ?? '', body) : send(res, 404, { error: { message: 'no pr' } });
         }
         return send(res, 404, { error: { message: `no route ${req.method} ${rest}` } });

@@ -93,6 +93,15 @@ export type HomeGroupKey = 'to-do' | 'mine' | 'waiting' | 'others';
 /** Aggregate of the build statuses Bitbucket attaches to a PR's latest commit. */
 export type BuildState = 'failed' | 'running' | 'success' | 'none';
 
+/** One build status (any CI publishing to Bitbucket) on a PR's latest commit. */
+export interface BuildCheck {
+    key: string;
+    name: string;
+    state: 'success' | 'failed' | 'running' | 'stopped';
+    url: string | null;
+    updatedOn: string | null;
+}
+
 export interface BuildSummary {
     state: BuildState;
     failed: number;

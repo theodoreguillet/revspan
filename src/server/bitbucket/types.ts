@@ -79,3 +79,17 @@ export interface BbPage<T> {
 export interface BbSrcMeta {
     attributes?: string[];
 }
+
+export interface BbStatus {
+    key: string;
+    name?: string;
+    state: 'SUCCESSFUL' | 'FAILED' | 'INPROGRESS' | 'STOPPED';
+    url?: string;
+    updated_on?: string;
+    commit?: { hash: string };
+}
+
+export interface BbBranch {
+    name?: string;
+    target?: { hash?: string };
+}

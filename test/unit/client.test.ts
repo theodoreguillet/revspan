@@ -176,3 +176,43 @@ describe('BitbucketClient: commit erased after being cached', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 });
+
+describe('BitbucketClient: build statuses and branch heads', () => {
+    it('reads PR statuses with a page length of 50 and follows pagination', async () => {
+        const next = `${BASE}/repositories/acme/records-api/pullrequests/7/statuses?page=2`;
+        const fetchImpl = mockFetch(
+            jsonResponse(200, { values: [{ key: 'ci', state: 'FAILED' }], next }),
+            jsonResponse(200, { values: [{ key: 'scan', state: 'SUCCESSFUL' }] }),
+        );
+        const statuses = await makeClient(fetchImpl).prStatuses('acme', 'records-api', 7);
+        expect(statuses.map((s) => s.key)).toEqual(['ci', 'scan']);
+        const first = new URL(String(fetchImpl.mock.calls[0]?.[0]));
+        expect(first.pathname).toBe('/2.0/repositories/acme/records-api/pullrequests/7/statuses');
+        expect(first.searchParams.get('pagelen')).toBe('50');
+    });
+
+    it('caches PR statuses for a short time', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { values: [] }), jsonResponse(200, { values: [] }));
+        const client = makeClient(fetchImpl);
+        await client.prStatuses('acme', 'records-api', 7);
+        await client.prStatuses('acme', 'records-api', 7);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the head hash of a branch and encodes each segment of its name', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { name: 'release/1.x', target: { hash: 'c'.repeat(40) } }));
+        await expect(makeClient(fetchImpl).branchHead('acme', 'records-api', 'release/1.x')).resolves.toBe('c'.repeat(40));
+        expect(new URL(String(fetchImpl.mock.calls[0]?.[0])).pathname).toBe('/2.0/repositories/acme/records-api/refs/branches/release/1.x');
+    });
+
+    it('encodes special characters in a branch name', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { target: { hash: 'c'.repeat(40) } }));
+        await makeClient(fetchImpl).branchHead('acme', 'records-api', 'feature/a b#c');
+        expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/refs/branches/feature/a%20b%23c');
+    });
+
+    it('returns null when the branch does not exist', async () => {
+        const fetchImpl = mockFetch(jsonResponse(404, { error: { message: 'gone' } }));
+        await expect(makeClient(fetchImpl).branchHead('acme', 'records-api', 'old')).resolves.toBeNull();
+    });
+});

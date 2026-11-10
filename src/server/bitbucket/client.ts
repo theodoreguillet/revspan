@@ -7,13 +7,14 @@ import type { Cache } from '../infra/cache.ts';
 import type { CompareSource, DiffstatEntry, FileContent } from '../core/compare.ts';
 import { userOf } from '../core/model.ts';
 import type {
-    BbActivity, BbComment, BbCommit, BbDiffstatEntry, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbUser,
+    BbActivity, BbBranch, BbComment, BbCommit, BbDiffstatEntry, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbStatus, BbUser,
 } from './types.ts';
 
 export const DEFAULT_BASE_URL = 'https://api.bitbucket.org/2.0';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const LIVE_TTL_MS = 15000;
+const BUILD_TTL_MS = 60000;
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_REDIRECTS = 3;
 
@@ -268,6 +269,20 @@ export class BitbucketClient {
     comments(ws: string, repo: string, id: number): Promise<BbComment[]> {
         return this.cache.getLive(`live:${ws}/${repo}#${id}:comments`, LIVE_TTL_MS,
             () => this.getAllPages<BbComment>(`${this.prPath(ws, repo, id)}/comments`, { pagelen: 100 }));
+    }
+
+    /** Build statuses published to Bitbucket for the PR (all commits; filter with toBuildChecks). */
+    prStatuses(ws: string, repo: string, id: number): Promise<BbStatus[]> {
+        return this.cache.getLive(`live:${ws}/${repo}#${id}:statuses`, BUILD_TTL_MS,
+            () => this.getAllPages<BbStatus>(`${this.prPath(ws, repo, id)}/statuses`, { pagelen: 50 }));
+    }
+
+    /** Head commit of a branch, or null if the branch no longer exists. */
+    branchHead(ws: string, repo: string, branch: string): Promise<string | null> {
+        return this.cache.getLive(`live:${ws}/${repo}:branch:${branch}`, BUILD_TTL_MS, async () => {
+            const raw = await this.json<BbBranch>('GET', `${this.repoPath(ws, repo)}/refs/branches/${encodePath(branch)}`, { allow404: true });
+            return raw?.target?.hash ?? null;
+        });
     }
 
     openPullRequests(ws: string, repo: string): Promise<BbPullRequest[]> {
