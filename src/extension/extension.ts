@@ -72,21 +72,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         } catch (error) {
             void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: errorText(hostL10n().t, errorPayload(error)) }));
         }
-        tree.refresh({ fresh: true });
+        // The followed list is part of the home's key: the home is recomputed without asking Bitbucket for fresh data.
+        tree.refresh();
     }
-
-    const notifier = new Notifier({
-        store: app.store, session: app.services.session, home: app.services.home, prs: app.services.prs, onPolled: () => tree.refresh(),
-    });
-    const refreshSetting = `${REPOS_SETTING.section}.${REVIEW_SETTING_KEYS.refreshMinutes}`;
 
     const diffs = new DiffDocuments(app.services.prs);
     const panel = new RevspanPanel({ context, app, diffs, onWrite: () => tree.refresh() });
+    const treeView = vscode.window.createTreeView('revspan.home', { treeDataProvider: tree });
+
+    const notifier = new Notifier({
+        store: app.store,
+        session: app.services.session,
+        home: app.services.home,
+        prs: app.services.prs,
+        onPolled: () => tree.refresh(),
+        isVisible: () => treeView.visible || panel.visible,
+    });
+    const refreshSetting = `${REPOS_SETTING.section}.${REVIEW_SETTING_KEYS.refreshMinutes}`;
 
     context.subscriptions.push(
         tree,
         notifier,
-        vscode.window.registerTreeDataProvider('revspan.home', tree),
+        treeView,
+        // Polls may be skipped while the view is hidden (every notification off): it catches up when shown again.
+        treeView.onDidChangeVisibility(({ visible }) => {
+            if (visible) {
+                tree.refresh();
+            }
+        }),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
         // After "Reload Window", VS Code reopens the panel with the state saved by the page (its route).
         vscode.window.registerWebviewPanelSerializer(PANEL_VIEW_TYPE, {

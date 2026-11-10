@@ -293,3 +293,64 @@ describe('notified state (Store)', () => {
         });
     });
 });
+
+describe('home shared between windows (Store)', () => {
+    const home: Home = { me: null, repos: ['acme/records-api'], groups: [], errors: [] };
+
+    it('a snapshot saved by one window is read by another; dropped, it is gone for both', () => {
+        const dir = tempDir();
+        const a = new Store(dir);
+        const b = new Store(dir);
+        expect(b.homeSnapshot()).toBeNull();
+        a.saveHomeSnapshot({ at: 1000, key: 'k', home });
+        expect(b.homeSnapshot()).toEqual({ at: 1000, key: 'k', home });
+        b.dropHomeSnapshot();
+        expect(a.homeSnapshot()).toBeNull();
+        fs.writeFileSync(path.join(dir, 'home.json'), '{"at":"x"}');
+        expect(a.homeSnapshot()).toBeNull();
+    });
+
+    it('lease: one holder at a time, released by its holder only, taken over once stale', () => {
+        vi.useFakeTimers();
+        try {
+            const dir = tempDir();
+            const a = new Store(dir);
+            const b = new Store(dir);
+            const releaseA = a.claimHomeLease(60_000);
+            expect(releaseA).not.toBeNull();
+            expect(b.claimHomeLease(60_000)).toBeNull();
+            releaseA?.();
+            const releaseB = b.claimHomeLease(60_000);
+            expect(releaseB).not.toBeNull();
+            // A holder that never released (window closed mid-computation) is taken over once stale.
+            vi.advanceTimersByTime(60_001);
+            const releaseA2 = a.claimHomeLease(60_000);
+            expect(releaseA2).not.toBeNull();
+            // The late release of the old holder does not free the new holder's lease.
+            releaseB?.();
+            expect(b.claimHomeLease(60_000)).toBeNull();
+            releaseA2?.();
+            expect(b.claimHomeLease(60_000)).not.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('local signature: changed by a "reviewed" mark or a version type, not by seen files', () => {
+        const store = new Store(tempDir());
+        const initial = store.localSignature();
+        store.updatePrState('acme/records-api#1', (state) => {
+            state.viewed['src/A.ts'] = 'h1';
+        });
+        expect(store.localSignature()).toBe(initial);
+        store.updatePrState('acme/records-api#1', (state) => {
+            state.kinds.abcdef123456 = 'code';
+        });
+        const withKind = store.localSignature();
+        expect(withKind).not.toBe(initial);
+        store.updatePrState('acme/records-api#1', (state) => {
+            state.reviewedHash = 'abcdef123456';
+        });
+        expect(store.localSignature()).not.toBe(withKind);
+    });
+});

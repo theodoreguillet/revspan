@@ -51,24 +51,30 @@ export class Notifier implements vscode.Disposable {
     private readonly home: HomeService;
     private readonly prs: Pick<PrService, 'versionKinds'>;
     private readonly onPolled: () => void;
+    private readonly isVisible: () => boolean;
     private startup: NodeJS.Timeout | undefined;
     private interval: NodeJS.Timeout | undefined;
     private polling = false;
     private disposed = false;
 
-    /** onPolled: called after each completed poll (the home was just read, the tree can show it). */
-    constructor({ store, session, home, prs, onPolled }: {
+    /**
+     * onPolled: called after each completed poll (the home was just read, the tree can show it).
+     * isVisible: whether a Revspan view or panel is on screen (with every notification off, nothing else needs a poll).
+     */
+    constructor({ store, session, home, prs, onPolled, isVisible = () => false }: {
         store: Store;
         session: BitbucketSession;
         home: HomeService;
         prs: Pick<PrService, 'versionKinds'>;
         onPolled: () => void;
+        isVisible?: () => boolean;
     }) {
         this.store = store;
         this.session = session;
         this.home = home;
         this.prs = prs;
         this.onPolled = onPolled;
+        this.isVisible = isVisible;
     }
 
     /** One poll shortly after startup, then one every revspan.refreshIntervalMinutes. */
@@ -123,6 +129,15 @@ export class Notifier implements vscode.Disposable {
 
     /** Notifications this window must show; null when the cycle is skipped. */
     private async collect(): Promise<PendingNotification[] | null> {
+        const prefs = this.store.config.review.notifications;
+        if (!prefs.newPullRequest && !prefs.newVersion && !prefs.buildFailed && !this.isVisible()) {
+            // Nobody to tell and nothing on screen: no request. The heads are no longer recorded, so the next poll with a
+            // notification on records a new baseline instead of showing what happened meanwhile.
+            this.store.updateNotified((state) => {
+                state.initialized = false;
+            });
+            return null;
+        }
         if (this.store.config.repos.length === 0 || !await this.session.hasToken()) {
             return null;
         }
@@ -130,13 +145,12 @@ export class Notifier implements vscode.Disposable {
         if (!await this.session.me()) {
             return null;
         }
-        // Not fresh: the TTL caches of the home, PR lists, activities and statuses keep each poll cheap on the
-        // Bitbucket API; only the explicit "Refresh" command bypasses them.
+        // Not fresh: the home shared by the windows and the caches kept per head keep each poll down to the PR lists;
+        // only the explicit "Refresh" command bypasses them.
         const home = await this.home.get();
         if (!home.me) {
             return null;
         }
-        const prefs = this.store.config.review.notifications;
         const codeChanged = prefs.newVersion ? await this.codeChanges(home) : {};
         let pending: PendingNotification[] = [];
         // Planned on the state re-read from disk inside the update: a PR head another window already recorded (and
@@ -158,7 +172,7 @@ export class Notifier implements vscode.Disposable {
         const changes: Record<string, boolean | null> = {};
         await eachLimited(versionCandidates(home, this.store.notified()), SUMMARY_CONCURRENCY, async ({ ref, previousHead }: VersionCandidate) => {
             try {
-                changes[prKeyOf(ref)] = codeChangedSince(await this.prs.versionKinds(ref), previousHead);
+                changes[prKeyOf(ref)] = codeChangedSince(await this.prs.versionKinds(ref, previousHead), previousHead);
             } catch (error) {
                 // Unknown counts as code: better a notification too many than a missed new version.
                 console.warn(`revspan: versions of ${prKeyOf(ref)} unreadable (${(error as Error).message})`);

@@ -1,6 +1,7 @@
 // Which VS Code notifications a home refresh raises: pure rules, the notifier applies them to the shared state.
 import type { Home, HomeGroupKey, PrCard, PrRef, VersionKind } from '../../shared/api.ts';
 import type { NotificationPrefs } from '../../shared/review-settings.ts';
+import { versionsAfter } from '../../server/core/model.ts';
 import { prKeyOf, type NotifiedState } from '../../server/infra/config.ts';
 
 export interface PendingNotification {
@@ -74,13 +75,11 @@ export function versionCandidates(home: Home, state: NotifiedState): VersionCand
 }
 
 /**
- * Whether a version after the previous head has code or dependencies (versions oldest first, full hashes). If the previous
- * head is no longer among them (force-push), only the last version is judged.
+ * Whether a version after the previous head has code or dependencies (versions oldest first, full hashes; kind null: not
+ * computed). If the previous head is no longer among them (force-push), only the last version is judged.
  */
-export function codeChangedSince(versions: readonly { hash: string; kind: VersionKind }[], previousHead: string): boolean {
-    const index = previousHead ? versions.findIndex((v) => v.hash.startsWith(previousHead)) : -1;
-    const since = index >= 0 ? versions.slice(index + 1) : versions.slice(-1);
-    return since.some((v) => CODE_KINDS.has(v.kind));
+export function codeChangedSince(versions: readonly { hash: string; kind: VersionKind | null }[], previousHead: string): boolean {
+    return versionsAfter(versions, previousHead).some((v) => v.kind !== null && CODE_KINDS.has(v.kind));
 }
 
 /**

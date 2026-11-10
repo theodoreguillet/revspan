@@ -30,6 +30,11 @@ export class RevspanPanel {
         this.onWrite = onWrite;
     }
 
+    /** Whether the panel is open and on screen. */
+    get visible(): boolean {
+        return this.panel?.visible ?? false;
+    }
+
     /** Shows a page route (a single panel, reused). */
     show(route: string): void {
         if (this.panel) {

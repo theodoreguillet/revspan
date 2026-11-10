@@ -138,6 +138,15 @@ export function versionByHash<V extends DatedVersion>(versions: readonly V[], ha
 }
 
 /** A reply (discussion) does not count as a review. */
+/**
+ * Versions pushed after the one whose hash starts with `head`, oldest first; the last one alone when that head is unknown
+ * or no longer among them (force-push).
+ */
+export function versionsAfter<V extends { hash: string }>(versions: readonly V[], head: string): V[] {
+    const index = head ? versions.findIndex((v) => v.hash.startsWith(head)) : -1;
+    return index >= 0 ? versions.slice(index + 1) : versions.slice(-1);
+}
+
 export function isReply(comment: Pick<BbComment, 'parent'>): boolean {
     return Boolean(comment.parent?.id);
 }

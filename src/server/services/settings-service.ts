@@ -65,6 +65,8 @@ export class SettingsService {
         }
         await store.saveConfig(next);
 
+        // Repositories and review settings need no new session: the home key changes with them, the caches stay.
+        const credentialsChanged = store.config.email !== previousEmail || patch.token !== undefined;
         if (patch.token !== undefined) {
             const { email } = store.config;
             const token = patch.token.trim();
@@ -79,7 +81,9 @@ export class SettingsService {
                 await secrets.remove(email);
             }
         }
-        this.session.reset();
+        if (credentialsChanged) {
+            this.session.reset();
+        }
         return this.get();
     }
 

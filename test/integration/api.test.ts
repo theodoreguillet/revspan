@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiErrorBody, Comparison, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import {
-    FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall,
+    FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall, type RecordedRequest,
 } from '../support/fake-bitbucket.ts';
 
 interface Env {
@@ -43,6 +43,7 @@ async function restart(current: Env, fetchImpl?: typeof fetch): Promise<void> {
 }
 
 afterEach(async () => {
+    vi.useRealTimers();
     if (env) {
         await env.app.close();
         await env.fake.close();
@@ -603,5 +604,230 @@ describe('home', () => {
         expect(new Set(Object.values(groupsOf(body)))).toEqual(new Set(['others']));
         expect(Object.keys(groupsOf(body))).toHaveLength(Object.keys(FAKE_PRS).length);
         expect(body.groups.flatMap((g) => g.prs).every((p) => p.versionsCount === null && !p.myApproval && !p.designatedReviewer)).toBe(true);
+    });
+});
+
+describe('request budget', () => {
+    const MINUTE_MS = 60_000;
+    /** Default refresh interval of the background poll (review.refreshMinutes). */
+    const INTERVAL_MS = 5 * MINUTE_MS;
+    const ME = { uuid: '{me}', display_name: 'Thomas Girard', nickname: 'tgirard' };
+    const MASTER_HEAD = (): string => env?.fake.data.branchHeads.get('master') ?? '';
+
+    /** "list", "user", "refs" or the PR sub-resource ("activity", "statuses"...), with the PR id when there is one. */
+    function label({ path: route, page }: RecordedRequest): string {
+        const rest = route.replace(/^\/2\.0\/repositories\/[^/]+\/[^/]+/, '');
+        if (route === '/2.0/user') {
+            return 'user';
+        }
+        if (rest === '/pullrequests') {
+            return `list p${page}`;
+        }
+        const pr = /^\/pullrequests\/(\d+)(?:\/([a-z-]+))?/.exec(rest);
+        if (pr) {
+            return `${pr[2] ?? 'pr'} #${pr[1]}${page > 1 ? ` p${page}` : ''}`;
+        }
+        return rest.split('/')[1] ?? rest;
+    }
+
+    /** Requests the fake Bitbucket answered while `run` ran. */
+    async function requestsOf(run: () => Promise<unknown>): Promise<RecordedRequest[]> {
+        const start = env?.fake.requests.length ?? 0;
+        await run();
+        return env?.fake.requests.slice(start) ?? [];
+    }
+
+    const labels = (list: RecordedRequest[]): string[] => list.map(label).sort();
+    const home = async (route = '/api/home'): Promise<Home> => (await api<Home>('GET', route)).body;
+    /** Time goes by (only Date is faked: the HTTP servers keep their real timers). */
+    const elapse = (ms: number): void => {
+        vi.setSystemTime(new Date(Date.now() + ms));
+    };
+    const fakeTime = (): void => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-10T09:00:00Z'));
+    };
+
+    it('(a) steady state: nothing changed, every 60 s TTL expired: one list request per repository page, nothing else', async () => {
+        fakeTime();
+        await setup();
+        const first = await home();
+        // Beyond the 60 s live TTLs and the cross-window reuse (half the interval), within one refresh interval.
+        elapse(3 * MINUTE_MS);
+        let second: Home | null = null;
+        const spent = await requestsOf(async () => {
+            second = await home();
+        });
+        expect(labels(spent)).toEqual(['list p1']);
+        expect(second).toEqual(first);
+    });
+
+    it('(b) after a push on one PR: only that PR\'s data is fetched again, plus the lists', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        await home();
+        pushVersion(fake.data, FAKE_PRS.purged, {
+            commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: { 'src/Purged.ts': 'a\nb\nv2\nv3\nv4\n' }, date: '2026-10-22T09:00:00Z',
+        });
+        elapse(3 * MINUTE_MS);
+        let after: Home | null = null;
+        const spent = await requestsOf(async () => {
+            after = await home();
+        });
+        const others = spent.filter((r) => !label(r).startsWith('list '));
+        expect(others.length).toBeGreaterThan(0);
+        expect(others.every((r) => r.path.includes(`/pullrequests/${FAKE_PRS.purged}/`))).toBe(true);
+        expect(labels(others)).toContain(`statuses #${FAKE_PRS.purged}`);
+        expect(cardOf(after!, FAKE_PRS.purged)).toMatchObject({ versionsCount: 4, head: fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash });
+    });
+
+    it('(c) builds: a running or missing build is re-read once per interval, a failed or successful one never again', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        const neverHead = [...fake.data.repo.commits.keys()].find((k) => k.startsWith(fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.source?.commit?.hash ?? '-')) ?? '';
+        fake.data.statuses.set(FAKE_PRS.neverReviewed, [{ key: 'pipeline', name: 'Pipeline', state: 'SUCCESSFUL', commit: { hash: neverHead }, updated_on: '2026-10-21T09:00:00Z' }]);
+        const first = await home();
+        expect(cardOf(first, FAKE_PRS.neverReviewed)?.build?.state).toBe('success');
+        elapse(INTERVAL_MS + 1000);
+        const spent = labels(await requestsOf(home)).filter((l) => l.startsWith('statuses'));
+        expect(spent).toContain(`statuses #${FAKE_PRS.mine}`);
+        expect(spent).toContain(`statuses #${FAKE_PRS.long}`);
+        expect(spent).not.toContain(`statuses #${FAKE_PRS.main}`);
+        expect(spent).not.toContain(`statuses #${FAKE_PRS.neverReviewed}`);
+        // Once the running check finished, the next cycle sees it; then it is settled for good.
+        fake.data.statuses.set(FAKE_PRS.mine, (fake.data.statuses.get(FAKE_PRS.mine) ?? []).map((s) => ({ ...s, state: 'FAILED' as const })));
+        elapse(INTERVAL_MS + 1000);
+        expect(cardOf(await home(), FAKE_PRS.mine)?.build?.state).toBe('failed');
+        elapse(INTERVAL_MS + 1000);
+        expect(labels(await requestsOf(home))).not.toContain(`statuses #${FAKE_PRS.mine}`);
+    });
+
+    it('(d) two windows on one profile: the second reuses the home the first just computed, with no Bitbucket call', async () => {
+        fakeTime();
+        const current = await setup();
+        const second = await startRevspan(current.dir, current.fake);
+        try {
+            const first = await home();
+            elapse(MINUTE_MS + 1000);
+            let reused: unknown = null;
+            const spent = await requestsOf(async () => {
+                reused = await (await fetch(`${second.url}/api/home`)).json();
+            });
+            expect(spent).toEqual([]);
+            expect(reused).toEqual(first);
+            // The explicit Refresh bypasses the shared home.
+            const refreshed = await requestsOf(() => fetch(`${second.url}/api/home?fresh=1`).then((r) => r.json()));
+            expect(labels(refreshed)).toContain('list p1');
+        } finally {
+            await second.close();
+        }
+    });
+
+    it('(d) two windows computing at the same time: one of them computes, the other waits for its home', async () => {
+        fakeTime();
+        const current = await setup();
+        await restart(current);
+        const second = await startRevspan(current.dir, current.fake);
+        try {
+            const spent = await requestsOf(() => Promise.all([home(), fetch(`${second.url}/api/home`).then((r) => r.json())]));
+            expect(labels(spent).filter((l) => l.startsWith('list '))).toEqual(['list p1']);
+        } finally {
+            await second.close();
+        }
+    });
+
+    it('(e) several PRs of mine in one repository share a single branch-head read', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        for (const id of [FAKE_PRS.neverReviewed, FAKE_PRS.others, FAKE_PRS.waiting]) {
+            fake.data.prs.get(id)!.pr.author = ME;
+        }
+        const first = await home();
+        expect(first.groups.find((g) => g.key === 'mine')?.prs.length).toBeGreaterThanOrEqual(4);
+        const refs = (list: RecordedRequest[]): number => list.filter((r) => r.path.includes('/refs/branches/')).length;
+        expect(refs(fake.requests)).toBe(1);
+        elapse(INTERVAL_MS + 1000);
+        expect(refs(await requestsOf(home))).toBe(1);
+    });
+
+    it('explicit Refresh: lists, unsettled builds and branch heads only; it shows what changed', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        await home();
+        fake.data.statuses.set(FAKE_PRS.mine, (fake.data.statuses.get(FAKE_PRS.mine) ?? []).map((s) => ({ ...s, state: 'FAILED' as const })));
+        let refreshed: Home | null = null;
+        const spent = labels(await requestsOf(async () => {
+            refreshed = await home('/api/home?fresh=1');
+        }));
+        expect(cardOf(refreshed!, FAKE_PRS.mine)?.build?.state).toBe('failed');
+        expect(spent.filter((l) => l.startsWith('activity') || l === 'merge-base')).toEqual([]);
+        expect(spent).not.toContain(`statuses #${FAKE_PRS.main}`);
+        expect(spent).toEqual(expect.arrayContaining(['list p1', 'refs', `statuses #${FAKE_PRS.mine}`]));
+    });
+
+    it('a new push is seen by the next computation after the shared reuse, without Refresh', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        await home();
+        pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
+        elapse(INTERVAL_MS / 2 + 1000);
+        expect(cardOf(await home(), FAKE_PRS.purged)?.versionsCount).toBe(4);
+    });
+
+    it('a write on a PR drops the shared home: the next read shows it at once', async () => {
+        fakeTime();
+        await setup();
+        expect(cardOf(await home(), FAKE_PRS.waiting)?.myApproval).toBe(true);
+        await api('DELETE', `${prPath(FAKE_PRS.waiting)}/approve`);
+        expect(cardOf(await home(), FAKE_PRS.waiting)?.myApproval).toBe(false);
+    });
+
+    it('marking files viewed (frequent while reviewing) does not recompute the home; a "reviewed" mark does', async () => {
+        fakeTime();
+        await setup();
+        await home();
+        const viewed = await requestsOf(async () => {
+            await api('POST', `${prPath()}/viewed`, { path: 'src/Action.ts', contentHash: 'abc', viewed: true });
+            await home();
+        });
+        expect(viewed).toEqual([]);
+        await api('POST', `${prPath(FAKE_PRS.others)}/reviewed`, { version: 1 });
+        expect(cardOf(await home(), FAKE_PRS.others)?.lastReviewed).toBe(1);
+    });
+
+    it('a comment written from Revspan shows on the home at once, even if Bitbucket keeps updated_on', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBeNull();
+        const updatedOn = fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.updated_on;
+        await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/comments`, { raw: 'Looks good' });
+        expect(fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.updated_on).toBe(updatedOn);
+        expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBe(2);
+    });
+
+    it('PR summary, comparison and "reviewed" mark read no build status, branch head or rebase merge base', async () => {
+        await setup();
+        const spent = await requestsOf(async () => {
+            await api('GET', `${prPath(FAKE_PRS.mine)}/summary`);
+            await api('GET', `${prPath(FAKE_PRS.mine)}/compare?from=1&to=2`);
+            await api('POST', `${prPath(FAKE_PRS.mine)}/reviewed`, { version: 2 });
+        });
+        expect(labels(spent).filter((l) => l.startsWith('statuses') || l === 'refs')).toEqual([]);
+        expect(spent.filter((r) => r.path.endsWith(`..${MASTER_HEAD()}`))).toEqual([]);
+        // The detail still carries them.
+        const detailSpent = labels(await requestsOf(() => detail(FAKE_PRS.mine)));
+        expect(detailSpent).toEqual(expect.arrayContaining([`statuses #${FAKE_PRS.mine}`, 'refs']));
+    });
+
+    it('settings: following someone keeps the session and its caches; a new token resets them', async () => {
+        await setup();
+        await home();
+        const follow = await requestsOf(async () => {
+            await api('PUT', '/api/settings', { review: { followed: [{ uuid: '{yan}', displayName: 'Yann Bernard' }] } });
+            await home();
+        });
+        expect(labels(follow)).toEqual(['list p1']);
+        const token = await requestsOf(() => api('PUT', '/api/settings', { token: FAKE_TOKEN }));
+        expect(labels(token)).toContain('user');
     });
 });

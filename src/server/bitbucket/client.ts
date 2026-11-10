@@ -1,9 +1,10 @@
 // Bitbucket Cloud REST client (API 2.0): Basic auth with e-mail + Atlassian API token, pagination,
 // concurrency limit, retries (429/5xx for reads, 429 only for writes), disk cache of immutable data.
 import { createHash } from 'node:crypto';
-import type { NewComment, User } from '../../shared/api.ts';
+import type { BuildCheck, NewComment, User } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
+import { toBuildChecks } from '../core/build.ts';
 import type { CompareSource, DiffstatEntry, FileContent } from '../core/compare.ts';
 import { userOf } from '../core/model.ts';
 import type {
@@ -77,6 +78,11 @@ class Semaphore {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).digest('hex');
+
+/** Abbreviation of a head hash in build keys: the PR list gives 12 characters, the activity sometimes the full hash. */
+const HEAD_PREFIX = 12;
+/** A check whose state can no longer change on that commit. */
+const SETTLED_STATES: ReadonlySet<BuildCheck['state']> = new Set(['success', 'failed', 'stopped']);
 
 const commitKey = (ws: string, repo: string, hash: string): string => `commit:${ws}/${repo}:${hash}`;
 const mergeBaseKey = (ws: string, repo: string, a: string, b: string): string => `merge-base:${ws}/${repo}:${a}..${b}`;
@@ -261,8 +267,9 @@ export class BitbucketClient {
         return this.cache.getLive(`live:${ws}/${repo}#${id}:pr`, LIVE_TTL_MS, () => this.getJson<BbPullRequest>(this.prPath(ws, repo, id)));
     }
 
-    activity(ws: string, repo: string, id: number): Promise<BbActivity[]> {
-        return this.cache.getLive(`live:${ws}/${repo}#${id}:activity`, LIVE_TTL_MS,
+    /** maxAgeMs: age of a cached answer still served (0: always asked again, concurrent reads shared). */
+    activity(ws: string, repo: string, id: number, maxAgeMs = LIVE_TTL_MS): Promise<BbActivity[]> {
+        return this.cache.getLive(`live:${ws}/${repo}#${id}:activity`, maxAgeMs,
             () => this.getAllPages<BbActivity>(`${this.prPath(ws, repo, id)}/activity`, { pagelen: 50 }, 400));
     }
 
@@ -271,15 +278,34 @@ export class BitbucketClient {
             () => this.getAllPages<BbComment>(`${this.prPath(ws, repo, id)}/comments`, { pagelen: 100 }));
     }
 
-    /** Build statuses published to Bitbucket for the PR (all commits; filter with toBuildChecks). */
-    prStatuses(ws: string, repo: string, id: number): Promise<BbStatus[]> {
-        return this.cache.getLive(`live:${ws}/${repo}#${id}:statuses`, BUILD_TTL_MS,
+    /**
+     * Build checks of the PR's head commit. Once every check is settled (success, failed or stopped), they are kept on
+     * disk for that head and never asked again; unsettled or missing checks are asked again once older than maxAgeMs.
+     * recheck: asks even settled checks (the PR page, where a re-run shows) and updates what is kept for that head.
+     */
+    async headChecks(ws: string, repo: string, id: number, head: string, { maxAgeMs = BUILD_TTL_MS, recheck = false } = {}): Promise<BuildCheck[]> {
+        const short = head.slice(0, HEAD_PREFIX);
+        const settledKey = `build:${ws}/${repo}#${id}:${short}`;
+        const settled = recheck ? undefined : this.cache.get<BuildCheck[]>(settledKey);
+        if (settled) {
+            return settled;
+        }
+        // The statuses route lists every commit of the PR; the key holds the head, so a new push is always read.
+        const statuses = await this.cache.getLive(`live:statuses:${ws}/${repo}#${id}:${short}`, maxAgeMs,
             () => this.getAllPages<BbStatus>(`${this.prPath(ws, repo, id)}/statuses`, { pagelen: 50 }));
+        const checks = toBuildChecks(statuses, short);
+        if (checks.length > 0 && checks.every((check) => SETTLED_STATES.has(check.state))) {
+            this.cache.set(settledKey, checks);
+        } else if (recheck) {
+            // A re-run started on a head whose checks were settled: the home reads them again.
+            this.cache.delete(settledKey);
+        }
+        return checks;
     }
 
     /** Head commit of a branch, or null if the branch no longer exists. */
-    branchHead(ws: string, repo: string, branch: string): Promise<string | null> {
-        return this.cache.getLive(`live:${ws}/${repo}:branch:${branch}`, BUILD_TTL_MS, async () => {
+    branchHead(ws: string, repo: string, branch: string, maxAgeMs = BUILD_TTL_MS): Promise<string | null> {
+        return this.cache.getLive(`live:branch:${ws}/${repo}:${branch}`, maxAgeMs, async () => {
             const raw = await this.json<BbBranch>('GET', `${this.repoPath(ws, repo)}/refs/branches/${encodePath(branch)}`, { allow404: true });
             return raw?.target?.hash ?? null;
         });
@@ -293,9 +319,14 @@ export class BitbucketClient {
         }, 4);
     }
 
+    /** Forgets the unsettled build checks and the branch heads read for a repository (explicit refresh). */
+    forgetLiveHealth(ws: string, repo: string): void {
+        this.cache.invalidateLive(`live:statuses:${ws}/${repo}#`);
+        this.cache.invalidateLive(`live:branch:${ws}/${repo}:`);
+    }
+
     invalidatePr(ws: string, repo: string, id: number): void {
         this.cache.invalidateLive(`live:${ws}/${repo}#${id}:`);
-        this.cache.invalidateLive('live:home:');
     }
 
     // ---------- Immutable data (disk cache) ----------

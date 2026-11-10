@@ -1,8 +1,9 @@
 // Configuration folder, settings and local state (JSON files written atomically, mode 0600).
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { PrRef, VersionKind } from '../../shared/api.ts';
+import type { Home, PrRef, VersionKind } from '../../shared/api.ts';
 import { parseRepoList } from '../../shared/repos.ts';
 import { normalizeReviewSettings, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { LocalReview } from '../core/model.ts';
@@ -26,6 +27,15 @@ export interface NotifiedState {
     /** false until the first poll recorded the baseline (nothing is notified before). */
     initialized: boolean;
     seen: Record<string, string>;
+}
+
+/** Last home computed by any window of the profile, reused by the others for a while (HomeService). */
+export interface HomeSnapshot {
+    /** Date.now() when its computation started. */
+    at: number;
+    /** What the home depends on besides Bitbucket (account, repositories, review settings, local state). */
+    key: string;
+    home: Home;
 }
 
 interface StateFile {
@@ -104,6 +114,46 @@ class JsonFile<T> {
         this.cached = value;
         this.signature = signatureOf(this.file);
     }
+
+    /** Removes the file: the next read gives the defaults. */
+    remove(): void {
+        try {
+            fs.rmSync(this.file, { force: true });
+        } catch (error) {
+            console.warn(`revspan: cannot remove ${this.file} (${(error as Error).message})`);
+        }
+        this.signature = null;
+    }
+}
+
+function homeSnapshotOf(raw: unknown): HomeSnapshot | null {
+    const value = raw as Partial<HomeSnapshot> | null;
+    return value && typeof value.at === 'number' && typeof value.key === 'string' && typeof value.home === 'object' && value.home !== null
+        ? { at: value.at, key: value.key, home: value.home }
+        : null;
+}
+
+interface Lease {
+    token: string;
+    at: number;
+}
+
+function readLease(file: string): Lease | null {
+    try {
+        const value = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Lease>;
+        return typeof value.token === 'string' && typeof value.at === 'number' ? { token: value.token, at: value.at } : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Age of a lease file by its modification time (a lease being written cannot be read yet). */
+function fileAgeMs(file: string): number {
+    try {
+        return Date.now() - fs.statSync(file).mtimeMs;
+    } catch {
+        return Infinity;
+    }
 }
 
 /** Copy of a PR state, nested records included: a mutation does not reach the cached file until it is written. */
@@ -142,6 +192,9 @@ export class Store {
     private readonly reviewSource: ReviewSource | null;
     private readonly configFile: JsonFile<AppConfig>;
     private readonly stateFile: JsonFile<StateFile>;
+    private readonly homeFile: JsonFile<HomeSnapshot | null>;
+    private readonly leaseFile: string;
+    private localSig: { of: StateFile['prs']; value: string } | null = null;
 
     constructor(dir: string, { repoSource = null, reviewSource = null }: { repoSource?: RepoSource | null; reviewSource?: ReviewSource | null } = {}) {
         this.dir = dir;
@@ -153,6 +206,8 @@ export class Store {
             return { ...value, review: normalizeReviewSettings(value.review) };
         });
         this.stateFile = new JsonFile(path.join(dir, 'state.json'), (raw) => ({ prs: {}, ...(raw as Partial<StateFile>) }));
+        this.homeFile = new JsonFile(path.join(dir, 'home.json'), homeSnapshotOf);
+        this.leaseFile = path.join(dir, 'home.lock');
     }
 
     get config(): Readonly<AppConfig> {
@@ -212,5 +267,72 @@ export class Store {
         if (JSON.stringify(state) !== before) {
             this.stateFile.write({ ...file, notified: state });
         }
+    }
+
+    /**
+     * Fingerprint of what the home reads in the local PR states: "reviewed" marks and version types. Seen files are left
+     * out (ticked one by one while reviewing, they do not change the home).
+     */
+    localSignature(): string {
+        const { prs } = this.stateFile.read();
+        if (this.localSig?.of !== prs) {
+            const read = Object.entries(prs)
+                .filter(([, state]) => state.reviewedHash || Object.keys(state.kinds ?? {}).length > 0)
+                .map(([key, state]) => [key, state.reviewedHash ?? null, state.reviewedAt ?? null, state.kinds ?? {}]);
+            this.localSig = { of: prs, value: createHash('sha1').update(JSON.stringify(read)).digest('hex') };
+        }
+        return this.localSig.value;
+    }
+
+    /** Last home computed by a window of this profile (null if none or unreadable). */
+    homeSnapshot(): HomeSnapshot | null {
+        return this.homeFile.read();
+    }
+
+    saveHomeSnapshot(snapshot: HomeSnapshot): void {
+        try {
+            this.homeFile.write(snapshot);
+        } catch (error) {
+            console.warn(`revspan: cannot share the home (${(error as Error).message})`);
+        }
+    }
+
+    /** Forgets the shared home (a write on a PR, a change of account or token): the next read computes it again. */
+    dropHomeSnapshot(): void {
+        this.homeFile.remove();
+    }
+
+    /**
+     * Takes the right to compute the home for every window of the profile (a file created exclusively). Returns its
+     * release, or null while another window holds it; a lease older than staleMs (window closed mid-computation) is taken
+     * over. When no lease can be written at all, the caller computes anyway.
+     */
+    claimHomeLease(staleMs: number): (() => void) | null {
+        const token = randomUUID();
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                fs.writeFileSync(this.leaseFile, JSON.stringify({ token, at: Date.now() }), { flag: 'wx', mode: 0o600 });
+                return () => {
+                    try {
+                        if (readLease(this.leaseFile)?.token === token) {
+                            fs.rmSync(this.leaseFile, { force: true });
+                        }
+                    } catch (error) {
+                        console.warn(`revspan: cannot release the home lease (${(error as Error).message})`);
+                    }
+                };
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+                    return () => undefined;
+                }
+                const held = readLease(this.leaseFile);
+                const age = held ? Date.now() - held.at : fileAgeMs(this.leaseFile);
+                if (age >= 0 && age < staleMs) {
+                    return null;
+                }
+                fs.rmSync(this.leaseFile, { force: true });
+            }
+        }
+        return null;
     }
 }

@@ -27,6 +27,8 @@ export interface BbPullRequest {
     destination?: { branch?: { name?: string }; commit?: BbCommitRef };
     created_on?: string;
     updated_on?: string;
+    /** Comments on the PR (part of the list's default fields). */
+    comment_count?: number;
     participants?: BbParticipant[];
     reviewers?: BbUser[];
     links?: { html?: { href?: string } };

@@ -38,7 +38,7 @@ describe('extension manifest', () => {
         const source = fs.readFileSync(new URL('../../src/extension/extension.ts', import.meta.url), 'utf8');
         const registered = (pattern: RegExp): string[] => [...source.matchAll(pattern)].map((m) => m[1] ?? '').sort();
         expect(registered(/registerCommand\('([^']+)'/g)).toEqual(manifest.contributes.commands.map((c) => c.command).sort());
-        expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
+        expect(registered(/createTreeView\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
     });
 
     it('activated once VS Code has started: background refresh and notifications do not wait for the view', () => {

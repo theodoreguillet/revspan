@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BitbucketClient } from '../../src/server/bitbucket/client.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
-import { summarizeBuild, toBuildChecks } from '../../src/server/core/build.ts';
+import { summarizeBuild } from '../../src/server/core/build.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
 
 describe('fake Bitbucket: build statuses and branch heads', () => {
@@ -15,7 +15,7 @@ describe('fake Bitbucket: build statuses and branch heads', () => {
 
     const buildOf = async (id: number) => {
         const pr = await client.pullRequest(WS, REPO, id);
-        return summarizeBuild(toBuildChecks(await client.prStatuses(WS, REPO, id), pr.source?.commit?.hash ?? ''));
+        return summarizeBuild(await client.headChecks(WS, REPO, id, pr.source?.commit?.hash ?? ''));
     };
 
     it('serves one failed, one running and one PR without status', async () => {

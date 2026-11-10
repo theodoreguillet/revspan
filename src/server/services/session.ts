@@ -64,6 +64,7 @@ export class BitbucketSession {
     reset(): void {
         this.connection = null;
         this.cache.invalidateLive('live:');
+        this.store.dropHomeSnapshot();
     }
 
     /** The token is read once (on macOS, one `security` subprocess per read) then kept until reset(). */

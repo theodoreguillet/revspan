@@ -178,25 +178,101 @@ describe('BitbucketClient: commit erased after being cached', () => {
 });
 
 describe('BitbucketClient: build statuses and branch heads', () => {
-    it('reads PR statuses with a page length of 50 and follows pagination', async () => {
+    const HEAD = 'a'.repeat(40);
+    const status = (key: string, state: string, hash = HEAD): Record<string, unknown> => ({ key, state, commit: { hash }, updated_on: '2026-10-01T00:00:00Z' });
+
+    it('reads the head\'s checks with a page length of 50, following pagination, other commits left out', async () => {
         const next = `${BASE}/repositories/acme/records-api/pullrequests/7/statuses?page=2`;
         const fetchImpl = mockFetch(
-            jsonResponse(200, { values: [{ key: 'ci', state: 'FAILED' }], next }),
-            jsonResponse(200, { values: [{ key: 'scan', state: 'SUCCESSFUL' }] }),
+            jsonResponse(200, { values: [status('ci', 'FAILED'), status('old', 'SUCCESSFUL', 'b'.repeat(40))], next }),
+            jsonResponse(200, { values: [status('scan', 'SUCCESSFUL')] }),
         );
-        const statuses = await makeClient(fetchImpl).prStatuses('acme', 'records-api', 7);
-        expect(statuses.map((s) => s.key)).toEqual(['ci', 'scan']);
+        const checks = await makeClient(fetchImpl).headChecks('acme', 'records-api', 7, HEAD.slice(0, 12));
+        expect(checks.map((c) => `${c.key}:${c.state}`)).toEqual(['ci:failed', 'scan:success']);
         const first = new URL(String(fetchImpl.mock.calls[0]?.[0]));
         expect(first.pathname).toBe('/2.0/repositories/acme/records-api/pullrequests/7/statuses');
         expect(first.searchParams.get('pagelen')).toBe('50');
     });
 
-    it('caches PR statuses for a short time', async () => {
-        const fetchImpl = mockFetch(jsonResponse(200, { values: [] }), jsonResponse(200, { values: [] }));
-        const client = makeClient(fetchImpl);
-        await client.prStatuses('acme', 'records-api', 7);
-        await client.prStatuses('acme', 'records-api', 7);
-        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    it('settled checks (success, failed, stopped) are kept for their head and never asked again', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(jsonResponse(200, { values: [status('ci', 'FAILED'), status('scan', 'STOPPED'), status('lint', 'SUCCESSFUL')] }));
+            const client = makeClient(fetchImpl);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 1000 });
+            vi.advanceTimersByTime(24 * 3600_000);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD.slice(0, 12), { maxAgeMs: 1000 })).map((c) => c.state))
+                .toEqual(['failed', 'stopped', 'success']);
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a running check or no check at all is asked again once older than maxAgeMs, and for a new head', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(
+                jsonResponse(200, { values: [status('ci', 'INPROGRESS'), status('scan', 'SUCCESSFUL')] }),
+                jsonResponse(200, { values: [status('ci', 'SUCCESSFUL'), status('scan', 'SUCCESSFUL')] }),
+                jsonResponse(200, { values: [] }),
+                jsonResponse(200, { values: [] }),
+            );
+            const client = makeClient(fetchImpl);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000 });
+            vi.advanceTimersByTime(59_000);
+            await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000 });
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(2_000);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD, { maxAgeMs: 60_000 })).map((c) => c.state)).toEqual(['success', 'success']);
+            // No check on a new head: read, then read again only past maxAgeMs.
+            const other = 'c'.repeat(40);
+            expect(await client.headChecks('acme', 'records-api', 7, other, { maxAgeMs: 60_000 })).toEqual([]);
+            await client.headChecks('acme', 'records-api', 7, other, { maxAgeMs: 60_000 });
+            expect(fetchImpl).toHaveBeenCalledTimes(3);
+            vi.advanceTimersByTime(61_000);
+            await client.headChecks('acme', 'records-api', 7, other, { maxAgeMs: 60_000 });
+            expect(fetchImpl).toHaveBeenCalledTimes(4);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('recheck asks even settled checks; a re-run drops what was kept, so the next read asks again', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(
+                jsonResponse(200, { values: [status('ci', 'FAILED')] }),
+                jsonResponse(200, { values: [status('ci', 'INPROGRESS')] }),
+                jsonResponse(200, { values: [status('ci', 'SUCCESSFUL')] }),
+            );
+            const client = makeClient(fetchImpl);
+            await client.headChecks('acme', 'records-api', 7, HEAD);
+            vi.advanceTimersByTime(61_000);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD, { recheck: true })).map((c) => c.state)).toEqual(['running']);
+            vi.advanceTimersByTime(61_000);
+            expect((await client.headChecks('acme', 'records-api', 7, HEAD)).map((c) => c.state)).toEqual(['success']);
+            expect(fetchImpl).toHaveBeenCalledTimes(3);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('branch heads are reused for maxAgeMs, then asked again; forgetLiveHealth drops them', async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchImpl = mockFetch(...['1', '2', '3'].map((c) => jsonResponse(200, { target: { hash: c.repeat(40) } })));
+            const client = makeClient(fetchImpl);
+            expect(await client.branchHead('acme', 'records-api', 'master', 300_000)).toBe('1'.repeat(40));
+            vi.advanceTimersByTime(200_000);
+            expect(await client.branchHead('acme', 'records-api', 'master', 300_000)).toBe('1'.repeat(40));
+            vi.advanceTimersByTime(101_000);
+            expect(await client.branchHead('acme', 'records-api', 'master', 300_000)).toBe('2'.repeat(40));
+            client.forgetLiveHealth('acme', 'records-api');
+            expect(await client.branchHead('acme', 'records-api', 'master', 300_000)).toBe('3'.repeat(40));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('returns the head hash of a branch and encodes each segment of its name', async () => {

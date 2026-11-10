@@ -21,7 +21,6 @@ vi.mock('vscode', () => import('../support/fake-vscode.ts'));
 let fake: FakeBitbucket;
 let dir: string;
 const notifiers: Notifier[] = [];
-const caches: Cache[] = [];
 /** Requests sent to the fake Bitbucket by every window. */
 let requests = 0;
 const countingFetch: typeof fetch = (input, init) => {
@@ -29,17 +28,32 @@ const countingFetch: typeof fetch = (input, init) => {
     return fetch(input, init);
 };
 
-/** The live caches' TTLs elapse in every window (the poller reads through them, never fresh). */
-const expireLiveCaches = (): void => caches.forEach((cache) => cache.invalidateLive('live:'));
+/** One refresh interval goes by (default 5 minutes): every cache the poller reads through has expired. Only Date is faked. */
+const nextInterval = (): void => {
+    vi.setSystemTime(new Date(Date.now() + 5 * 60_000 + 1000));
+};
+
+/** Requests sent to the fake Bitbucket while `run` ran, as "list", "user", "diffstat"... */
+async function requestsOf(run: () => Promise<unknown>): Promise<string[]> {
+    const start = fake.requests.length;
+    await run();
+    return fake.requests.slice(start).map((r) => {
+        const rest = r.path.replace(/^\/2\.0\/repositories\/[^/]+\/[^/]+/, '');
+        if (rest === '/pullrequests') {
+            return 'list';
+        }
+        const pr = /^\/pullrequests\/\d+(?:\/([a-z-]+))?/.exec(rest);
+        return pr ? pr[1] ?? 'pr' : rest.split('/')[1] ?? rest;
+    });
+}
 
 /** One VS Code window: its own Store, services and notifier, on the shared folder. */
-async function openWindow(onPolled = vi.fn()): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
+async function openWindow(onPolled = vi.fn(), isVisible = (): boolean => false): Promise<{ store: Store; services: Services; notifier: Notifier; onPolled: typeof onPolled }> {
     const store = new Store(dir);
     const secrets = await createSecretStore({ dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
     const cache = new Cache(path.join(dir, `cache-${notifiers.length}`));
-    caches.push(cache);
     const services = createServices({ store, secrets, cache, baseUrl: fake.url, fetchImpl: countingFetch });
-    const notifier = new Notifier({ store, session: services.session, home: services.home, prs: services.prs, onPolled });
+    const notifier = new Notifier({ store, session: services.session, home: services.home, prs: services.prs, onPolled, isVisible });
     notifiers.push(notifier);
     return { store, services, notifier, onPolled };
 }
@@ -50,11 +64,13 @@ const pushOnPurged = (): void => {
     pushVersion(fake.data, FAKE_PRS.purged, {
         commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: { 'src/Purged.ts': 'a\nb\nv2\nv3\nv4\n' }, date: '2026-10-22T09:00:00Z',
     });
-    expireLiveCaches();
+    nextInterval();
 };
 
 beforeEach(async () => {
     resetFakeVscode();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T09:00:00Z'));
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-notifier-'));
     fake = await startFakeBitbucket();
     const first = await openWindow();
@@ -66,7 +82,6 @@ afterEach(async () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     notifiers.splice(0).forEach((n) => n.dispose());
-    caches.length = 0;
     await fake.close();
     fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -112,7 +127,7 @@ describe('background refresh and notifications', () => {
         await notifier.poll();
         const statuses = fake.data.statuses.get(FAKE_PRS.mine) ?? [];
         fake.data.statuses.set(FAKE_PRS.mine, statuses.map((s) => ({ ...s, state: 'FAILED' })));
-        expireLiveCaches();
+        nextInterval();
         await notifier.poll();
         await notifier.poll();
         expect(recorded.warnings).toEqual(['Build failed on your PR: DEMO-45 - feat(mine): my own pull request']);
@@ -123,14 +138,14 @@ describe('background refresh and notifications', () => {
         const { store, notifier } = await openWindow();
         await notifier.poll();
         pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
-        expireLiveCaches();
+        nextInterval();
         await notifier.poll();
         expect(recorded.infos).toEqual([]);
         const head = fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash ?? '';
         expect(store.notified().seen[`${WS}/${REPO}#${FAKE_PRS.purged}`]?.split(' ')[0]).toBe(head.slice(0, 12));
     });
 
-    it('within the cache TTL a poll reads the cached home: a push is only seen once the TTL elapsed', async () => {
+    it('within half an interval a poll reads the shared home: a push is only seen by the next interval\'s poll', async () => {
         const { notifier } = await openWindow();
         await notifier.poll();
         pushVersion(fake.data, FAKE_PRS.purged, {
@@ -140,7 +155,7 @@ describe('background refresh and notifications', () => {
         await notifier.poll();
         expect(requests).toBe(before);
         expect(recorded.infos).toEqual([]);
-        expireLiveCaches();
+        nextInterval();
         await notifier.poll();
         expect(recorded.infos).toEqual([`New version to review: ${PURGED_TITLE}`]);
     });
@@ -164,6 +179,66 @@ describe('background refresh and notifications', () => {
         env.language = 'fr';
         await notifier.poll();
         expect(recorded.infos).toEqual([`Nouvelle version à relire : ${PURGED_TITLE}`]);
+    });
+
+    it('all three notifications off and no Revspan view visible: the poll does nothing; switching one on shows no backlog', async () => {
+        const { store, notifier, onPolled } = await openWindow();
+        await notifier.poll();
+        const on = store.config.review.notifications;
+        await store.saveConfig({ review: { ...store.config.review, notifications: { newPullRequest: false, newVersion: false, buildFailed: false } } });
+        pushOnPurged();
+        expect(await requestsOf(() => notifier.poll())).toEqual([]);
+        expect(onPolled).toHaveBeenCalledTimes(1);
+        await store.saveConfig({ review: { ...store.config.review, notifications: on } });
+        nextInterval();
+        await notifier.poll();
+        expect(recorded.infos).toEqual([]);
+        // What happens from then on is notified again.
+        pushVersion(fake.data, FAKE_PRS.purged, {
+            commit: 'purged:v5', from: 'purged:v4', base: 'purged:m0', changes: { 'src/Purged.ts': 'a\nb\nv2\nv3\nv4\nv5\n' }, date: '2026-10-23T09:00:00Z',
+        });
+        nextInterval();
+        await notifier.poll();
+        expect(recorded.infos).toEqual([`New version to review: ${PURGED_TITLE}`]);
+    });
+
+    it('all notifications off but a Revspan view visible: the poll still refreshes the home', async () => {
+        const { store, notifier, onPolled } = await openWindow(vi.fn(), () => true);
+        await store.saveConfig({ review: { ...store.config.review, notifications: { newPullRequest: false, newVersion: false, buildFailed: false } } });
+        expect(await requestsOf(() => notifier.poll())).toContain('list');
+        expect(onPolled).toHaveBeenCalledTimes(1);
+    });
+
+    it('two windows polling at the same moment compute the home once', async () => {
+        const a = await openWindow();
+        const b = await openWindow();
+        await a.notifier.poll();
+        await b.notifier.poll();
+        nextInterval();
+        const spent = await requestsOf(() => Promise.all([a.notifier.poll(), b.notifier.poll()]));
+        expect(spent.filter((r) => r === 'list')).toEqual(['list']);
+    });
+
+    it('new version check: only the versions since the previous head are summarized, then nothing is checked again', async () => {
+        const { notifier } = await openWindow();
+        await notifier.poll();
+        pushVersion(fake.data, FAKE_PRS.long, {
+            commit: 'long:v35', from: 'long:v34', base: 'long:m28', changes: { 'src/Long.ts': 'changed\n' }, date: '2026-10-22T09:00:00Z',
+        });
+        nextInterval();
+        const check = await requestsOf(() => notifier.poll());
+        expect(recorded.infos).toEqual(['New version to review: DEMO-43 - feat(long): a very long running pull request']);
+        // One version summary (at most 3 diffstats), not the 35 versions of the PR.
+        expect(check.filter((r) => r === 'diffstat').length).toBeLessThanOrEqual(3);
+        // Next interval: only what is read once per interval (lists, unsettled checks, branch heads); no version check again.
+        nextInterval();
+        const next = await requestsOf(() => notifier.poll());
+        expect(next).toContain('list');
+        expect(next.filter((r) => !['list', 'statuses', 'refs'].includes(r))).toEqual([]);
+        // Within the interval, from another window: nothing at all.
+        const other = await openWindow();
+        await other.services.session.me();
+        expect(await requestsOf(() => other.notifier.poll())).toEqual([]);
     });
 });
 

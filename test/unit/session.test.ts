@@ -8,7 +8,7 @@ describe('BitbucketSession', () => {
     it('reads the token only once until reset()', async () => {
         const get = vi.fn(async () => 'tok-123456');
         const secrets = { kind: 'file', get, set: vi.fn(), remove: vi.fn() } as unknown as SecretStore;
-        const store = { config: { email: 'a@acme.test', repos: [] } } as unknown as Store;
+        const store = { config: { email: 'a@acme.test', repos: [] }, dropHomeSnapshot: vi.fn() } as unknown as Store;
         const session = new BitbucketSession({ store, secrets, cache: new Cache(null) });
         const first = await session.getClient();
         expect(await session.getClient()).toBe(first);
@@ -16,5 +16,7 @@ describe('BitbucketSession', () => {
         session.reset();
         await session.getClient();
         expect(get).toHaveBeenCalledTimes(2);
+        // A new account or token: the home shared by the windows is not reused either.
+        expect(store.dropHomeSnapshot).toHaveBeenCalledTimes(1);
     });
 });

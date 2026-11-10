@@ -68,11 +68,22 @@ export interface FakeData {
     nextId(): number;
 }
 
+/** A request the fake Bitbucket answered (reads included), to count what a computation costs. */
+export interface RecordedRequest {
+    method: string;
+    path: string;
+    /** Page number of a paginated read (1 when absent). */
+    page: number;
+}
+
 export interface FakeBitbucket {
     url: string;
     port: number;
     data: FakeData;
+    /** Writes only. */
     calls: RecordedCall[];
+    /** Every authenticated API request, reads included. */
+    requests: RecordedRequest[];
     close(): Promise<void>;
 }
 
@@ -144,6 +155,7 @@ class FakeBuilder {
                 destination: { branch: { name: 'master' }, commit: { hash: hex(last.base).slice(0, 12) } },
                 created_on: first.date,
                 updated_on: last.date,
+                comment_count: comments.length,
                 participants,
                 // Like Bitbucket, the designated reviewers are the participants with the REVIEWER role.
                 reviewers: participants.flatMap((p) => (p.role === 'REVIEWER' && p.user ? [p.user] : [])),
@@ -394,6 +406,7 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown> |
 export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
     const data = buildFakeData();
     const calls: RecordedCall[] = [];
+    const requests: RecordedRequest[] = [];
     const src = data.repo.source();
     const auth = `Basic ${Buffer.from(`${FAKE_EMAIL}:${FAKE_TOKEN}`).toString('base64')}`;
     const fullHash = (prefix: string): string | undefined => [...data.repo.commits.keys()].find((k) => k.startsWith(prefix));
@@ -416,6 +429,7 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         if (req.headers.authorization !== auth) {
             return send(res, 401, { type: 'error', error: { message: 'Unauthorized' } });
         }
+        requests.push({ method: req.method ?? '', path, page: Number(url.searchParams.get('page') ?? 1) });
         if (failNext) {
             const status = failNext;
             failNext = null;
@@ -525,6 +539,7 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             };
             fake.comments.push(created);
             fake.activity.push({ comment: created });
+            fake.pr.comment_count = fake.comments.filter((c) => !c.deleted).length;
             return send(res, 201, created);
         }
         if ((m = /^\/comments\/(\d+)$/.exec(sub)) && req.method === 'DELETE') {
@@ -533,6 +548,7 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
                 return send(res, 404, { error: { message: 'no comment' } });
             }
             target.deleted = true;
+            fake.pr.comment_count = fake.comments.filter((c) => !c.deleted).length;
             return send(res, 204, '', 'text/plain');
         }
         if ((m = /^\/comments\/(\d+)\/resolve$/.exec(sub))) {
@@ -572,6 +588,7 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
                 port: bound,
                 data,
                 calls,
+                requests,
                 close: () => new Promise((done) => {
                     server.closeAllConnections();
                     server.close(() => done());

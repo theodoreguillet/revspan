@@ -5,7 +5,7 @@ import type {
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import { compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource } from '../core/compare.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf, type PushUpdate,
+    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf, versionsAfter, type PushUpdate,
 } from '../core/model.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -15,6 +15,18 @@ import type { BitbucketSession } from './session.ts';
 
 /** To increment if the summary computation changes (invalidates the disk cache). */
 const SUMMARY_VERSION = 4;
+
+/**
+ * What a read needs besides the versions. comments: false for the reads that only use the versions (summary, version types,
+ * "reviewed" mark); their review and threads are then incomplete. health: build checks and needs-rebase (PR page only).
+ */
+interface LoadOptions {
+    comments?: boolean;
+    health?: boolean;
+}
+
+/** The versions only (summary, version types, "reviewed" mark). */
+const VERSIONS_ONLY: LoadOptions = { comments: false };
 
 interface LoadedPr {
     client: BitbucketClient;
@@ -38,27 +50,44 @@ export class PrService {
     // ---------- Reading ----------
 
     async detail(ref: PrRef): Promise<PrDetail> {
-        return (await this.load(ref)).detail;
+        return (await this.load(ref, { health: true })).detail;
     }
 
     async summary(ref: PrRef): Promise<Summary> {
-        return { versions: (await this.summarize(ref)).results };
+        const { results } = await this.summarize(ref);
+        return { versions: results.filter((r): r is VersionSummary => r !== null) };
     }
 
-    /** Type of each version, oldest first, with its commit (the notifier tells code from rebases since a given head). */
-    async versionKinds(ref: PrRef): Promise<{ hash: string; kind: VersionKind }[]> {
-        const { versions, results } = await this.summarize(ref);
-        return versions.map((version, i) => ({ hash: version.hash, kind: results[i]?.kind ?? 'unavailable' }));
+    /**
+     * Type of each version, oldest first, with its commit (the notifier tells code from rebases since a given head).
+     * sinceHead: only the versions after that head are computed (the last one alone if it is no longer there); the
+     * others have kind null. Each version summary is kept on disk, so a version is computed once.
+     */
+    async versionKinds(ref: PrRef, sinceHead?: string): Promise<{ hash: string; kind: VersionKind | null }[]> {
+        const { versions, results } = await this.summarize(ref, sinceHead);
+        return versions.map((version, i) => ({ hash: version.hash, kind: results[i]?.kind ?? null }));
     }
 
-    private async summarize(ref: PrRef): Promise<{ versions: Version[]; results: VersionSummary[] }> {
-        const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => ({
-            versions,
-            // Unavailable version: immediate summary, never cached.
-            results: await Promise.all(versions.map((v) => (v.available
-                ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
-                : summarizeVersion(src, versions, v.index)))),
-        }));
+    /**
+     * Summaries of every version, or of those after sinceHead (null for the others), remembered as version types for the
+     * home.
+     */
+    private async summarize(ref: PrRef, sinceHead?: string): Promise<{ versions: Version[]; results: (VersionSummary | null)[] }> {
+        const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => {
+            const wanted = new Set(sinceHead === undefined ? versions : versionsAfter(versions, sinceHead));
+            return {
+                versions,
+                results: await Promise.all(versions.map((v) => {
+                    if (!wanted.has(v)) {
+                        return null;
+                    }
+                    // Unavailable version: immediate summary, never cached.
+                    return v.available
+                        ? this.cache.getOrCompute(summaryKey(ref, v, versions[previousAvailable(versions, v.index) - 1]), () => summarizeVersion(src, versions, v.index))
+                        : summarizeVersion(src, versions, v.index);
+                })),
+            };
+        }, VERSIONS_ONLY);
         // Remembers the type of each version for the home page (no recomputation there).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
@@ -140,7 +169,7 @@ export class PrService {
     }
 
     async markReviewed(ref: PrRef, version: number): Promise<Ok> {
-        const { versions } = await this.load(ref);
+        const { versions } = await this.load(ref, VERSIONS_ONLY);
         const target = versions[version - 1];
         if (!target) {
             throw badRequest(`Unknown version: ${version}`);
@@ -165,12 +194,12 @@ export class PrService {
 
     // ---------- Internal ----------
 
-    private async load(ref: PrRef): Promise<LoadedPr> {
+    private async load(ref: PrRef, { comments: withComments = true, health = false }: LoadOptions = {}): Promise<LoadedPr> {
         const client = await this.session.getClient();
         const [pr, activity, comments, me] = await Promise.all([
             client.pullRequest(ref.workspace, ref.repo, ref.id),
             client.activity(ref.workspace, ref.repo, ref.id),
-            client.comments(ref.workspace, ref.repo, ref.id),
+            withComments ? client.comments(ref.workspace, ref.repo, ref.id) : [],
             this.session.me(),
         ]);
         const updates = extractUpdates(activity, pr);
@@ -184,10 +213,13 @@ export class PrService {
         const info = prInfo(ref, pr);
         const head = pr.source?.commit?.hash ?? versions[versions.length - 1]?.hash ?? '';
         const isMine = meUuid !== null && pr.author?.uuid === meUuid;
-        const [build, needsRebase] = await Promise.all([
-            loadBuildChecks(client, ref, head),
-            isMine ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
-        ]);
+        // The PR page reads the checks even when settled (a re-run shows there, and the home learns it).
+        const [build, needsRebase] = health
+            ? await Promise.all([
+                loadBuildChecks(client, ref, head, { recheck: true }),
+                isMine ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
+            ])
+            : [null, null];
         return {
             client,
             updates,
@@ -202,8 +234,8 @@ export class PrService {
      * Computation over the PR's versions. A commit cached then erased by Bitbucket only shows up here (404 on its
      * contents): it is forgotten along with what depends on it, the PR reloaded (the version becomes unavailable) and the computation resumed.
      */
-    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>): Promise<T> {
-        let loaded = await this.load(ref);
+    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>, options: LoadOptions = {}): Promise<T> {
+        let loaded = await this.load(ref, options);
         const purged = new Set<string>();
         for (;;) {
             try {
@@ -216,7 +248,7 @@ export class PrService {
                 const { hash } = error.version;
                 purged.add(hash);
                 this.forgetVersion(ref, loaded, error.version);
-                loaded = await this.load(ref);
+                loaded = await this.load(ref, options);
                 // If Bitbucket still reads that commit (contents 404), stop here (410) instead of looping.
                 if (loaded.versions.some((v) => v.hash === hash && isReadable(v))) {
                     throw error;
@@ -237,13 +269,14 @@ export class PrService {
         }
     }
 
-    /** Write to Bitbucket, then invalidation of the PR's live data and of the home page. */
+    /** Write to Bitbucket, then invalidation of the PR's live data and of the home shared by the windows. */
     private async write<T>(ref: PrRef, action: (client: BitbucketClient) => Promise<T>): Promise<T> {
         const client = await this.session.getClient();
         try {
             return await action(client);
         } finally {
             client.invalidatePr(ref.workspace, ref.repo, ref.id);
+            this.store.dropHomeSnapshot();
         }
     }
 }
