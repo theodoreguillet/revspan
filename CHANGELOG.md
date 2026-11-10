@@ -25,7 +25,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   changed since; other PRs needing review go to "Other open PRs". While you follow nobody, every PR needing review is
   still listed.
 - Saving a setting VS Code does not know yet (the extension was updated but the window was not reloaded) now asks you
-  to reload the window instead of showing an internal error.
+  to reload the window instead of showing an internal error, and saves none of the other changes. Saving or following
+  without touching the new setting keeps working until the reload.
 - French texts of the review, notification and settings strings now say « tu » everywhere.
 
 ## [3.1.0] - 2026-11-10

@@ -174,7 +174,8 @@ export const workspace = {
         return {
             get<T>(key: string): T | undefined {
                 const levels = settingLevels.get(id(key));
-                return (levels?.workspace ?? levels?.global ?? settingDefault(id(key))) as T | undefined;
+                // An unregistered setting has no default (VS Code does not know it): undefined when unset.
+                return (levels?.workspace ?? levels?.global ?? (registered(id(key)) ? settingDefault(id(key)) : undefined)) as T | undefined;
             },
             inspect(key: string): { defaultValue?: unknown; globalValue?: unknown; workspaceValue?: unknown } {
                 const levels = settingLevels.get(id(key));

@@ -149,6 +149,33 @@ describe('review settings in the VS Code configuration', () => {
         });
     });
 
+    it('a window not reloaded yet: saving other review settings works, the unknown setting counts as its default', async () => {
+        const { http: app, store } = await bridge();
+        unregisteredSettings.add('revspan.review.hideUnfollowed');
+        expect(store.config.review.hideUnfollowed).toBe(true);
+        const followed = [{ uuid: '{cam}', displayName: 'Camille Durand' }];
+        const put = await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { followed } } });
+        expect(put.status).toBe(200);
+        expect((put.body as Settings).review.followed).toEqual(followed);
+        expect(settings().inspect('review.followedContributors')?.globalValue).toEqual(followed);
+        expect(settings().inspect('review.hideUnfollowed')?.globalValue).toBeUndefined();
+    });
+
+    it('a save touching an unknown setting writes nothing at all (all or nothing)', async () => {
+        const { http: app } = await bridge();
+        unregisteredSettings.add('revspan.review.hideUnfollowed');
+        const put = await callApi(app, {
+            method: 'PUT',
+            path: '/api/settings',
+            body: { review: { requiredApprovals: 3, followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }], hideUnfollowed: false, refreshMinutes: 10 } },
+        });
+        expect(put.status).toBe(409);
+        expect((put.body as ApiErrorBody).error).toMatchObject({ code: 'SETTING_UNREGISTERED', params: { setting: 'revspan.review.hideUnfollowed' } });
+        for (const key of ['review.requiredApprovals', 'review.followedContributors', 'review.hideUnfollowed', 'refreshIntervalMinutes']) {
+            expect(settings().inspect(key)?.globalValue, key).toBeUndefined();
+        }
+    });
+
     it('any other write failure stays an internal error with VS Code\'s text', async () => {
         const { http: app } = await bridge();
         settingWrites.failure = new Error('Unable to write into user settings. Please open the user settings to correct errors/warnings in it and try again.');

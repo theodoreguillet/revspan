@@ -10,6 +10,7 @@ import { createHttpApp } from '../server/http/app.ts';
 import { Cache } from '../server/infra/cache.ts';
 import { Store, type RepoSource, type ReviewSource } from '../server/infra/config.ts';
 import { createServices, type Services } from '../server/services/index.ts';
+import { DEFAULT_REVIEW_SETTINGS } from '../shared/review-settings.ts';
 import { AppError } from '../server/errors.ts';
 import { IN_MEMORY_HOST } from './lib/bridge.ts';
 import { isUnregisteredSetting, settingTarget } from './lib/setting-target.ts';
@@ -26,6 +27,12 @@ export const REPOS_SETTING = { section: 'revspan', key: 'repositories', id: 'rev
 
 const TOKEN_KEY_PREFIX = 'revspan.bitbucket-token:';
 
+/** A setting the running window does not know yet (extension updated, window not reloaded): the page asks to reload. */
+function unregisteredError(key: string): AppError {
+    const setting = `${REPOS_SETTING.section}.${key}`;
+    return new AppError(409, 'SETTING_UNREGISTERED', `Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings (${setting} is not registered yet).`, { setting });
+}
+
 /**
  * Writes a revspan.* setting at the level that gives the effective value (otherwise a .vscode/settings.json would mask the
  * save). A setting VS Code does not know yet (extension updated, window not reloaded) gives SETTING_UNREGISTERED, which
@@ -41,8 +48,7 @@ async function writeSetting(key: string, value: unknown): Promise<void> {
         await config.update(key, value, target);
     } catch (error) {
         if (isUnregisteredSetting(error, inspection)) {
-            const setting = `${REPOS_SETTING.section}.${key}`;
-            throw new AppError(409, 'SETTING_UNREGISTERED', `Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings (${setting} is not registered yet).`, { setting });
+            throw unregisteredError(key);
         }
         throw error;
     }
@@ -88,21 +94,28 @@ export function vscodeReviewSource(): ReviewSource {
             };
         },
         async set(review) {
-            const values: [string, unknown][] = [
-                [keys.requiredApprovals, review.requiredApprovals],
-                [keys.requiredApprovalsByRepo, review.requiredApprovalsByRepo],
-                [keys.followed, review.followed],
-                [keys.hideUnfollowed, review.hideUnfollowed],
-                [keys.newPullRequest, review.notifications.newPullRequest],
-                [keys.newVersion, review.notifications.newVersion],
-                [keys.buildFailed, review.notifications.buildFailed],
-                [keys.refreshMinutes, review.refreshMinutes],
+            const defaults = DEFAULT_REVIEW_SETTINGS;
+            // [key, new value, default]: the default stands for a setting VS Code returns nothing for (not registered yet).
+            const values: [string, unknown, unknown][] = [
+                [keys.requiredApprovals, review.requiredApprovals, defaults.requiredApprovals],
+                [keys.requiredApprovalsByRepo, review.requiredApprovalsByRepo, defaults.requiredApprovalsByRepo],
+                [keys.followed, review.followed, defaults.followed],
+                [keys.hideUnfollowed, review.hideUnfollowed, defaults.hideUnfollowed],
+                [keys.newPullRequest, review.notifications.newPullRequest, defaults.notifications.newPullRequest],
+                [keys.newVersion, review.notifications.newVersion, defaults.notifications.newVersion],
+                [keys.buildFailed, review.notifications.buildFailed, defaults.notifications.buildFailed],
+                [keys.refreshMinutes, review.refreshMinutes, defaults.refreshMinutes],
             ];
-            for (const [key, value] of values) {
-                // Only what changed: an untouched setting stays absent from the user's settings.json.
-                if (JSON.stringify(read(key)) !== JSON.stringify(value)) {
-                    await writeSetting(key, value);
-                }
+            // Only what changed from the effective value: an untouched setting stays absent from the user's settings.json,
+            // and a setting the window does not know yet is not written while it keeps its default.
+            const changed = values.filter(([key, value, fallback]) => JSON.stringify(read(key) ?? fallback) !== JSON.stringify(value));
+            // All or nothing: a save that needs a setting VS Code does not know yet writes none of them.
+            const unknown = changed.find(([key]) => config().inspect(key)?.defaultValue === undefined);
+            if (unknown) {
+                throw unregisteredError(unknown[0]);
+            }
+            for (const [key, value] of changed) {
+                await writeSetting(key, value);
             }
         },
     };
