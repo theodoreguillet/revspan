@@ -183,7 +183,7 @@ export class PrService {
             updates,
             versions,
             detail: {
-                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build: build ?? [], needsRebase,
+                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase,
             },
         };
     }

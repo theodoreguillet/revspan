@@ -25,10 +25,11 @@ Common rules:
 |---|---|---|---|
 | GET | `/api/health` | — | `Health` |
 | GET | `/api/settings` | — | `Settings` |
+| GET | `/api/settings/followed` | — | `FollowedList` (local; the pages read it before a follow, since a read of `/api/settings` retitles the VS Code panel) |
 | PUT | `/api/settings` | `SettingsUpdate` | `Settings` |
 | POST | `/api/settings/test` | — | `ConnectionTest` |
 | GET | `/api/home` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key) |
-| GET | `/api/pr/:ws/:repo/:id` | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`) |
+| GET | `/api/pr/:ws/:repo/:id` | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`; `build`: `[]` no build, `null` statuses unreadable) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |
 | POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` |

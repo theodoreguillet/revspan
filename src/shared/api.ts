@@ -1,7 +1,7 @@
 // Local API contract, shared by the server (src/server) and the page (src/web).
 // All routes are under /api; any request other than GET carries the X-Revspan: 1 header.
 
-import type { NotificationPrefs, ReviewSettings } from './review-settings.ts';
+import type { FollowedUser, NotificationPrefs, ReviewSettings } from './review-settings.ts';
 
 export const MUTATION_HEADER = 'X-Revspan';
 
@@ -69,6 +69,11 @@ export interface Settings {
     repos: string[];
     review: ReviewSettings;
     me: User | null;
+}
+
+/** GET /api/settings/followed: the followed contributors alone (local, no Bitbucket call). */
+export interface FollowedList {
+    followed: FollowedUser[];
 }
 
 /** token: non-empty string to replace it, "" to delete it. */
@@ -250,8 +255,8 @@ export interface PrDetail {
     participants: Participant[];
     review: Review;
     threads: Thread[];
-    /** Checks of the head commit (empty: none, or statuses unreadable). */
-    build: BuildCheck[];
+    /** Checks of the head commit ([]: no build attached; null: statuses unreadable). */
+    build: BuildCheck[] | null;
     /** Destination branch moved since the PR's base; null: not mine, or not computable. */
     needsRebase: boolean | null;
 }

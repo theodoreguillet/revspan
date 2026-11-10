@@ -4,7 +4,7 @@ import type { FileDiff, PrDetail } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
 import { isBoolean, useLocalPref } from './useLocalPref.ts';
 
-export type PrTab = 'diff' | 'discussions' | 'versions';
+export type PrTab = 'diff' | 'discussions' | 'versions' | 'builds';
 export type DiffView = 'unified' | 'split';
 
 const isDiffView = (value: unknown): value is DiffView => value === 'unified' || value === 'split';

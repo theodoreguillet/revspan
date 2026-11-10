@@ -49,7 +49,7 @@ export class HomeService {
         const client = await this.session.getClient();
         const me = await this.session.me();
         const { repos, review } = this.store.config;
-        // The settings are part of the key: a change of minimum shows at once.
+        // The settings are part of the key: a change of minimum or of followed contributors shows at once.
         return this.cache.getLive(`live:home:${repos.join(',')}:${JSON.stringify(review)}`, HOME_TTL_MS, () => this.compute(client, me, repos, review));
     }
 
@@ -60,7 +60,7 @@ export class HomeService {
             const [workspace = '', repo = ''] = fullName.split('/');
             try {
                 const list = await client.openPullRequests(workspace, repo);
-                cards.push(...await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw, requiredApprovalsFor(review, fullName)))));
+                cards.push(...await Promise.all(list.map((raw) => this.card(client, me, { workspace, repo, id: raw.id }, raw, review))));
             } catch (error) {
                 errors.push({ repo: fullName, ...errorPayload(error) });
             }
@@ -89,7 +89,7 @@ export class HomeService {
         card.data.needsRebase = needsRebase;
     }
 
-    private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest, requiredApprovals: number): Promise<Card> {
+    private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest, settings: ReviewSettings): Promise<Card> {
         const meUuid = me?.uuid ?? null;
         const isMe = (uuid: string | undefined): boolean => meUuid !== null && uuid === meUuid;
         const participants = raw.participants ?? [];
@@ -98,6 +98,7 @@ export class HomeService {
         const involved = designatedReviewer || participants.some((p) => isMe(p.user?.uuid));
         const local = this.store.prState(prKeyOf(ref));
         const approvals = participants.filter((p) => p.approved && p.user?.uuid !== raw.author?.uuid).length;
+        const requiredApprovals = requiredApprovalsFor(settings, `${ref.workspace}/${ref.repo}`);
         const head = raw.source?.commit?.hash ?? '';
         const destBranch = raw.destination?.branch?.name ?? '';
         const base: PrCard = {
@@ -118,7 +119,7 @@ export class HomeService {
             newComments: 0,
             needsReview: needsReview(approvals, requiredApprovals),
             designatedReviewer,
-            followed: false,
+            followed: settings.followed.some((u) => u.uuid === raw.author?.uuid),
             approvalHolds: false,
             build: null,
             needsRebase: null,

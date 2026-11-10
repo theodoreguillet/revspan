@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ApiErrorBody, Comparison, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comparison, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import {
     FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall,
@@ -447,6 +447,8 @@ describe('home', () => {
             // Not about me, minimum of 2 approvals reached.
             [FAKE_PRS.others]: 'others',
             [FAKE_PRS.purged]: 'to-do',
+            // Approved on its latest version: nothing to do until the author pushes.
+            [FAKE_PRS.waiting]: 'waiting',
         });
         expect(cardOf(body, FAKE_PRS.main)).toMatchObject({
             versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, requiredApprovals: 2, newComments: 2,
@@ -548,11 +550,45 @@ describe('home', () => {
         await setup();
         const mine = await detail(FAKE_PRS.mine);
         expect(mine.needsRebase).toBe(true);
-        expect(mine.build.map((c) => c.state).sort()).toEqual(['running', 'success']);
+        expect(mine.build?.map((c) => c.state).sort()).toEqual(['running', 'success']);
         const failed = await detail(42);
         expect(failed.needsRebase).toBeNull();
-        expect(failed.build.map((c) => c.state).sort()).toEqual(['failed', 'success']);
+        expect(failed.build?.map((c) => c.state).sort()).toEqual(['failed', 'success']);
         expect((await detail(FAKE_PRS.others)).build).toEqual([]);
+    });
+
+    it('PR detail: unreadable statuses give build null, unlike "no build" ([])', async () => {
+        const { fake } = await setup();
+        fake.data.statusesFailure = 403;
+        const { status, body } = await api<PrDetail>('GET', prPath(FAKE_PRS.mine));
+        expect(status).toBe(200);
+        expect(body.build).toBeNull();
+        expect(body.needsRebase).toBe(true);
+    });
+
+    it('cards of a followed author are marked followed, at once after the settings change', async () => {
+        await setup();
+        let { body } = await api<Home>('GET', '/api/home');
+        expect(body.groups.flatMap((g) => g.prs).some((p) => p.followed)).toBe(false);
+        const put = await api<Settings>('PUT', '/api/settings', { review: { followed: [{ uuid: '{yan}', displayName: 'Yann Bernard' }] } });
+        expect(put.status).toBe(200);
+        ({ body } = await api<Home>('GET', '/api/home'));
+        const cards = body.groups.flatMap((g) => g.prs);
+        expect(cards.filter((p) => p.followed).map((p) => p.id).sort()).toEqual(
+            cards.filter((p) => p.author?.uuid === '{yan}').map((p) => p.id).sort(),
+        );
+        expect(cardOf(body, FAKE_PRS.neverReviewed)?.followed).toBe(true);
+        expect(cardOf(body, FAKE_PRS.main)?.followed).toBe(false);
+    });
+
+    it('GET /api/settings/followed: the followed list alone, without Bitbucket', async () => {
+        const { fake } = await setup();
+        expect((await api<FollowedList>('GET', '/api/settings/followed')).body).toEqual({ followed: [] });
+        await api('PUT', '/api/settings', { review: { followed: [{ uuid: '{yan}', displayName: 'Yann Bernard' }] } });
+        await fake.close(); // Bitbucket unreachable: the list is local
+        const { status, body } = await api<FollowedList>('GET', '/api/settings/followed');
+        expect(status).toBe(200);
+        expect(body).toEqual({ followed: [{ uuid: '{yan}', displayName: 'Yann Bernard' }] });
     });
 
     it('me unknown (token without read:user): every PR in "others", no history loaded, no error', async () => {

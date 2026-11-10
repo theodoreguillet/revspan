@@ -6,7 +6,7 @@
     --rv-add: #1a7f37; --rv-add-bg: rgba(46,160,67,.14); --rv-add-hl: rgba(46,160,67,.32);
     --rv-del: #cf222e; --rv-del-bg: rgba(248,81,73,.13); --rv-del-hl: rgba(248,81,73,.32);
     --rv-rebase: #bc4c00; --rv-rebase-bg: rgba(251,143,68,.16); --rv-new: #0969da;
-    --rv-range: rgba(9,105,218,.10); --rv-ok: #1f883d; --rv-ok-hover: #1a7f37; --rv-danger-bg: #fff1f0; --rv-danger-border: #ffccc7;
+    --rv-range: rgba(9,105,218,.10); --rv-star: #9a6700; --rv-ok: #1f883d; --rv-ok-hover: #1a7f37; --rv-danger-bg: #fff1f0; --rv-danger-border: #ffccc7;
     --rv-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --rv-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     /* main button, active preset, "new" badge, + button */
@@ -22,7 +22,7 @@
         --text-primary: #f5f5f7; --text-secondary: #98989d; --text-tertiary: #6e6e73; --accent: #0a84ff; --selected-bg: rgba(10,132,255,.15);
         --rv-add: #3fb950; --rv-add-bg: rgba(46,160,67,.17); --rv-add-hl: rgba(46,160,67,.40);
         --rv-del: #f85149; --rv-del-bg: rgba(248,81,73,.15); --rv-del-hl: rgba(248,81,73,.40);
-        --rv-rebase: #f0883e; --rv-rebase-bg: rgba(240,136,62,.18); --rv-new: #58a6ff; --rv-range: rgba(56,139,253,.16);
+        --rv-rebase: #f0883e; --rv-rebase-bg: rgba(240,136,62,.18); --rv-new: #58a6ff; --rv-range: rgba(56,139,253,.16); --rv-star: #e3b341;
         --rv-ok: #238636; --rv-ok-hover: #2ea043; --rv-danger-bg: rgba(248,81,73,.12); --rv-danger-border: rgba(248,81,73,.4);
     }
 }
@@ -101,6 +101,11 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-appr .stale i { font-style: normal; color: var(--rv-rebase); }
 .rv-head .acts { display: flex; gap: 6px; align-items: flex-start; flex-shrink: 0; flex-wrap: wrap; }
 .rv-head .acts .own { font-size: 12px; color: var(--text-secondary); padding: 5px 0; }
+.rv-bbadge { display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: 999px; padding: 1px 9px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.rv-bbadge:hover { border-color: currentColor; }
+.rv-fol { border: 1px solid var(--border); background: var(--bg-secondary); border-radius: 999px; padding: 0 9px; font-size: 11.5px; line-height: 18px; cursor: pointer; color: var(--text-secondary); }
+.rv-fol:hover:not(:disabled) { color: var(--text-primary); }
+.rv-fol.on { color: var(--rv-star); border-color: color-mix(in srgb, var(--rv-star) 45%, transparent); }
 
 /* ---------- Timeline ---------- */
 .rv-tl { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg-primary); padding: 8px 16px 8px; position: sticky; top: 0; z-index: 20; }
@@ -180,6 +185,7 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-tab.on { border-color: #fd8c73; color: var(--text-primary); font-weight: 600; }
 .rv-tab .n { background: var(--bg-tertiary); border-radius: 999px; padding: 0 6px; font-size: 11px; margin-left: 4px; font-weight: 500; color: var(--text-primary); }
 .rv-tab .n.blue { background: var(--accent-bg); color: var(--accent-fg); }
+.rv-tab .n.red { background: var(--rv-del-bg); color: var(--rv-del); }
 
 /* ---------- Diff ---------- */
 .rv-body { display: flex; min-height: 360px; }
@@ -326,6 +332,18 @@ details > summary.rv-dgrp { cursor: pointer; list-style: revert; }
 
 /* ---------- Versions ---------- */
 .rv-vers { padding: 12px 16px 40px; overflow-x: auto; }
+.rv-builds { padding: 12px 16px 40px; max-width: 900px; }
+.rv-builds-list { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); }
+.rv-chk { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 12.5px; }
+.rv-chk:first-child { border-top: none; }
+.rv-chk .ic { width: 16px; display: inline-flex; justify-content: center; font-weight: 700; flex: none; }
+.rv-chk .ic.failed, .rv-chk .ic.stopped { color: var(--rv-del); }
+.rv-chk .ic.success { color: var(--rv-add); }
+.rv-chk .ic.running { color: var(--accent); }
+.rv-chk .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rv-chk .when { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.rv-chk.muted, .rv-chk.note { color: var(--text-secondary); }
+.rv-chk.note { font-size: 11.5px; }
 .rv-tbl { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; }
 .rv-tbl th { text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; padding: 7px 12px; background: var(--bg-primary); border-bottom: 1px solid var(--border); }
 .rv-tbl td { padding: 6px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -365,6 +383,29 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
 .rv-nb.grey { background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500; }
 .rv-nb.green { background: var(--rv-add-bg); color: var(--rv-add); }
 .rv-nb.orange { background: var(--rv-rebase-bg); color: var(--rv-rebase); }
+.rv-lgrp .desc { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-tertiary); }
+.rv-home-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: -4px 0 10px; font-size: 12px; color: var(--text-secondary); }
+.rv-sg { padding: 5px 16px; font-size: 11.5px; font-weight: 600; color: var(--text-secondary); background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.rv-sg .cnt { font-weight: 500; }
+.rv-lgrp + .rv-sg, summary + .rv-sg { border-top: none; }
+.rv-roww { position: relative; border-top: 1px solid var(--border); }
+.rv-roww > .rv-row { border-top: none; }
+.rv-lgrp + .rv-roww, summary + .rv-roww, .rv-sg + .rv-roww { border-top: none; }
+.rv-roww.has-menu > .rv-row { padding-right: 46px; }
+.rv-row .t .su.hold { font-style: italic; }
+.rv-row-more { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 26px; height: 26px; border: none; border-radius: 6px; background: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; line-height: 1; }
+.rv-row-more:hover, .rv-row-more[aria-expanded="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
+.rv-menu { position: fixed; z-index: 40; min-width: 200px; padding: 4px 0; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.rv-menu button { display: block; width: 100%; text-align: left; padding: 6px 14px; border: none; background: none; cursor: pointer; font-size: 12.5px; color: var(--text-primary); }
+.rv-menu button:hover:not(:disabled), .rv-menu button:focus-visible { background: var(--selected-bg); outline: none; }
+.rv-menu button:disabled { opacity: .55; cursor: default; }
+.rv-star { color: var(--rv-star); margin-right: 5px; }
+.rv-build { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.rv-build.failed, .rv-bbadge.failed { background: var(--rv-del-bg); color: var(--rv-del); }
+.rv-build.success, .rv-bbadge.success { background: var(--rv-add-bg); color: var(--rv-add); }
+.rv-build.running, .rv-bbadge.running { background: var(--selected-bg); color: var(--accent); }
+.rv-spin { display: inline-block; width: .85em; height: .85em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: rv-spin .8s linear infinite; flex: none; }
+@media (prefers-reduced-motion: reduce) { .rv-spin { animation-duration: 2.5s; } }
 .rv-errs { border: 1px solid var(--rv-danger-border); background: var(--rv-danger-bg); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 12px; }
 .rv-errs ul { margin: 4px 0 0; padding-left: 18px; }
 .rv-errs .r { font-family: var(--rv-mono); font-size: 11.5px; }
@@ -455,6 +496,7 @@ body.vscode-light, body.vscode-dark, body.vscode-high-contrast {
     --rv-del: var(--vscode-charts-red, var(--vscode-gitDecoration-deletedResourceForeground));
     --rv-rebase: var(--vscode-charts-orange, #d18616);
     --rv-new: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+    --rv-star: var(--vscode-charts-yellow, #cca700);
     --rv-add-bg: var(--vscode-diffEditor-insertedLineBackground, rgba(155,185,85,.2));
     --rv-del-bg: var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,.2));
     --rv-add-hl: var(--vscode-diffEditor-insertedTextBackground, rgba(156,204,44,.25));

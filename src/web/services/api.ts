@@ -6,6 +6,7 @@ import {
     type Comment,
     type Comparison,
     type ConnectionTest,
+    type FollowedList,
     type Home,
     type NewComment,
     type Ok,
@@ -90,6 +91,8 @@ const prPath = (ref: PrRef): string => `/pr/${encodeURIComponent(ref.workspace)}
 export const api = {
     settings: () => request<Settings>('GET', '/settings'),
     saveSettings: (update: SettingsUpdate) => request<Settings>('PUT', '/settings', update),
+    /** Not GET /settings: in VS Code, a read of /settings retitles the panel "Settings". */
+    followed: () => request<FollowedList>('GET', '/settings/followed'),
     testConnection: () => request<ConnectionTest>('POST', '/settings/test', {}),
     home: () => request<Home>('GET', '/home'),
 

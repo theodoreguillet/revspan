@@ -8,7 +8,7 @@ run-against-fake.ts starts the fake Bitbucket and the server, then runs this scr
     REVSPAN_BASE_URL    URL of the Revspan server (required).
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
-    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged.
+    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting.
     REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Credentials of the fake Bitbucket (token put back after deletion).
 Options:
     REVSPAN_SHOTS_DIR   Screenshots folder (default: <tmp>/revspan-shots).
@@ -186,6 +186,14 @@ def expect_selection(page, frm, to):
     expect(page).to_have_url(re.compile(f'[?&]from={frm}&to={to}$'))
 
 
+def followed_uuids():
+    return [u['uuid'] for u in api('/settings')['review']['followed']]
+
+
+def home_cards(group):
+    return next(g for g in api('/home')['groups'] if g['key'] == group)['prs']
+
+
 def wait_api(predicate, desc, timeout=8.0):
     deadline = time.time() + timeout
     while not predicate():
@@ -271,6 +279,82 @@ def run_checks(page):
             light = others.locator(f'.rv-row[data-pr="{fake_ref("others")}"]')
             expect(light.locator('.rv-nb')).to_have_text('pas encore relue')  # versionsCount null : pas de nombre
     home(page)
+
+    if FAKE_PRS:
+        ws, repo, _ = MAIN_PR.split('/')
+
+        @check('home: the four groups, build badges, "needs rebase" on my PR, no "mark as reviewed"')
+        def queue_groups(page):
+            page.goto(url(''))
+            todo = page.locator('section[data-group="to-do"]')
+            expect(todo).to_be_visible(timeout=20000)
+            expect(page.locator('section[data-group="mine"]')).to_be_visible()
+            expect(page.locator('section[data-group="waiting"]')).to_be_visible()
+            expect(page.locator('details[data-group="others"]')).to_be_visible()
+            expect(todo.locator('.rv-lgrp')).to_contain_text('À faire')
+            expect(todo.locator('.rv-lgrp .desc')).to_have_text('PR qui attendent une action de ta part')
+            waiting = page.locator('section[data-group="waiting"]')
+            expect(waiting.locator('.rv-lgrp')).to_contain_text('En attente de l\'auteur')
+            expect(waiting.locator('.rv-lgrp .desc')).to_have_text('rien à faire de ton côté')
+            expect(waiting.locator(f'.rv-row[data-pr="{fake_ref("waiting")}"]')).to_be_visible()
+            main_row = todo.locator(f'.rv-row[data-pr="{MAIN_PR}"]')
+            expect(main_row.locator('.rv-build')).to_have_text('✗ échec')
+            expect(main_row.locator('.rv-build')).to_have_attribute('data-build', 'failed')
+            expect(main_row).to_contain_text('1/2 approbation')
+            expect(main_row.locator('[data-chip="designated"]')).to_have_text('désigné relecteur')
+            mine_row = page.locator(f'section[data-group="mine"] .rv-row[data-pr="{fake_ref("mine")}"]')
+            expect(mine_row.locator('[data-chip="needs-rebase"]')).to_have_text('à rebaser')
+            expect(mine_row.locator('.rv-build')).to_have_attribute('data-build', 'running')
+            expect(page.locator('[data-chip="needs-rebase"]')).to_have_count(1)  # own PRs only
+            expect(page.locator('.rv-roww [data-action="mark-reviewed"]')).to_have_count(0)
+            expect(page.locator(f'.rv-roww[data-row="{fake_ref("mine")}"] .rv-row-more')).to_have_count(0)  # nobody to follow
+        queue_groups(page)
+
+        @check('home: grouping by contributor regroups "to do" and survives a reload')
+        def grouping(page):
+            todo_prs = home_cards('to-do')
+            authors = sorted({p['author']['displayName'] for p in todo_prs})
+            by_author = [f'{name} · {sum(1 for p in todo_prs if p["author"]["displayName"] == name)}' for name in authors]
+            subs = page.locator('section[data-group="to-do"] .rv-sg')
+            expect(subs).to_have_text([f'{ws}/{repo} · {len(todo_prs)}'])
+            page.click('.rv-home-bar button[data-grouping="contributor"]')
+            expect(subs).to_have_text(by_author)
+            assert len(by_author) > 1, by_author
+            expect(page.locator('section[data-group="mine"] .rv-sg')).to_have_text([f'{ws}/{repo} · 1'])  # always by repository
+            expect(page.locator('section[data-group="waiting"] .rv-sg')).to_have_count(0)  # never grouped
+            page.reload()
+            expect(page.locator('.rv-home-bar button[data-grouping="contributor"]')).to_have_attribute('aria-pressed', 'true', timeout=20000)
+            expect(subs).to_have_text(by_author)
+            page.click('.rv-home-bar button[data-grouping="none"]')
+            expect(subs).to_have_count(0)
+            expect(page.locator('section[data-group="to-do"] .rv-row')).to_have_count(len(todo_prs))
+            page.click('.rv-home-bar button[data-grouping="repository"]')
+            expect(subs).to_have_count(1)
+        grouping(page)
+
+        @check('home: following an author from the row menu moves their "to do" PR to the top with a ★')
+        def follow_row(page):
+            ref = fake_ref('neverReviewed')
+            author = next(p['author'] for p in home_cards('to-do') if p['id'] == FAKE_PRS['neverReviewed'])
+            rows = page.locator('section[data-group="to-do"] .rv-row')
+            assert rows.first.get_attribute('data-pr') != ref, 'the PR must not already be first'
+            expect(page.locator('.rv-star')).to_have_count(0)
+            page.locator(f'.rv-roww[data-row="{ref}"] .rv-row-more').click()
+            item = page.locator('.rv-menu [data-action="follow"]')
+            expect(item).to_have_text(f'Suivre {author["displayName"]}')
+            item.click()
+            expect(rows.first).to_have_attribute('data-pr', ref)
+            expect(rows.first.locator('.rv-star')).to_be_visible()
+            wait_api(lambda: followed_uuids() == [author['uuid']], 'author saved in review.followed')
+            page.reload()
+            expect(rows.first).to_have_attribute('data-pr', ref, timeout=20000)
+            expect(rows.first.locator('.rv-star')).to_be_visible()
+            page.locator(f'.rv-roww[data-row="{ref}"] .rv-row-more').click()
+            expect(item).to_have_text(f'Ne plus suivre {author["displayName"]}')
+            item.click()
+            expect(page.locator('.rv-star')).to_have_count(0)
+            wait_api(lambda: followed_uuids() == [], 'author removed from review.followed')
+        follow_row(page)
 
     @check('opening the PR from the home page, default range')
     def open_main(page):
@@ -649,6 +733,50 @@ def run_checks(page):
             expect(page.locator('[data-action="request-changes"]')).to_have_count(0)
         mine(page)
 
+        @check('PR page: the header build badge opens the Builds tab listing the checks')
+        def builds_tab(page):
+            open_pr(page, MAIN_PR)
+            badge = page.locator('.rv-head .rv-bbadge')
+            tab = page.locator('.rv-tab[data-tab="builds"]')
+            expect(badge).to_have_text('✗ 1 échec')
+            expect(tab.locator('.n.red')).to_have_text('2')
+            expect(page.locator('.rv-head .rv-chk')).to_have_count(0)  # the checks are listed in the tab only
+            badge.click()
+            expect(tab).to_have_attribute('aria-selected', 'true')
+            expect(page.locator('.rv-builds .rv-chk[data-check]')).to_have_count(2)
+            expect(page.locator('.rv-chk[data-check="pipeline"] .nm')).to_have_text('Pipeline #12 — échec')
+            expect(page.locator('.rv-chk[data-check="scan"] .nm')).to_have_text('Security scan — réussi')
+            link = page.locator('.rv-chk[data-check="pipeline"] a.ext')
+            expect(link).to_have_attribute('href', f'https://ci.example.test/pipeline/{FAKE_PRS["main"]}')
+            expect(link).to_have_attribute('target', '_blank')
+            expect(link).to_have_attribute('rel', 'noopener noreferrer')
+            open_pr(page, fake_ref('neverReviewed'))
+            expect(page.locator('.rv-head .rv-bbadge')).to_have_count(0)
+            expect(page.locator('.rv-tab[data-tab="builds"] .n')).to_have_count(0)
+            page.click('.rv-tab[data-tab="builds"]')
+            expect(page.locator('[data-builds="empty"]')).to_have_text('Aucun build rattaché à cette PR')
+        builds_tab(page)
+
+        @check('PR page: follow toggle on the author; my PR shows "needs rebase" and its running build')
+        def follow_header(page):
+            open_pr(page, fake_ref('neverReviewed'))
+            uuid = api(pr_api(fake_ref('neverReviewed')))['pr']['author']['uuid']
+            toggle = page.locator('.rv-head [data-action="follow"]')
+            expect(toggle).to_have_text('☆ Suivre')
+            toggle.click()
+            expect(toggle).to_have_text('★ Suivi')
+            expect(toggle).to_have_attribute('aria-pressed', 'true')
+            wait_api(lambda: followed_uuids() == [uuid], 'author saved in review.followed')
+            toggle.click()
+            expect(toggle).to_have_text('☆ Suivre')
+            wait_api(lambda: followed_uuids() == [], 'author removed from review.followed')
+            open_pr(page, fake_ref('mine'))
+            expect(page.locator('.rv-head [data-chip="needs-rebase"]')).to_have_text('à rebaser')
+            expect(page.locator('.rv-head')).to_contain_text('master a avancé depuis la base de la PR')
+            expect(page.locator('.rv-head .rv-bbadge')).to_have_text('build en cours')
+            expect(page.locator('.rv-head [data-action="follow"]')).to_have_count(0)
+        follow_header(page)
+
         @check('never reviewed: "First review" then "Mark vN as reviewed"')
         def never_reviewed(page):
             ref = fake_ref('neverReviewed')
@@ -800,6 +928,36 @@ def run_language_checks(page, fr_page):
             assert title.split(' · ')[0] in titles or title.rsplit(' · ', 1)[0] in titles, f'untranslated group title: {title}'
         expect(page.locator('.rv-nav .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')
     en_home(page)
+
+    if FAKE_PRS:
+        @check('English (en-US browser): grouping switch, rebase chip, build pill and row menu')
+        def en_queue(page):
+            page.goto(url(''))
+            expect(page.locator('section[data-group="waiting"] .rv-lgrp')).to_contain_text('Waiting on the author', timeout=20000)
+            expect(page.locator('.rv-home-bar')).to_contain_text('Group by')
+            expect(page.locator('.rv-home-bar button')).to_have_text(['Repository', 'Contributor', 'None'])
+            mine_row = page.locator(f'.rv-row[data-pr="{fake_ref("mine")}"]')
+            expect(mine_row.locator('[data-chip="needs-rebase"]')).to_have_text('needs rebase')
+            expect(mine_row.locator('.rv-build')).to_have_text('running')
+            expect(mine_row).to_contain_text('1/2 approval')
+            page.locator(f'.rv-roww[data-row="{fake_ref("waiting")}"] .rv-row-more').click()
+            expect(page.locator('.rv-menu [data-action="follow"]')).to_have_text('Follow Yann Bernard')
+            page.keyboard.press('Escape')
+            expect(page.locator('.rv-menu')).to_have_count(0)
+        en_queue(page)
+
+        @check('English (en-US browser): Builds tab and follow toggle')
+        def en_builds(page):
+            open_pr(page, MAIN_PR)
+            expect(page.locator('.rv-head [data-action="follow"]')).to_have_text('☆ Follow')
+            badge = page.locator('.rv-head .rv-bbadge')
+            expect(badge).to_have_text('✗ 1 failure')
+            badge.click()
+            expect(page.locator('.rv-tab[data-tab="builds"]')).to_contain_text('Builds')
+            expect(page.locator('.rv-chk[data-check="pipeline"] .nm')).to_have_text('Pipeline #12 — failed')
+            expect(page.locator('.rv-builds .note')).to_contain_text('Statuses published to Bitbucket')
+            page.click('.rv-tab[data-tab="diff"]')  # same PR next: the page (and its tab) is kept across range changes
+        en_builds(page)
 
     @check('English (en-US browser): a PR, its tabs and the Versions table')
     def en_pr(page):

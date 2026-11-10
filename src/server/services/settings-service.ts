@@ -1,6 +1,6 @@
 // Settings: Atlassian e-mail, token (secure storage), home repositories.
 import { normalizeReviewSettings } from '../../shared/review-settings.ts';
-import type { ConnectionTest, Settings, SettingsUpdate } from '../../shared/api.ts';
+import type { ConnectionTest, FollowedList, Settings, SettingsUpdate } from '../../shared/api.ts';
 import { AppError, badRequest } from '../errors.ts';
 import { normalizeRepos, type AppConfig, type Store } from '../infra/config.ts';
 import type { SecretStore } from '../infra/secrets.ts';
@@ -23,6 +23,11 @@ export class SettingsService {
         const hasToken = await this.session.hasToken();
         const me = hasToken ? await this.session.me().catch(() => null) : null;
         return { email: this.store.config.email, hasToken, tokenStore: this.secrets.kind, repos: [...this.store.config.repos], review: this.store.config.review, me };
+    }
+
+    /** Followed contributors only: read by the home and PR pages before a follow (no token or Bitbucket call). */
+    followed(): FollowedList {
+        return { followed: this.store.config.review.followed };
     }
 
     async update(patch: SettingsUpdate): Promise<Settings> {

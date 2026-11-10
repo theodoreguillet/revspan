@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watchEffect } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
-import type { Home } from '../../shared/api.ts';
-import { t, tr } from '../i18n/index.ts';
+import type { Home, HomeGroupKey, User } from '../../shared/api.ts';
+import { useFollow } from '../composables/useFollow.ts';
+import { useLocalPref } from '../composables/useLocalPref.ts';
+import { t, tr, type MessageKey } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
+import { withFollowedCards } from '../lib/follow.ts';
 import { GROUP_TITLES } from '../lib/home.ts';
+import { GROUPINGS, groupCards, groupingFor, isGrouping, type Grouping } from '../lib/home-grouping.ts';
 import { api, ApiError } from '../services/api.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
 import I18nText from '../components/I18nText.vue';
@@ -41,7 +45,34 @@ async function load(): Promise<void> {
     }
 }
 
-const visibleGroups = computed(() => home.value?.groups.filter((g) => g.prs.length > 0) ?? []);
+const GROUPING_LABELS = {
+    repository: 'home.grouping.repository',
+    contributor: 'home.grouping.contributor',
+    none: 'home.grouping.none',
+} as const satisfies Record<Grouping, MessageKey>;
+
+const GROUP_DESCRIPTIONS: Partial<Record<HomeGroupKey, 'home.groupDesc.toDo' | 'home.groupDesc.waiting'>> = {
+    'to-do': 'home.groupDesc.toDo',
+    waiting: 'home.groupDesc.waiting',
+};
+
+const grouping = useLocalPref<Grouping>('home.grouping', 'repository', isGrouping);
+
+const visibleGroups = computed(() => (home.value?.groups.filter((g) => g.prs.length > 0) ?? []).map((group) => {
+    const mode = groupingFor(group.key, grouping.value);
+    return { ...group, mode, description: GROUP_DESCRIPTIONS[group.key] ?? null, subgroups: groupCards(group.prs, mode) };
+}));
+
+// Follow from a row: the cards are marked from the saved list at once, without reloading the PRs.
+const { busy: followBusy, setFollow } = useFollow((list) => {
+    if (home.value) {
+        home.value = withFollowedCards(home.value, list);
+    }
+});
+
+function onFollow(user: User, follow: boolean): void {
+    void setFollow(user, follow);
+}
 
 onMounted(load);
 </script>
@@ -79,16 +110,49 @@ onMounted(load);
                     <template #settings><RouterLink to="/settings">{{ t('home.settingsLink') }}</RouterLink></template>
                 </I18nText>
             </p>
-            <template v-for="group in visibleGroups" :key="group.key">
-                <details v-if="group.key === 'others'" class="rv-list" :data-group="group.key" :open="!home.me">
-                    <summary class="rv-lgrp">{{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span></summary>
-                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :me="home.me" />
-                </details>
-                <section v-else class="rv-list" :data-group="group.key">
-                    <div class="rv-lgrp">{{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span></div>
-                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :me="home.me" />
-                </section>
-            </template>
+            <div v-if="visibleGroups.length" class="rv-home-bar">
+                <span>{{ t('home.groupBy') }}</span>
+                <span class="rv-seg" role="group" :aria-label="t('home.groupBy')">
+                    <button
+                        v-for="mode in GROUPINGS"
+                        :key="mode"
+                        type="button"
+                        :class="{ on: grouping === mode }"
+                        :data-grouping="mode"
+                        :aria-pressed="grouping === mode"
+                        @click="grouping = mode"
+                    >
+                        {{ t(GROUPING_LABELS[mode]) }}
+                    </button>
+                </span>
+            </div>
+            <component
+                :is="group.key === 'others' ? 'details' : 'section'"
+                v-for="group in visibleGroups"
+                :key="group.key"
+                class="rv-list"
+                :data-group="group.key"
+                :open="group.key === 'others' ? !home.me : undefined"
+            >
+                <component :is="group.key === 'others' ? 'summary' : 'div'" class="rv-lgrp">
+                    {{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span>
+                    <span v-if="group.description" class="desc">{{ t(group.description) }}</span>
+                </component>
+                <template v-for="sub in group.subgroups" :key="sub.key">
+                    <div v-if="group.mode !== 'none'" class="rv-sg" :data-subgroup="sub.key">
+                        <span v-if="group.mode === 'contributor' && sub.cards[0]?.followed" class="rv-star" :title="t('home.followedMark')">★</span>
+                        {{ sub.label || t('home.unknownAuthor') }} <span class="cnt">· {{ sub.cards.length }}</span>
+                    </div>
+                    <PrCardRow
+                        v-for="card in sub.cards"
+                        :key="`${card.workspace}/${card.repo}/${card.id}`"
+                        :card="card"
+                        :me="home.me"
+                        :follow-busy="followBusy"
+                        @follow="onFollow"
+                    />
+                </template>
+            </component>
             <div v-if="!home.repos.length" class="rv-panel-msg" data-testid="no-repos">
                 <h2>{{ t('home.noRepos') }}</h2>
                 <p>

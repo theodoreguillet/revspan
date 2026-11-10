@@ -117,6 +117,8 @@ describe('panel title', () => {
         expect(routeOfApiRead('GET', '/api/home')).toBe('/');
         expect(routeOfApiRead('GET', '/api/home?fresh=1')).toBe('/');
         expect(routeOfApiRead('GET', '/api/settings')).toBe('/settings');
+        // Read by the home and PR pages to follow an author: must not retitle the panel "Settings".
+        expect(routeOfApiRead('GET', '/api/settings/followed')).toBeNull();
         expect(routeOfApiRead('GET', '/api/pr/acme/records-api/212')).toBe('/pr/acme/records-api/212');
         expect(routeOfApiRead('GET', '/api/pr/acme/records-api/212/compare?from=2&to=6&context=3')).toBe('/pr/acme/records-api/212');
         expect(routeOfApiRead('PUT', '/api/settings')).toBeNull();

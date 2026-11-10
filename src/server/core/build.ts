@@ -1,6 +1,8 @@
 // Build statuses of a PR (any CI that publishes statuses to Bitbucket): per-commit filtering and aggregation.
-import type { BuildCheck, BuildSummary } from '../../shared/api.ts';
+import type { BuildCheck } from '../../shared/api.ts';
 import type { BbStatus } from '../bitbucket/types.ts';
+
+export { summarizeBuild } from '../../shared/build.ts';
 
 const HASH_PREFIX = 12;
 
@@ -39,18 +41,4 @@ export function toBuildChecks(statuses: BbStatus[], headHash: string): BuildChec
         url: status.url ?? null,
         updatedOn: status.updated_on ?? null,
     }));
-}
-
-/** failed (or stopped) wins over running, running over success; no check gives none. */
-export function summarizeBuild(checks: BuildCheck[]): BuildSummary {
-    const failed = checks.filter((c) => c.state === 'failed' || c.state === 'stopped').length;
-    const running = checks.filter((c) => c.state === 'running').length;
-    const total = checks.length;
-    if (failed > 0) {
-        return { state: 'failed', failed, running, total };
-    }
-    if (running > 0) {
-        return { state: 'running', failed, running, total };
-    }
-    return { state: total > 0 ? 'success' : 'none', failed, running, total };
 }

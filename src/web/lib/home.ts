@@ -50,9 +50,8 @@ export function cardSubtitle(tr: Translator, card: PrCard, me: User | null): str
         mine ? tr.t('common.you') : displayName(card.author),
         openedSince(tr, card.createdOn),
         tr.t('home.pushed', { ago: ago(tr, card.lastPushAt) }),
+        // against the required minimum: tells how far the PR is from leaving the review queue
+        tr.t('home.approvalsOf', { count: card.approvals, required: card.requiredApprovals }),
     ];
-    if (card.approvals > 0) {
-        parts.push(tr.t('common.approvals', { count: card.approvals }));
-    }
     return parts.join(' · ');
 }

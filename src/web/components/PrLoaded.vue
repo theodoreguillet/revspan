@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, watchEffect } from 'vue';
 import type { PrDetail, PrRef } from '../../shared/api.ts';
 import { useKeyboard } from '../composables/useKeyboard.ts';
 import { providePrPage } from '../composables/usePrPage.ts';
+import BuildChecks from './BuildChecks.vue';
 import DiffTab from './DiffTab.vue';
 import DiscussionsTab from './DiscussionsTab.vue';
 import PrHeader from './PrHeader.vue';
@@ -47,6 +48,7 @@ onBeforeUnmount(() => {
     <div class="rv-content">
         <DiffTab v-if="page.tab === 'diff'" />
         <DiscussionsTab v-else-if="page.tab === 'discussions'" />
-        <VersionsTab v-else />
+        <VersionsTab v-else-if="page.tab === 'versions'" />
+        <BuildChecks v-else />
     </div>
 </template>

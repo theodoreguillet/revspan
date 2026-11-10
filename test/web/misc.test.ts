@@ -88,8 +88,11 @@ describe('home cards', () => {
     });
 
     it('subtitle; my PR: "you", no versions badge', () => {
-        expect(cardSubtitle(fr, card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2 approbations');
-        expect(cardSubtitle(en, card({}), me)).toBe('Auteur · open for 22 days · pushed 2 hours ago · 2 approvals');
+        expect(cardSubtitle(fr, card({}), me)).toBe('Auteur · ouverte depuis 22 j · push il y a 2 h · 2/2 approbations');
+        expect(cardSubtitle(en, card({}), me)).toBe('Auteur · open for 22 days · pushed 2 hours ago · 2/2 approvals');
+        // Approvals against the required minimum, shown even at 0.
+        expect(cardSubtitle(en, card({ approvals: 0, requiredApprovals: 1 }), me)).toMatch(/ · 0\/1 approvals$/);
+        expect(cardSubtitle(fr, card({ approvals: 1, requiredApprovals: 3 }), me)).toMatch(/ · 1\/3 approbation$/);
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
         expect(cardSubtitle(fr, mine, me)).toMatch(/^toi · /);
         expect(badges(mine)).toEqual(['💬 1 nouveau']);

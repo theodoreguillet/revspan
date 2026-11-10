@@ -103,6 +103,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.get('/api/health', (c) => c.json<Health>({ app: 'revspan', version }));
 
     app.get('/api/settings', async (c) => c.json(await settings.get()));
+    app.get('/api/settings/followed', (c) => c.json(settings.followed()));
     app.put('/api/settings', async (c) => c.json(await settings.update(parse(settingsUpdateSchema, await jsonBody(c)))));
     app.post('/api/settings/test', async (c) => c.json(await settings.test()));
 

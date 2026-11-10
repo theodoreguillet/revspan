@@ -28,6 +28,8 @@ export const FAKE_PRS = {
     others: 47,
     /** v1 erased by Bitbucket (commit not found), v2 and v3 readable; my comment dates from v1. */
     purged: 48,
+    /** I approved its only version (author Yann, not a designated reviewer): "waiting" on the author. */
+    waiting: 49,
 } as const;
 
 /** PR of the main scenario (backward compatibility of the tests). */
@@ -277,15 +279,15 @@ function purgedPr(b: FakeBuilder): void {
     b.repo.commits.delete(hex('purged:v1'));
 }
 
-/** Simple PR with 1 or 2 code versions (mine, never reviewed, others). */
-function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number): void {
+/** Simple PR with 1 or 2 code versions (mine, never reviewed, others, waiting). */
+function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number, events: BbActivity[] = []): void {
     b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']) });
     const plan: PlanStep[] = [];
     for (let v = 1; v <= versions; v++) {
         b.derive(`${key}:v${v}`, v === 1 ? `${key}:m0` : `${key}:v${v - 1}`, { [`src/${key}.ts`]: lines(['x', ...Array.from({ length: v }, (_, i) => `y${i + 1}`)]) }, title);
         plan.push({ commit: `${key}:v${v}`, base: `${key}:m0`, date: addDays('2026-10-10T09:00:00Z', v) });
     }
-    b.pr(id, { title, author, participants, plan });
+    b.pr(id, { title, author, participants, plan, events });
 }
 
 /** New push on a PR: commit `commit` (content of `from` modified by `changes`, same message) on base `base`. */
@@ -323,6 +325,9 @@ export function buildFakeData(): FakeData {
     simplePr(b, FAKE_PRS.others, 'others', 'DEMO-47 - chore(others): not about me', YAN,
         [{ user: CAM, role: 'REVIEWER', approved: true, state: 'approved' }, { user: AI, role: 'PARTICIPANT', approved: true, state: 'approved' }], 1);
     purgedPr(b);
+    simplePr(b, FAKE_PRS.waiting, 'waiting', 'DEMO-49 - fix(waiting): approved, waiting on the author', YAN,
+        [{ user: ME, role: 'PARTICIPANT', approved: true, state: 'approved' }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 1,
+        [{ approval: { date: '2026-10-12T09:00:00Z', user: ME } }]);
     const headOf = (id: number): string => {
         const prefix = b.prs.get(id)?.pr.source?.commit?.hash ?? '';
         return [...b.repo.commits.keys()].find((k) => k.startsWith(prefix)) ?? prefix;
