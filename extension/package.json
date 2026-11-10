@@ -29,7 +29,15 @@
         "untrustedWorkspaces": {
             "supported": "limited",
             "description": "%capabilities.untrustedWorkspaces%",
-            "restrictedConfigurations": ["revspan.repositories", "revspan.review.requiredApprovalsByRepository", "revspan.review.followedContributors"]
+            "restrictedConfigurations": [
+                "revspan.repositories",
+                "revspan.review.requiredApprovalsByRepository",
+                "revspan.review.followedContributors",
+                "revspan.refreshIntervalMinutes",
+                "revspan.notifications.newPullRequest",
+                "revspan.notifications.newVersion",
+                "revspan.notifications.buildFailed"
+            ]
         },
         "virtualWorkspaces": {
             "supported": "limited",

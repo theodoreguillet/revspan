@@ -55,7 +55,7 @@ describe('extension manifest', () => {
         expect(source('panel.ts')).toContain('createWebviewPanel(PANEL_VIEW_TYPE,');
     });
 
-    it('an untrusted workspace cannot impose its repositories, approvals per repository or followed contributors', () => {
+    it('an untrusted workspace cannot impose its repositories, review rules, followed contributors, notifications or refresh rate', () => {
         const manifest = readJson('extension/package.json') as {
             capabilities: { untrustedWorkspaces: Record<string, unknown> };
             contributes: { configuration: { properties: Record<string, unknown> } };
@@ -63,9 +63,13 @@ describe('extension manifest', () => {
         // VS Code only applies restrictedConfigurations with supported: 'limited'.
         expect(manifest.capabilities.untrustedWorkspaces).toMatchObject({
             supported: 'limited',
-            restrictedConfigurations: ['revspan.repositories', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors'],
+            restrictedConfigurations: [
+                'revspan.repositories', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors',
+                'revspan.refreshIntervalMinutes', 'revspan.notifications.newPullRequest', 'revspan.notifications.newVersion',
+                'revspan.notifications.buildFailed',
+            ],
         });
-        for (const id of ['revspan.repositories', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors']) {
+        for (const id of (manifest.capabilities.untrustedWorkspaces.restrictedConfigurations as string[])) {
             expect(manifest.contributes.configuration.properties).toHaveProperty([id]);
         }
     });
