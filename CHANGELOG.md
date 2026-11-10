@@ -28,6 +28,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Build status from any CI that publishes statuses to Bitbucket: a badge on the home cards and in the PR header, and a
   "Builds" tab on the PR page with each check and its link.
 - "Needs rebase" flag on your own PRs when the destination branch moved since the PR's base.
+- Draft PRs: they go to "Other open PRs" with a "draft" badge, never to "To do", and never notify (your own drafts stay
+  in "My PRs"). Once ready for review, a draft is treated like a new PR.
+- A notice on the home page and in the VS Code view when a repository has more open PRs than Revspan reads (the first
+  200 are listed).
 
 ### Changed
 
@@ -39,6 +43,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   several windows, a new push can show up after up to about 1.5 intervals.
 - Saving the settings no longer resets the session unless the e-mail or the token changed.
 - Marketplace README and privacy section updated (background refresh, local notifications, local data).
+- A designated reviewer who requested changes, with only neutral pushes since, now sees the PR in "Waiting on the
+  author" instead of "To do".
+- The notification and refresh settings are ignored when set by an untrusted workspace, like the repositories.
 
 ### Fixed
 
@@ -47,6 +54,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   crashes, no notification is sent, and the page says why.
 - An invalid minimum of approvals (0, negative, not a whole number) falls back to the default instead of hiding or
   flooding the queue.
+- The page's "↻ Refresh" button now reads Bitbucket again instead of the home shared by the windows, and Refresh also
+  re-reads the build checks of your own PRs (a re-run on the same commit).
+- A build that fails after an earlier check passed on the same commit (lint first, then the CI) is no longer shown as
+  passed: checks are read again during the hour after a push.
 
 ## [3.0.0] - 2026-11-09
 
