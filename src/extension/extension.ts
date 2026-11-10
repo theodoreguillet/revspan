@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import { parsePrUrl } from '../shared/pr-url.ts';
-import { createExtensionApp, REPOS_SETTING, REVIEW_SETTING_KEYS } from './app-context.ts';
+import { createExtensionApp } from './app-context.ts';
 import { DiffDocuments } from './diff-documents.ts';
 import { withFollowed } from '../shared/follow.ts';
 import { GROUPINGS, isGrouping, type Grouping } from '../shared/home-grouping.ts';
@@ -12,6 +12,7 @@ import { errorText } from './lib/error-text.ts';
 import { errorPayload } from '../server/errors.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
 import { PANEL_VIEW_TYPE, restoredRoute } from './lib/panel-route.ts';
+import { settingsChangeActions } from './lib/settings-change.ts';
 import { Notifier } from './notifier.ts';
 import { RevspanPanel } from './panel.ts';
 
@@ -88,8 +89,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         onPolled: () => tree.refresh(),
         isVisible: () => treeView.visible || panel.visible,
     });
-    const refreshSetting = `${REPOS_SETTING.section}.${REVIEW_SETTING_KEYS.refreshMinutes}`;
-
     context.subscriptions.push(
         tree,
         notifier,
@@ -118,10 +117,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             }
         }),
         vscode.workspace.onDidChangeConfiguration((event) => {
-            if (event.affectsConfiguration(REPOS_SETTING.id)) {
+            const actions = settingsChangeActions((section) => event.affectsConfiguration(section));
+            if (actions.repositoriesChanged) {
+                notifier.repositoriesChanged();
+            }
+            if (actions.refreshTree) {
+                // The repositories and review settings are part of the home's key: recomputed without asking for fresh data.
                 tree.refresh();
             }
-            if (event.affectsConfiguration(refreshSetting)) {
+            if (actions.rearm) {
                 notifier.rearm();
             }
         }),

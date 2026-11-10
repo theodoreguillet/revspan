@@ -15,6 +15,7 @@ import { errorText as pageErrorText } from '../../src/web/lib/errors.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { settingTarget } from '../../src/extension/lib/setting-target.ts';
 import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
+import { settingsChangeActions } from '../../src/extension/lib/settings-change.ts';
 
 const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
 
@@ -67,6 +68,24 @@ describe('extension manifest', () => {
         for (const id of ['revspan.repositories', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors']) {
             expect(manifest.contributes.configuration.properties).toHaveProperty([id]);
         }
+    });
+});
+
+describe('settings change', () => {
+    /** ConfigurationChangeEvent.affectsConfiguration: a changed setting affects itself and every section above it. */
+    const changed = (...ids: string[]) => (section: string): boolean => ids.some((id) => id === section || id.startsWith(`${section}.`));
+
+    it('the tree is refreshed when the repositories or a review setting change (approvals, overrides, followed)', () => {
+        for (const id of ['revspan.review.requiredApprovals', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors']) {
+            expect(settingsChangeActions(changed(id)), id).toEqual({ refreshTree: true, repositoriesChanged: false, rearm: false });
+        }
+        expect(settingsChangeActions(changed('revspan.repositories'))).toEqual({ refreshTree: true, repositoriesChanged: true, rearm: false });
+    });
+
+    it('the refresh interval re-arms the poll; notification options and other extensions change nothing', () => {
+        expect(settingsChangeActions(changed('revspan.refreshIntervalMinutes'))).toEqual({ refreshTree: false, repositoriesChanged: false, rearm: true });
+        expect(settingsChangeActions(changed('revspan.notifications.newVersion'))).toEqual({ refreshTree: false, repositoriesChanged: false, rearm: false });
+        expect(settingsChangeActions(changed('editor.fontSize'))).toEqual({ refreshTree: false, repositoriesChanged: false, rearm: false });
     });
 });
 
