@@ -48,5 +48,10 @@
     "None": "Aucun",
     "current": "actuel",
     "Group by…": "Grouper par…",
-    "How to split “To do” and “Other open PRs”": "Comment découper « À faire » et « Autres PR ouvertes »"
+    "How to split “To do” and “Other open PRs”": "Comment découper « À faire » et « Autres PR ouvertes »",
+    "New PR to review from {author}: {title}": "Nouvelle PR à relire de {author} : {title}",
+    "New PR to review: {title}": "Nouvelle PR à relire : {title}",
+    "New version to review: {title}": "Nouvelle version à relire : {title}",
+    "Build failed on your PR: {title}": "Échec du build sur ta PR : {title}",
+    "Open": "Ouvrir"
 }

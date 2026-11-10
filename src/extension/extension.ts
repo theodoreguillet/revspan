@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import { parsePrUrl } from '../shared/pr-url.ts';
-import { createExtensionApp, REPOS_SETTING } from './app-context.ts';
+import { createExtensionApp, REPOS_SETTING, REVIEW_SETTING_KEYS } from './app-context.ts';
 import { DiffDocuments } from './diff-documents.ts';
 import { withFollowed } from '../shared/follow.ts';
 import { GROUPINGS, isGrouping, type Grouping } from '../shared/home-grouping.ts';
@@ -12,6 +12,7 @@ import { errorText } from './lib/error-text.ts';
 import { errorPayload } from '../server/errors.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
 import { PANEL_VIEW_TYPE, restoredRoute } from './lib/panel-route.ts';
+import { Notifier } from './notifier.ts';
 import { RevspanPanel } from './panel.ts';
 
 /** Key of the grouping choice in the extension's global state. */
@@ -74,11 +75,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         tree.refresh({ fresh: true });
     }
 
+    const notifier = new Notifier({ store: app.store, session: app.services.session, home: app.services.home, onPolled: () => tree.refresh() });
+    const refreshSetting = `${REPOS_SETTING.section}.${REVIEW_SETTING_KEYS.refreshMinutes}`;
+
     const diffs = new DiffDocuments(app.services.prs);
     const panel = new RevspanPanel({ context, app, diffs, onWrite: () => tree.refresh() });
 
     context.subscriptions.push(
         tree,
+        notifier,
         vscode.window.registerTreeDataProvider('revspan.home', tree),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
         // After "Reload Window", VS Code reopens the panel with the state saved by the page (its route).
@@ -101,8 +106,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             if (event.affectsConfiguration(REPOS_SETTING.id)) {
                 tree.refresh();
             }
+            if (event.affectsConfiguration(refreshSetting)) {
+                notifier.rearm();
+            }
         }),
     );
+    notifier.start();
 }
 
 export function deactivate(): void {

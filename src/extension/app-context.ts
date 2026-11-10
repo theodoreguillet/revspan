@@ -16,6 +16,8 @@ import { settingTarget } from './lib/setting-target.ts';
 export interface ExtensionApp {
     services: Services;
     http: Hono;
+    /** Shared local state (the notifier records there what was already notified). */
+    store: Store;
 }
 
 /** VS Code setting for the tracked repositories: visible in Settings, synced by Settings Sync, per profile. */
@@ -132,5 +134,5 @@ export async function createExtensionApp(context: vscode.ExtensionContext): Prom
     }
     const version = String((context.extension.packageJSON as { version?: string }).version ?? '0.0.0');
     const http = createHttpApp({ version, settings: services.settings, home: services.home, prs: services.prs, allowedHosts: () => [IN_MEMORY_HOST] });
-    return { services, http };
+    return { services, http, store };
 }

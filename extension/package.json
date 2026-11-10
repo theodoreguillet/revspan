@@ -36,7 +36,7 @@
             "description": "%capabilities.virtualWorkspaces%"
         }
     },
-    "activationEvents": ["onWebviewPanel:revspan"],
+    "activationEvents": ["onWebviewPanel:revspan", "onStartupFinished"],
     "main": "./dist/extension.cjs",
     "l10n": "./l10n",
     "contributes": {

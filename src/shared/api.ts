@@ -145,6 +145,8 @@ export interface PrCard extends PrRef {
     build: BuildSummary | null;
     /** Destination branch moved since the PR's base; null: not computed (always for others' PRs). */
     needsRebase: boolean | null;
+    /** Source head commit abbreviated to 12 characters ('' if Bitbucket did not give it): one notification per head. */
+    head: string;
 }
 
 /** A home group: the page and the VS Code tree each show their own translation of the key. */

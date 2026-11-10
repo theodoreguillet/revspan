@@ -72,7 +72,7 @@ describe('home cards', () => {
         workspace: 'acme', repo: 'records-api', id: 1, title: 't', author: { uuid: '{a}', displayName: 'Auteur' }, url: 'u',
         createdOn: '2026-10-14T09:10:00Z', updatedOn: '2026-11-05T12:00:00Z', versionsCount: 10, lastPushAt: '2026-11-05T12:00:00Z',
         lastReviewed: 7, newVersions: 3, newCodeVersions: 1, approvals: 2, requiredApprovals: 2, myApproval: false, newComments: 2,
-        needsReview: false, designatedReviewer: false, followed: false, approvalHolds: false, build: null, needsRebase: null, ...over,
+        needsReview: false, designatedReviewer: false, followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', ...over,
     });
     const badges = (c: PrCard): string[] => cardBadges(fr, c, me).map((b) => b.text);
 

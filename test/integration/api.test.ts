@@ -455,6 +455,7 @@ describe('home', () => {
             needsReview: true, designatedReviewer: true, followed: false, approvalHolds: false, build: expect.objectContaining({ state: 'failed' }), needsRebase: null,
         });
         // My approval counts towards the minimum, the author's could not.
+        expect(cardOf(body, FAKE_PRS.main)?.head).toMatch(/^[0-9a-f]{12}$/);
         expect(cardOf(body, FAKE_PRS.long)).toMatchObject({ lastReviewed: 30, newVersions: 4, myApproval: true, approvals: 1, approvalHolds: false });
         expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ lastReviewed: 1, newVersions: 1, newCodeVersions: 0 });
         expect(cardOf(body, FAKE_PRS.mine)).toMatchObject({ approvals: 1, needsReview: true, designatedReviewer: false, needsRebase: true });

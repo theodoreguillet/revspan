@@ -18,8 +18,20 @@ export interface LocalPrState extends LocalReview {
     kinds: Record<string, VersionKind>;
 }
 
+/**
+ * What the VS Code notifications already covered, shared by every window of the profile.
+ * seen: prKey (or prKey#build, or a "workspace/repo" baseline marker) -> head hash abbreviated to 12.
+ */
+export interface NotifiedState {
+    /** false until the first poll recorded the baseline (nothing is notified before). */
+    initialized: boolean;
+    seen: Record<string, string>;
+}
+
 interface StateFile {
     prs: Record<string, Partial<LocalPrState>>;
+    /** Raw section, validated by completeNotified. */
+    notified?: unknown;
 }
 
 export function configDir(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string {
@@ -97,6 +109,20 @@ class JsonFile<T> {
 /** Copy of a PR state, nested records included: a mutation does not reach the cached file until it is written. */
 const completeState = (state: Partial<LocalPrState> = {}): LocalPrState => ({ ...state, viewed: { ...state.viewed }, kinds: { ...state.kinds } });
 
+/** Valid copy of the notified section: anything unexpected falls back to the defaults (nothing notified, baseline again). */
+function completeNotified(raw: unknown): NotifiedState {
+    const source = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+    const seen: Record<string, string> = {};
+    if (typeof source.seen === 'object' && source.seen !== null && !Array.isArray(source.seen)) {
+        for (const [key, value] of Object.entries(source.seen)) {
+            if (typeof value === 'string') {
+                seen[key] = value;
+            }
+        }
+    }
+    return { initialized: source.initialized === true, seen };
+}
+
 /** Repository list kept somewhere other than config.json (VS Code extension: revspan.repositories setting). */
 export interface RepoSource {
     get(): readonly string[];
@@ -166,5 +192,25 @@ export class Store {
         const state = completeState(file.prs[prKey]);
         mutate(state);
         this.stateFile.write({ ...file, prs: { ...file.prs, [prKey]: state } });
+    }
+
+    /** What the notifications already covered (copy). */
+    notified(): NotifiedState {
+        return completeNotified(this.stateFile.read().notified);
+    }
+
+    /**
+     * Re-reads state.json (another window may have written it) and applies `mutate` to that fresh copy, then writes
+     * atomically; nothing is written if nothing changed. Callers decide inside `mutate` what to notify, so a key another
+     * window already recorded is never notified twice.
+     */
+    updateNotified(mutate: (state: NotifiedState) => void): void {
+        const file = this.stateFile.read();
+        const state = completeNotified(file.notified);
+        const before = JSON.stringify(state);
+        mutate(state);
+        if (JSON.stringify(state) !== before) {
+            this.stateFile.write({ ...file, notified: state });
+        }
     }
 }

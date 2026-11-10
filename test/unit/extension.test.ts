@@ -41,6 +41,11 @@ describe('extension manifest', () => {
         expect(registered(/registerTreeDataProvider\('([^']+)'/g)).toEqual(Object.values(manifest.contributes.views).flat().map((v) => v.id).sort());
     });
 
+    it('activated once VS Code has started: background refresh and notifications do not wait for the view', () => {
+        const manifest = readJson('extension/package.json') as { activationEvents?: string[] };
+        expect(manifest.activationEvents).toContain('onStartupFinished');
+    });
+
     it('panel reopened after "Reload Window": activation event and serializer of the same type', () => {
         const manifest = readJson('extension/package.json') as { activationEvents?: string[] };
         expect(manifest.activationEvents).toContain(`onWebviewPanel:${PANEL_VIEW_TYPE}`);
@@ -379,7 +384,7 @@ describe('"My PRs" tree', () => {
         workspace: 'acme', repo: 'records-api', id, title: `PR ${id}`, author: { uuid: '{a}', displayName: 'Camille' }, url: '',
         createdOn: '', updatedOn: '', versionsCount: 3, lastPushAt: '', lastReviewed: 1, newVersions: 2, newCodeVersions: 1,
         approvals: 1, requiredApprovals: 2, myApproval: false, newComments: 2, needsReview: true, designatedReviewer: false,
-        followed: false, approvalHolds: false, build: null, needsRebase: null, ...extra,
+        followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', ...extra,
     });
     const home: Home = {
         me: { uuid: '{me}', displayName: 'Moi' },

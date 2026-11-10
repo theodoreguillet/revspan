@@ -150,7 +150,7 @@ describe('extension panel (simulated VS Code)', () => {
 
     function create(): RevspanPanel {
         const context = { extensionUri: Uri.file(path.join(dir, 'ext')), subscriptions } as unknown as vscode.ExtensionContext;
-        return new RevspanPanel({ context, app: { services, http }, diffs: { open: vi.fn() } as unknown as DiffDocuments, onWrite: () => undefined });
+        return new RevspanPanel({ context, app: { services, http, store: new Store(dir) }, diffs: { open: vi.fn() } as unknown as DiffDocuments, onWrite: () => undefined });
     }
 
     /** Opens the panel on a route; returns the fake VS Code panel. */

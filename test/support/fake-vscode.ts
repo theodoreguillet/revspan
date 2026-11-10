@@ -132,6 +132,15 @@ export const recorded = {
     errors: [] as string[],
     infos: [] as string[],
     opened: [] as string[],
+    /** Commands run by the extension (vscode.commands.executeCommand). */
+    commands: [] as { command: string; args: unknown[] }[],
+};
+
+export const commands = {
+    async executeCommand(command: string, ...args: unknown[]): Promise<undefined> {
+        recorded.commands.push({ command, args });
+        return undefined;
+    },
 };
 
 export const ConfigurationTarget = { Global: 1, Workspace: 2 };

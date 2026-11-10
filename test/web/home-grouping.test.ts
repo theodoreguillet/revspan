@@ -33,6 +33,7 @@ function card(over: Partial<PrCard> = {}): PrCard {
         approvalHolds: false,
         build: null,
         needsRebase: null,
+        head: '',
         ...over,
     };
 }

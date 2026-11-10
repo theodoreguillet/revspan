@@ -123,6 +123,7 @@ export class HomeService {
             approvalHolds: false,
             build: null,
             needsRebase: null,
+            head: head.slice(0, 12),
         };
         const queue: QueueInput = {
             isMine,
