@@ -706,6 +706,18 @@ describe('home', () => {
             expect(fake.requests.slice(start)).toEqual([]);
         });
 
+        it('profile unreadable (me unknown): nothing is hidden, even with someone followed; contributors still listed', async () => {
+            const current = await setup();
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            await restart(current);
+            await fetch(`http://127.0.0.1:${current.fake.port}/__fail-next?status=403`);
+            const { status, body } = await api<Home>('GET', '/api/home');
+            expect(status).toBe(200);
+            expect(body.me).toBeNull();
+            expect(body.hideUnfollowed).toBe(false);
+            expect(body.contributors.map((u) => u.uuid)).toEqual(['{cam}', '{me}', '{yan}']);
+        });
+
         it('contributors without a token: an empty list, no error', async () => {
             await setup({ withToken: false });
             expect((await api<ContributorList>('GET', '/api/settings/contributors')).body).toEqual({ contributors: [] });

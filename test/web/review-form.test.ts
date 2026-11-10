@@ -50,6 +50,13 @@ describe('hideUnfollowed and the contributors to follow', () => {
         ]);
         expect(followCandidates([], [])).toEqual([]);
     });
+
+    it('candidates never include me (the server cannot exclude me when it does not know who I am)', () => {
+        const me = { uuid: '{me}', displayName: 'Thomas Girard' };
+        const contributors = [me, { uuid: '{yan}', displayName: 'Yann Bernard' }];
+        expect(followCandidates(contributors, [], me)).toEqual([{ uuid: '{yan}', displayName: 'Yann Bernard' }]);
+        expect(followCandidates(contributors, [], null)).toEqual(contributors);
+    });
 });
 
 describe('byRepoRows', () => {

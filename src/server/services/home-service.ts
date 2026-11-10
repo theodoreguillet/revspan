@@ -97,7 +97,10 @@ function trimActivity(activity: readonly BbActivity[]): BbActivity[] {
 
 const sameCommit = (a: string, b: string): boolean => a.startsWith(b) || b.startsWith(a);
 
-/** Authors of the cards, me excepted, unique by uuid, sorted by name (the Settings page offers to follow them). */
+/**
+ * Authors of the cards, me excepted (nobody to exclude when my profile is unknown), unique by uuid, sorted by name (the
+ * Settings page offers to follow them).
+ */
 function contributorsOf(cards: readonly Card[], me: User | null): User[] {
     const authors = new Map<string, User>();
     for (const { data } of cards) {
@@ -164,8 +167,8 @@ export class HomeService {
         const key = homeKey(email, repos, review, this.store.localSignature(), generation);
         const compute = (): Promise<Home> => this.compute(client, key, generation, repos, review, fresh);
         // A display setting, applied to whichever home is returned (it may come from a window with other workspace
-        // settings): switching it never recomputes the home.
-        const withDisplay = (home: Home): Home => ({ ...home, hideUnfollowed: hidesUnfollowed(review) });
+        // settings): switching it never recomputes the home. Without my profile nothing is mine: nothing is hidden.
+        const withDisplay = (home: Home): Home => ({ ...home, hideUnfollowed: home.me !== null && hidesUnfollowed(review) });
         if (fresh) {
             return withDisplay(await compute());
         }
@@ -279,7 +282,7 @@ export class HomeService {
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
         truncated.sort((a, b) => a.repo.localeCompare(b.repo));
-        const home: Home = { me, repos: [...repos], groups, errors, truncated, hideUnfollowed: hidesUnfollowed(review), contributors: contributorsOf(cards, me) };
+        const home: Home = { me, repos: [...repos], groups, errors, truncated, hideUnfollowed: me !== null && hidesUnfollowed(review), contributors: contributorsOf(cards, me) };
         this.last = { key, at: startedAt, home };
         // A home without my profile (every PR in "others") is never shared. One with a repository error is, for
         // ERROR_REUSE_MS only (see shared()).

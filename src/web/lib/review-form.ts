@@ -57,9 +57,12 @@ export function reviewFromForm(form: ReviewForm): ReviewFormResult {
     };
 }
 
-/** Contributors the "Add" picker offers: the ones not followed yet, sorted by name. */
-export function followCandidates(contributors: readonly User[], followed: readonly FollowedUser[]): User[] {
+/** Contributors the "Add" picker offers: the ones not followed yet, never me, sorted by name. */
+export function followCandidates(contributors: readonly User[], followed: readonly FollowedUser[], me: User | null = null): User[] {
     const taken = new Set(followed.map((user) => user.uuid));
+    if (me) {
+        taken.add(me.uuid);
+    }
     return contributors.filter((user) => !taken.has(user.uuid)).sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 

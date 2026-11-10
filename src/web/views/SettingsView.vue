@@ -69,7 +69,7 @@ function readReview(): ReturnType<typeof reviewFromForm> {
     });
 }
 
-const candidates = computed(() => followCandidates(contributors.value, followed.value));
+const candidates = computed(() => followCandidates(contributors.value, followed.value, loaded.value?.me ?? null));
 
 /**
  * "Add": saved at once, like the ☆ Follow of a PR (same path). The form keeps its other unsaved input, and the saved
