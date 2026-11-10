@@ -213,11 +213,13 @@ export class PrService {
         const info = prInfo(ref, pr);
         const head = pr.source?.commit?.hash ?? versions[versions.length - 1]?.hash ?? '';
         const isMine = meUuid !== null && pr.author?.uuid === meUuid;
+        // A merged or declined PR is never rebased again: no flag, no read.
+        const rebaseApplies = isMine && info.state === 'OPEN';
         // The PR page reads the checks even when settled (a re-run shows there, and the home learns it).
         const [build, needsRebase] = health
             ? await Promise.all([
                 loadBuildChecks(client, ref, head, { recheck: true, pushedAt: versions[versions.length - 1]?.pushedAt ?? '' }),
-                isMine ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
+                rebaseApplies ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
             ])
             : [null, null];
         return {

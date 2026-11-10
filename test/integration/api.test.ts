@@ -561,6 +561,17 @@ describe('home', () => {
         expect((await detail(FAKE_PRS.others)).build).toEqual([]);
     });
 
+    it('M1: "needs rebase" only on an open PR: a merged PR of mine gets null, with no branch-head read', async () => {
+        const { fake } = await setup();
+        fake.data.prs.get(FAKE_PRS.mine)!.pr.state = 'MERGED';
+        const body = await detail(FAKE_PRS.mine);
+        expect(body.pr.state).toBe('MERGED');
+        expect(body.needsRebase).toBeNull();
+        expect(fake.requests.filter((r) => r.path.includes('/refs/branches/'))).toEqual([]);
+        // The home asks for open PRs only; a closed one in the answer is not flagged either.
+        expect(cardOf((await api<Home>('GET', '/api/home')).body, FAKE_PRS.mine)?.needsRebase).toBeNull();
+    });
+
     it('PR detail: unreadable statuses give build null, unlike "no build" ([])', async () => {
         const { fake } = await setup();
         fake.data.statusesFailure = 403;

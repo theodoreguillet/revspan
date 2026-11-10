@@ -45,6 +45,8 @@ interface Card {
     /** Source head and destination branch, to read the build and the rebase state. */
     head: string;
     destBranch: string;
+    /** The PR is open (the list asks for open PRs only): "needs rebase" applies. */
+    open: boolean;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -268,7 +270,7 @@ export class HomeService {
         const [checks, needsRebase] = await Promise.all([
             // lastPushAt: the last push, or the PR's last update for a light card (never earlier than the push).
             loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs, pushedAt: card.data.lastPushAt, recheck }),
-            card.group === 'mine' ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
+            card.group === 'mine' && card.open ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
         ]);
         card.data.build = checks ? summarizeBuild(checks) : null;
         card.data.needsRebase = needsRebase;
@@ -318,6 +320,7 @@ export class HomeService {
         const requiredApprovals = requiredApprovalsFor(settings, `${ref.workspace}/${ref.repo}`);
         const head = raw.source?.commit?.hash ?? '';
         const destBranch = raw.destination?.branch?.name ?? '';
+        const open = (raw.state ?? 'OPEN') === 'OPEN';
         const base: PrCard = {
             ...ref,
             title: raw.title ?? '',
@@ -355,7 +358,7 @@ export class HomeService {
         // PR that does not concern me (not author, designated reviewer or participant, never marked reviewed), or me
         // unknown: light card without the history, so the home page stays fast with many repositories.
         if (meUuid === null || (!isMine && !involved && !local.reviewedHash)) {
-            return { group: classifyPr(queue), data: base, head, destBranch };
+            return { group: classifyPr(queue), data: base, head, destBranch, open };
         }
 
         const activity = await this.activityOf(client, ref, raw);
@@ -391,6 +394,7 @@ export class HomeService {
             group,
             head,
             destBranch,
+            open,
             data: {
                 ...base,
                 versionsCount: versions.length,
