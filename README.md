@@ -264,7 +264,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
 `config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit,
-and each PR's activity as the home reads it: user ids, dates, commit hashes, comment ids, no text; can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
+and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text; can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 
 ## License

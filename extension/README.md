@@ -113,8 +113,9 @@ the panel uses the same language.
   is the same in every profile, while `revspan.repositories` is per profile. The token is never sent to the PR page
   shown in the panel.
 - Local data lives in the extension's storage on your machine: reviewed versions, seen files, cached commit contents,
-  the notifications already shown, a cached copy of each PR's activity (user ids, dates, commit hashes and comment ids,
-  without any comment text), and `home.json`, the last computed home, shared by your windows. `home.json` holds PR titles and
+  the notifications already shown, a cached copy of each PR's activity as the home reads it (pushes with their source
+  and destination: branch names, repositories and commit hashes; approvals and change requests: user id and date;
+  comments: id, date, author id and reply link; never any comment text), and `home.json`, the last computed home, shared by your windows. `home.json` holds PR titles and
   author names and is written with file mode 0600. Next to it, `home.lock` (which window computes the home) and
   `home.drop` (a counter bumped after each of your writes) hold no PR data.
 
