@@ -6,7 +6,7 @@ import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib
 import { bitbucketRepoOfRemote, currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
 import type { Grouping } from '../../src/shared/home-grouping.ts';
-import { buildHomeTree, repoErrorLabel, truncatedLabel } from '../../src/extension/lib/home-tree.ts';
+import { buildHomeTree, hiddenLabel, repoErrorLabel, truncatedLabel } from '../../src/extension/lib/home-tree.ts';
 import { createL10n, pageLocale, type L10n, type Translate } from '../../src/extension/lib/l10n.ts';
 import { errorText as extensionErrorText } from '../../src/extension/lib/error-text.ts';
 import type { ErrorLike } from '../../src/shared/error-text.ts';
@@ -550,6 +550,13 @@ describe('"My PRs" tree', () => {
         const drafted: Home = { ...home, groups: [{ key: 'others', prs: [card(3, { draft: true, newVersions: 0, newComments: 0 })] }] };
         expect(buildHomeTree(drafted, en)[0]?.prs[0]?.description).toBe('draft');
         expect(buildHomeTree(drafted, fr)[0]?.prs[0]?.description).toBe('brouillon');
+    });
+
+    it('hidden PRs: a line with the count, in English and in French (0 and 1 singular in French)', () => {
+        expect(hiddenLabel(en, 12)).toBe('12 PRs hidden (contributors you don’t follow)');
+        expect(hiddenLabel(en, 1)).toBe('1 PR hidden (a contributor you don’t follow)');
+        expect(hiddenLabel(fr, 12)).toBe('12 PR masquées (contributeurs non suivis)');
+        expect(hiddenLabel(fr, 1)).toBe('1 PR masquée (contributeur non suivi)');
     });
 
     it('I5: a repository whose open PR list was cut, in English and in French', () => {

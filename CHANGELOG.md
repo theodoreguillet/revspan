@@ -13,8 +13,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   the failed-build notification cover them like any of your PRs.
 - Hide the PRs of contributors you do not follow (`revspan.review.hideUnfollowed`, on by default; `review.hideUnfollowed`
   in the browser version). Your own PRs, the PRs where you are a designated reviewer and the ones you reviewed or
-  approved always stay, and nothing is hidden while you follow nobody. The home page shows how many PRs are hidden,
-  with a link to the settings. Notifications are unchanged, and switching the setting costs no Bitbucket request.
+  approved always stay, and nothing is hidden while you follow nobody. The home page and the VS Code view show how many
+  PRs are hidden, with a link to the settings. Notifications are unchanged, and switching the setting costs no Bitbucket request.
 - Follow a contributor from Settings: under "Followed contributors", pick one of the authors of the open PRs in your
   repositories and click **Add**.
 

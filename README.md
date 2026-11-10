@@ -107,7 +107,7 @@ your repositories).
 **Hiding unfollowed contributors** (`revspan.review.hideUnfollowed`, on by default): the home page and the VS Code tree
 leave out the PRs of authors you do not follow. Your own PRs ("To rebase", "My PRs"), the PRs where you are a designated
 reviewer and the ones you reviewed or approved are always shown, and nothing is hidden while you follow nobody. The page
-shows how many PRs are hidden, with a link to the setting. It is a display filter only: notifications and the request
+and the tree show how many PRs are hidden, with a link to the settings. It is a display filter only: notifications and the request
 budget are unchanged.
 
 "To review" and "Other open PRs" can be grouped by repository, by contributor or not at all. "To rebase" and "My PRs"

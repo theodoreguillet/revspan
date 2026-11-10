@@ -304,6 +304,16 @@ describe('extension panel (simulated VS Code)', () => {
         expect(subscriptions).toEqual([]);
     });
 
+    it('"My PRs" view: a line tells how many PRs are hidden, and opens the settings', async () => {
+        await services.settings.update({ review: { followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }] } });
+        const tree = new HomeTreeProvider(services.home, () => 'repository');
+        const roots = await tree.getChildren();
+        expect(roots[0]).toEqual({ kind: 'message', text: '1 PR hidden (a contributor you don’t follow)', icon: 'eye-closed', command: 'revspan.openSettings' });
+        await services.settings.update({ review: { hideUnfollowed: false } });
+        expect((await tree.getChildren()).filter((node) => node.kind === 'message')).toEqual([]);
+        tree.dispose();
+    });
+
     it('"My PRs" view: emitter released with the extension', () => {
         const tree = new HomeTreeProvider(services.home, () => 'repository');
         const listener = vi.fn();

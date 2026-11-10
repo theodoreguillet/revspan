@@ -165,6 +165,13 @@ export function repoErrorLabel(t: Translate, error: Home['errors'][number]): str
     return t('{repo}: {message}', { repo: error.repo, message: errorText(t, error) });
 }
 
+/** Tree line telling how many PRs the unfollowed filter hides. */
+export function hiddenLabel({ t, isSingular }: L10n, count: number): string {
+    return isSingular(count)
+        ? t('{count} PR hidden (a contributor you don’t follow)', { count })
+        : t('{count} PRs hidden (contributors you don’t follow)', { count });
+}
+
 /** Tree line of a repository with more open PRs than Revspan reads. */
 export function truncatedLabel(t: Translate, { repo, count }: Home['truncated'][number]): string {
     return t('{repo}: only the first {count} open PRs are listed', { repo, count });

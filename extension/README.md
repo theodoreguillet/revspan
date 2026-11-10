@@ -19,8 +19,8 @@ versions, without the noise brought in by rebases.
   you are a designated reviewer and the ones you reviewed that changed since; while you follow nobody, every PR needing
   review is listed.
 - **Hide unfollowed contributors** (on by default): PRs of authors you do not follow are left out of the view and the
-  home page. Your own PRs, designated reviews and PRs you reviewed or approved always stay. Nothing is hidden while you
-  follow nobody.
+  home page, and a line in the view tells how many are hidden (click it to open the settings). Your own PRs, designated
+  reviews and PRs you reviewed or approved always stay. Nothing is hidden while you follow nobody.
 - **Notifications** for a new PR needing review, a new code version on a PR you reviewed, and (optionally) a failed
   build on your PRs. See "Notifications" below.
 - **Build status** from any CI that publishes statuses to Bitbucket: a badge on the cards and in the PR header, and a

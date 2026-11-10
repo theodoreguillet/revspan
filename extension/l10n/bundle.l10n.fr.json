@@ -17,6 +17,8 @@
     "Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.": "Revspan vient d’être mis à jour : recharge la fenêtre VS Code (Developer: Reload Window) pour enregistrer les réglages.",
     "{repo}: {message}": "{repo} : {message}",
     "{repo}: only the first {count} open PRs are listed": "{repo} : seules les {count} premières PR ouvertes sont listées",
+    "{count} PR hidden (a contributor you don’t follow)": "{count} PR masquée (contributeur non suivi)",
+    "{count} PRs hidden (contributors you don’t follow)": "{count} PR masquées (contributeurs non suivis)",
     "To review": "À relire",
     "To rebase": "À rebaser",
     "My PRs": "Mes PR",
