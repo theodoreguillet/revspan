@@ -250,6 +250,10 @@ export interface PrDetail {
     participants: Participant[];
     review: Review;
     threads: Thread[];
+    /** Checks of the head commit (empty: none, or statuses unreadable). */
+    build: BuildCheck[];
+    /** Destination branch moved since the PR's base; null: not mine, or not computable. */
+    needsRebase: boolean | null;
 }
 
 export type VersionKind = 'creation' | 'code' | 'deps' | 'rebase-only' | 'message-only' | 'none' | 'unavailable';

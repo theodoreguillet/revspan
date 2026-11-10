@@ -10,6 +10,7 @@ import {
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
+import { loadBuildChecks, loadNeedsRebase } from './pr-health.ts';
 import type { BitbucketSession } from './session.ts';
 
 /** To increment if the summary computation changes (invalidates the disk cache). */
@@ -170,11 +171,20 @@ export class PrService {
         const meUuid = me?.uuid ?? null;
         const review = computeReview({ versions, activity, comments, meUuid, local: this.store.prState(prKeyOf(ref)) });
         const threads: Thread[] = buildThreads(comments, versions, { meUuid, sinceDate: review.lastReviewedAt });
+        const info = prInfo(ref, pr);
+        const head = pr.source?.commit?.hash ?? versions[versions.length - 1]?.hash ?? '';
+        const isMine = meUuid !== null && pr.author?.uuid === meUuid;
+        const [build, needsRebase] = await Promise.all([
+            loadBuildChecks(client, ref, head),
+            isMine ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
+        ]);
         return {
             client,
             updates,
             versions,
-            detail: { pr: prInfo(ref, pr), me, versions, participants: buildParticipants(pr, activity, versions), review, threads },
+            detail: {
+                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build: build ?? [], needsRebase,
+            },
         };
     }
 

@@ -59,6 +59,8 @@ export interface FakeData {
     prs: Map<number, FakePr>;
     /** PR id -> build statuses (several commits, like the real list). */
     statuses: Map<number, BbStatus[]>;
+    /** HTTP status the statuses route answers instead of the list (simulates an unreadable CI integration). */
+    statusesFailure?: number;
     /** Branch name -> full head hash. master moved past the base of every PR but #44 (see buildFakeData). */
     branchHeads: Map<string, string>;
     nextId(): number;
@@ -347,6 +349,15 @@ export function buildFakeData(): FakeData {
     ]);
     // master moved past every base (m0 of #45, #46, #47...) except that of #44, whose v2 sits on master.
     const branchHeads = new Map<string, string>([['master', hex('rebase:m1')]]);
+    // Merge base of each PR head and master's current head: still its own base, which is master's head only for #44.
+    for (const id of b.prs.keys()) {
+        const head = headOf(id);
+        const own = [...b.mergeBases.keys()].find((k) => k.startsWith(`${head}..`));
+        const base = own ? b.mergeBases.get(own) : undefined;
+        if (own && base && head) {
+            b.mergeBases.set(`${head}..${hex('rebase:m1')}`, base);
+        }
+    }
     return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, nextId: b.nextId };
 }
 
@@ -465,6 +476,9 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         if ((m = /^\/pullrequests\/(\d+)(\/.*)?$/.exec(rest))) {
             const fake = data.prs.get(Number(m[1]));
             if (fake && m[2] === '/statuses' && req.method === 'GET') {
+                if (data.statusesFailure) {
+                    return send(res, data.statusesFailure, { error: { message: 'statuses unavailable' } });
+                }
                 return send(res, 200, page(req, data.statuses.get(fake.pr.id) ?? [], 50));
             }
             return fake ? handlePr(req, res, fake, m[2] ?? '', body) : send(res, 404, { error: { message: 'no pr' } });

@@ -4,11 +4,13 @@ import { approvalHoldsSince } from '../../shared/approval.ts';
 import { requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbPullRequest } from '../bitbucket/types.ts';
+import { summarizeBuild } from '../core/build.ts';
 import { buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
 import { classifyPr, needsReview, type QueueInput } from '../core/review-queue.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
 import { errorPayload } from '../errors.ts';
+import { loadBuildChecks, loadNeedsRebase } from './pr-health.ts';
 import type { BitbucketSession } from './session.ts';
 
 const HOME_TTL_MS = 60000;
@@ -19,6 +21,9 @@ const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'mine', 'waiting', 'other
 interface Card {
     group: HomeGroupKey;
     data: PrCard;
+    /** Source head and destination branch, to read the build and the rebase state. */
+    head: string;
+    destBranch: string;
 }
 
 export class HomeService {
@@ -36,6 +41,10 @@ export class HomeService {
     async get({ fresh = false }: { fresh?: boolean } = {}): Promise<Home> {
         if (fresh) {
             this.cache.invalidateLive('live:home:');
+            for (const fullName of this.store.config.repos) {
+                this.cache.invalidateLive(`live:${fullName}#`);
+                this.cache.invalidateLive(`live:${fullName}:branch:`);
+            }
         }
         const client = await this.session.getClient();
         const me = await this.session.me();
@@ -57,12 +66,27 @@ export class HomeService {
             }
         }));
 
+        await Promise.all(cards.map((card) => this.withHealth(client, card)));
+
         const groups: HomeGroup[] = GROUP_ORDER.map((key) => ({
             key,
             prs: cards.filter((c) => c.group === key).map((c) => c.data).sort((a, b) => b.lastPushAt.localeCompare(a.lastPushAt)),
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
         return { me, repos: [...repos], groups, errors };
+    }
+
+    /** Build state for "to-do" and "mine" cards, needs-rebase for "mine" only. Failures leave null. */
+    private async withHealth(client: BitbucketClient, card: Card): Promise<void> {
+        if (card.group !== 'to-do' && card.group !== 'mine') {
+            return;
+        }
+        const [checks, needsRebase] = await Promise.all([
+            loadBuildChecks(client, card.data, card.head),
+            card.group === 'mine' ? loadNeedsRebase(client, card.data, card.head, card.destBranch) : null,
+        ]);
+        card.data.build = checks ? summarizeBuild(checks) : null;
+        card.data.needsRebase = needsRebase;
     }
 
     private async card(client: BitbucketClient, me: User | null, ref: PrRef, raw: BbPullRequest, requiredApprovals: number): Promise<Card> {
@@ -74,6 +98,8 @@ export class HomeService {
         const involved = designatedReviewer || participants.some((p) => isMe(p.user?.uuid));
         const local = this.store.prState(prKeyOf(ref));
         const approvals = participants.filter((p) => p.approved && p.user?.uuid !== raw.author?.uuid).length;
+        const head = raw.source?.commit?.hash ?? '';
+        const destBranch = raw.destination?.branch?.name ?? '';
         const base: PrCard = {
             ...ref,
             title: raw.title ?? '',
@@ -110,7 +136,7 @@ export class HomeService {
         // PR that does not concern me (not author, designated reviewer or participant, never marked reviewed), or me
         // unknown: light card without the history, so the home page stays fast with many repositories.
         if (meUuid === null || (!isMine && !involved && !local.reviewedHash)) {
-            return { group: classifyPr(queue), data: base };
+            return { group: classifyPr(queue), data: base, head, destBranch };
         }
 
         const activity = await client.activity(ref.workspace, ref.repo, ref.id);
@@ -144,6 +170,8 @@ export class HomeService {
         });
         return {
             group,
+            head,
+            destBranch,
             data: {
                 ...base,
                 versionsCount: versions.length,

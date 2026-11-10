@@ -450,12 +450,12 @@ describe('home', () => {
         });
         expect(cardOf(body, FAKE_PRS.main)).toMatchObject({
             versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, requiredApprovals: 2, newComments: 2,
-            needsReview: true, designatedReviewer: true, followed: false, approvalHolds: false, build: null, needsRebase: null,
+            needsReview: true, designatedReviewer: true, followed: false, approvalHolds: false, build: expect.objectContaining({ state: 'failed' }), needsRebase: null,
         });
         // My approval counts towards the minimum, the author's could not.
         expect(cardOf(body, FAKE_PRS.long)).toMatchObject({ lastReviewed: 30, newVersions: 4, myApproval: true, approvals: 1, approvalHolds: false });
         expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ lastReviewed: 1, newVersions: 1, newCodeVersions: 0 });
-        expect(cardOf(body, FAKE_PRS.mine)).toMatchObject({ approvals: 1, needsReview: true, designatedReviewer: false, needsRebase: null });
+        expect(cardOf(body, FAKE_PRS.mine)).toMatchObject({ approvals: 1, needsReview: true, designatedReviewer: false, needsRebase: true });
         expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ lastReviewed: null, newVersions: 2 });
         expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ versionsCount: null, lastReviewed: null, approvals: 2, needsReview: false, designatedReviewer: false });
     });
@@ -510,6 +510,49 @@ describe('home', () => {
         const { body } = await api<Home>('GET', '/api/home');
         expect(groupsOf(body)[FAKE_PRS.rebaseOnly]).toBe('waiting');
         expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ myApproval: true, approvalHolds: true, designatedReviewer: true, newVersions: 1, newCodeVersions: 0 });
+    });
+
+    it('build state only for "to-do" and "mine" cards, needs-rebase only for mine', async () => {
+        await setup();
+        const { body } = await api<Home>('GET', '/api/home');
+        expect(cardOf(body, 42)).toMatchObject({ build: expect.objectContaining({ state: 'failed' }), needsRebase: null });
+        expect(cardOf(body, FAKE_PRS.mine)).toMatchObject({ build: { state: 'running', failed: 0, running: 1, total: 2 }, needsRebase: true });
+        expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ build: { state: 'none', total: 0 }, needsRebase: null });
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ build: null, needsRebase: null });
+    });
+
+    it('mine: needs-rebase is false once master is back on the PR base', async () => {
+        const { fake } = await setup();
+        expect(cardOf((await api<Home>('GET', '/api/home')).body, FAKE_PRS.mine)?.needsRebase).toBe(true);
+        const mineHead = fake.data.prs.get(FAKE_PRS.mine)?.pr.source?.commit?.hash ?? '';
+        const baseKey = [...fake.data.mergeBases.keys()].find((k) => k.startsWith(mineHead));
+        const base = baseKey ? fake.data.mergeBases.get(baseKey) : undefined;
+        expect(base).toBeTruthy();
+        fake.data.branchHeads.set('master', base ?? '');
+        fake.data.mergeBases.set(`${mineHead}..${base}`, base ?? '');
+        const { body } = await api<Home>('GET', '/api/home?fresh=1');
+        expect(cardOf(body, FAKE_PRS.mine)?.needsRebase).toBe(false);
+    });
+
+    it('a statuses failure leaves build null and the home still loads', async () => {
+        const { fake } = await setup();
+        fake.data.statusesFailure = 403;
+        const { status, body } = await api<Home>('GET', '/api/home');
+        expect(status).toBe(200);
+        expect(body.errors).toEqual([]);
+        expect(body.groups.flatMap((g) => g.prs).every((p) => p.build === null)).toBe(true);
+        expect(cardOf(body, FAKE_PRS.mine)?.needsRebase).toBe(true);
+    });
+
+    it('PR detail carries the build checks and needs-rebase (mine only)', async () => {
+        await setup();
+        const mine = await detail(FAKE_PRS.mine);
+        expect(mine.needsRebase).toBe(true);
+        expect(mine.build.map((c) => c.state).sort()).toEqual(['running', 'success']);
+        const failed = await detail(42);
+        expect(failed.needsRebase).toBeNull();
+        expect(failed.build.map((c) => c.state).sort()).toEqual(['failed', 'success']);
+        expect((await detail(FAKE_PRS.others)).build).toEqual([]);
     });
 
     it('me unknown (token without read:user): every PR in "others", no history loaded, no error', async () => {
