@@ -1,13 +1,28 @@
 // "My PRs" tree of the side bar, built from the home page data (same groups as the page).
-import type { Home, HomeGroupKey, PrCard, PrRef } from '../../shared/api.ts';
+import type { Home, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
+import { groupCards, groupingFor, type Grouping } from '../../shared/home-grouping.ts';
 import { errorText } from './error-text.ts';
 import type { L10n, Translate } from './l10n.ts';
+
+/** `pr`: author can be followed; `pr-followed`: already followed; `pr-readonly`: own PR or unknown author. */
+export type PrContext = 'pr' | 'pr-followed' | 'pr-readonly';
 
 export interface PrNode {
     ref: PrRef;
     label: string;
     description: string;
     tooltip: string;
+    /** Build state as a codicon (error, sync~spin, pass); absent when there is no build or it is not loaded. */
+    icon?: string;
+    contextValue: PrContext;
+    author: User | null;
+}
+
+/** Subgroup of a group (repository or contributor), under the group node. */
+export interface SubgroupNode {
+    key: string;
+    label: string;
+    prs: PrNode[];
 }
 
 export interface GroupNode {
@@ -16,8 +31,13 @@ export interface GroupNode {
     /** Icon (codicon) of the group. */
     icon: string;
     collapsed: boolean;
+    /** PRs directly under the group (no subgroups). */
     prs: PrNode[];
+    /** Subgroups; empty when the group is not split. */
+    subgroups: SubgroupNode[];
 }
+
+const BUILD_ICONS = { failed: 'error', running: 'sync~spin', success: 'pass' } as const;
 
 const ICONS: Record<HomeGroupKey, string> = {
     'to-do': 'eye',
@@ -63,18 +83,36 @@ function badges(l10n: L10n, card: PrCard, key: HomeGroupKey): string[] {
     if (card.newComments > 0) {
         out.push(`💬 ${card.newComments}`);
     }
+    if (card.needsRebase === true) {
+        out.push(t('to rebase'));
+    }
     if (card.myApproval) {
         out.push(t('✓ approved'));
     }
     return out;
 }
 
-function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey): PrNode {
+function contextOf(card: PrCard, me: User | null): PrContext {
+    if (!card.author || card.author.uuid === me?.uuid) {
+        return 'pr-readonly';
+    }
+    return card.followed ? 'pr-followed' : 'pr';
+}
+
+function buildIcon(card: PrCard): string | undefined {
+    const state = card.build?.state;
+    return state && state !== 'none' ? BUILD_ICONS[state] : undefined;
+}
+
+function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey, me: User | null): PrNode {
     const extra = badges(l10n, card, key);
     return {
         ref: { workspace: card.workspace, repo: card.repo, id: card.id },
-        // Repository and number before the title: easy to spot at a glance in the list.
-        label: `${card.repo} #${card.id} · ${card.title}`,
+        // Repository and number before the title: easy to spot at a glance in the list. ★ marks a followed author.
+        label: `${card.followed ? '★ ' : ''}${card.repo} #${card.id} · ${card.title}`,
+        icon: buildIcon(card),
+        contextValue: contextOf(card, me),
+        author: card.author,
         description: extra.join(' · '),
         tooltip: [
             card.title,
@@ -86,17 +124,32 @@ function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey): PrNode {
     };
 }
 
-/** Non-empty groups; "Other open PRs" collapsed (expanded if the tool does not know who I am). */
-export function buildHomeTree(home: Home, l10n: L10n): GroupNode[] {
+function subgroupLabel(t: Translate, label: string, cards: PrCard[], byContributor: boolean): string {
+    const star = byContributor && cards.some((card) => card.followed) ? '★ ' : '';
+    return `${star}${label || t('Unknown author')} (${cards.length})`;
+}
+
+/**
+ * Non-empty groups; "Other open PRs" collapsed (expanded if the tool does not know who I am).
+ * `grouping` splits "to-do" and "others" (the other groups follow `groupingFor`).
+ */
+export function buildHomeTree(home: Home, l10n: L10n, grouping: Grouping = 'none'): GroupNode[] {
     return home.groups
         .filter((group) => group.prs.length > 0)
-        .map((group) => ({
-            key: group.key,
-            label: `${groupTitle(l10n.t, group.key)} (${group.prs.length})`,
-            icon: ICONS[group.key],
-            collapsed: group.key === 'others' && home.me !== null,
-            prs: group.prs.map((card) => prNode(l10n, card, group.key)),
-        }));
+        .map((group) => {
+            const effective = groupingFor(group.key, grouping);
+            const split = groupCards(group.prs, effective);
+            const nodes = (cards: PrCard[]): PrNode[] => cards.map((card) => prNode(l10n, card, group.key, home.me));
+            const flat = effective === 'none';
+            return {
+                key: group.key,
+                label: `${groupTitle(l10n.t, group.key)} (${group.prs.length})`,
+                icon: ICONS[group.key],
+                collapsed: group.key === 'others' && home.me !== null,
+                prs: flat ? nodes(split.flatMap((sub) => sub.cards)) : [],
+                subgroups: flat ? [] : split.map((sub) => ({ key: sub.key, label: subgroupLabel(l10n.t, sub.label, sub.cards, effective === 'contributor'), prs: nodes(sub.cards) })),
+            };
+        });
 }
 
 /** Tree line of a repository that could not be read, e.g. "acme/x: Not found on Bitbucket: ...". */

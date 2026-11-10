@@ -249,7 +249,7 @@ describe('extension panel (simulated VS Code)', () => {
     });
 
     it('"My PRs" view: emitter released with the extension', () => {
-        const tree = new HomeTreeProvider(services.home);
+        const tree = new HomeTreeProvider(services.home, () => 'repository');
         const listener = vi.fn();
         tree.onDidChangeTreeData(listener);
         tree.refresh();

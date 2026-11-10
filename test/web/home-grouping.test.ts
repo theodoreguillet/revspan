@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
-import { groupCards, groupingFor, isGrouping } from '../../src/web/lib/home-grouping.ts';
+import { groupCards, groupingFor, isGrouping } from '../../src/shared/home-grouping.ts';
 
 const CAM: User = { uuid: '{cam}', displayName: 'Camille Durand' };
 const YAN: User = { uuid: '{yan}', displayName: 'Yann Bernard' };

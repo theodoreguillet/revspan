@@ -44,7 +44,10 @@
             { "command": "revspan.openHome", "title": "%command.openHome%", "category": "%command.category%", "icon": "$(home)" },
             { "command": "revspan.openPr", "title": "%command.openPr%", "category": "%command.category%", "icon": "$(link-external)" },
             { "command": "revspan.openSettings", "title": "%command.openSettings%", "category": "%command.category%", "icon": "$(gear)" },
-            { "command": "revspan.refresh", "title": "%command.refresh%", "category": "%command.category%", "icon": "$(refresh)" }
+            { "command": "revspan.refresh", "title": "%command.refresh%", "category": "%command.category%", "icon": "$(refresh)" },
+            { "command": "revspan.groupBy", "title": "%command.groupBy%", "category": "%command.category%", "icon": "$(list-tree)" },
+            { "command": "revspan.followAuthor", "title": "%command.followAuthor%", "category": "%command.category%", "icon": "$(star-empty)" },
+            { "command": "revspan.unfollowAuthor", "title": "%command.unfollowAuthor%", "category": "%command.category%", "icon": "$(star-full)" }
         ],
         "configuration": {
             "title": "Revspan",
@@ -132,7 +135,16 @@
                 { "command": "revspan.refresh", "when": "view == revspan.home", "group": "navigation@1" },
                 { "command": "revspan.openPr", "when": "view == revspan.home", "group": "navigation@2" },
                 { "command": "revspan.openHome", "when": "view == revspan.home", "group": "navigation@3" },
-                { "command": "revspan.openSettings", "when": "view == revspan.home", "group": "navigation@4" }
+                { "command": "revspan.openSettings", "when": "view == revspan.home", "group": "navigation@4" },
+                { "command": "revspan.groupBy", "when": "view == revspan.home", "group": "navigation@5" }
+            ],
+            "view/item/context": [
+                { "command": "revspan.followAuthor", "when": "view == revspan.home && viewItem == pr", "group": "revspan@1" },
+                { "command": "revspan.unfollowAuthor", "when": "view == revspan.home && viewItem == pr-followed", "group": "revspan@1" }
+            ],
+            "commandPalette": [
+                { "command": "revspan.followAuthor", "when": "false" },
+                { "command": "revspan.unfollowAuthor", "when": "false" }
             ]
         }
     }

@@ -40,5 +40,13 @@
     "“{path}” doesn’t exist in {dir} (branch {branch}).": "« {path} » n'existe pas dans {dir} (branche {branch}).",
     "“{path}” doesn’t exist in {dir} (unknown branch).": "« {path} » n'existe pas dans {dir} (branche inconnue).",
     "The local copy is on {branch}: lines may differ from the PR version.": "Copie locale sur {branch} : les lignes peuvent différer de la version de la PR.",
-    "The local copy is on another branch: lines may differ from the PR version.": "Copie locale sur une autre branche : les lignes peuvent différer de la version de la PR."
+    "The local copy is on another branch: lines may differ from the PR version.": "Copie locale sur une autre branche : les lignes peuvent différer de la version de la PR.",
+    "to rebase": "à rebaser",
+    "Unknown author": "Auteur inconnu",
+    "Repository": "Dépôt",
+    "Contributor": "Contributeur",
+    "None": "Aucun",
+    "current": "actuel",
+    "Group by…": "Grouper par…",
+    "How to split “To do” and “Other open PRs”": "Comment découper « À faire » et « Autres PR ouvertes »"
 }

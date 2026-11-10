@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BuildCheck, BuildSummary, Home, PrCard } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { buildCheckText, buildHeaderText, buildRowText, safeBuildUrl } from '../../src/web/lib/build.ts';
-import { withFollowed, withFollowedCards } from '../../src/web/lib/follow.ts';
+import { withFollowed, withFollowedCards } from '../../src/shared/follow.ts';
 
 const fr = createTranslator('fr');
 const en = createTranslator('en');

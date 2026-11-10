@@ -1,6 +1,6 @@
 // Followed contributors: the list saved in the settings, and the home cards marked from it.
-import type { Home } from '../../shared/api.ts';
-import type { FollowedUser } from '../../shared/review-settings.ts';
+import type { Home } from './api.ts';
+import type { FollowedUser } from './review-settings.ts';
 
 /** The followed list with `user` added (once) or removed (by uuid). */
 export function withFollowed(list: readonly FollowedUser[], user: FollowedUser, follow: boolean): FollowedUser[] {

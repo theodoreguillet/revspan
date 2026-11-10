@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import type { User } from '../../shared/api.ts';
 import type { FollowedUser } from '../../shared/review-settings.ts';
-import { withFollowed } from '../lib/follow.ts';
+import { withFollowed } from '../../shared/follow.ts';
 import { api } from '../services/api.ts';
 import { showError } from './useErrors.ts';
 

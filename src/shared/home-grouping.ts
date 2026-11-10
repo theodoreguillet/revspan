@@ -1,5 +1,5 @@
 // Home subgroups: cards of a home group split by repository, by contributor, or not at all (pure, no Vue).
-import type { HomeGroupKey, PrCard } from '../../shared/api.ts';
+import type { HomeGroupKey, PrCard } from './api.ts';
 
 export type Grouping = 'repository' | 'contributor' | 'none';
 

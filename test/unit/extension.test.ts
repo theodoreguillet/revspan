@@ -5,6 +5,7 @@ import type { Home, PrCard } from '../../src/shared/api.ts';
 import { buildWebviewHtml, contentSecurityPolicy } from '../../src/extension/lib/webview-html.ts';
 import { bitbucketRepoOfRemote, currentBranch, findLocalRepo, type RepoFs } from '../../src/extension/lib/repo-path.ts';
 import { decodeDiffDocument, diffTitle, encodeDiffDocument } from '../../src/extension/lib/diff-uri.ts';
+import type { Grouping } from '../../src/shared/home-grouping.ts';
 import { buildHomeTree, repoErrorLabel } from '../../src/extension/lib/home-tree.ts';
 import { createL10n, pageLocale, type L10n, type Translate } from '../../src/extension/lib/l10n.ts';
 import { errorText as extensionErrorText } from '../../src/extension/lib/error-text.ts';
@@ -407,8 +408,8 @@ describe('"My PRs" tree', () => {
         expect(tree[1]?.prs[0]).toMatchObject({ description: 'not reviewed yet · 💬 2' });
         const approved = buildHomeTree({ ...home, groups: [{ key: 'mine', prs: [card(3, { myApproval: true, approvals: 2, newVersions: 1 })] }] }, en);
         expect(approved.map((g) => g.label)).toEqual(['My PRs (1)']);
-        expect(approved[0]?.prs[0]?.description).toBe('💬 2 · ✓ approved');
-        expect(approved[0]?.prs[0]?.tooltip).toContain('2 approvals');
+        expect(approved[0]?.subgroups[0]?.prs[0]?.description).toBe('💬 2 · ✓ approved');
+        expect(approved[0]?.subgroups[0]?.prs[0]?.tooltip).toContain('2 approvals');
     });
 
     it('plurals follow the display language: 0 and 1 are singular in French, only 1 in English', () => {
@@ -418,6 +419,59 @@ describe('"My PRs" tree', () => {
         const one = { ...home, groups: [{ key: 'to-do' as const, prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
         expect(buildHomeTree(one, en)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
         expect(buildHomeTree(one, fr)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
+    });
+
+    describe('review queue: subgroups, marks, follow state', () => {
+        const yann = { uuid: '{y}', displayName: 'Yann' };
+        const queue = (grouping: Grouping, extra: Partial<Home> = {}): ReturnType<typeof buildHomeTree> => buildHomeTree({
+            ...home,
+            groups: [
+                { key: 'to-do', prs: [card(1), card(6, { repo: 'records-web', author: yann, followed: true }), card(7, { author: yann, followed: true, build: { state: 'failed', failed: 1, running: 0, total: 2 } })] },
+                { key: 'mine', prs: [card(8, { author: home.me, needsRebase: true, build: { state: 'running', failed: 0, running: 1, total: 1 } })] },
+                { key: 'waiting', prs: [card(9)] },
+                { key: 'others', prs: [card(10, { author: null })] },
+            ],
+            ...extra,
+        }, en, grouping);
+
+        it('contributor grouping: subnodes in to-do and others, followed first, none in waiting, mine by repository', () => {
+            const tree = queue('contributor');
+            expect(tree.map((g) => [g.key, g.prs.length, g.subgroups.map((s) => s.label)])).toEqual([
+                ['to-do', 0, ['★ Yann (2)', 'Camille (1)']],
+                ['mine', 0, ['acme/records-api (1)']],
+                ['waiting', 1, []],
+                ['others', 0, ['Unknown author (1)']],
+            ]);
+            expect(tree[0]?.subgroups[0]?.prs.map((p) => p.ref.id)).toEqual([6, 7]);
+        });
+
+        it('repository grouping and no grouping', () => {
+            expect(queue('repository')[0]?.subgroups.map((s) => s.label)).toEqual(['acme/records-api (2)', 'acme/records-web (1)']);
+            const flat = queue('none')[0];
+            expect(flat?.subgroups).toEqual([]);
+            expect(flat?.prs).toHaveLength(3);
+            expect(queue('none')[1]?.subgroups.map((s) => s.label)).toEqual(['acme/records-api (1)']);
+        });
+
+        it('star, build icon and rebase mark', () => {
+            const [todo, mine] = queue('none');
+            expect(todo?.prs.map((p) => [p.label, p.icon])).toEqual([
+                ['★ records-web #6 · PR 6', undefined],
+                ['★ records-api #7 · PR 7', 'error'],
+                ['records-api #1 · PR 1', undefined],
+            ]);
+            expect(mine?.subgroups[0]?.prs[0]).toMatchObject({ icon: 'sync~spin', description: expect.stringContaining('to rebase') as string });
+            expect(buildHomeTree({ ...home, groups: [{ key: 'to-do', prs: [card(11, { build: { state: 'success', failed: 0, running: 0, total: 1 } })] }] }, fr)[0]?.prs[0]?.icon).toBe('pass');
+            expect(buildHomeTree({ ...home, groups: [{ key: 'mine', prs: [card(12, { needsRebase: true })] }] }, fr)[0]?.subgroups[0]?.prs[0]?.description).toContain('à rebaser');
+        });
+
+        it('contextValue reflects the followed state; own and unknown authors cannot be followed', () => {
+            const [todo, mine, , others] = queue('none');
+            expect(todo?.prs.map((p) => p.contextValue)).toEqual(['pr-followed', 'pr-followed', 'pr']);
+            expect(mine?.subgroups[0]?.prs[0]?.contextValue).toBe('pr-readonly');
+            expect(others?.prs[0]?.contextValue).toBe('pr-readonly');
+            expect(todo?.prs[2]?.author).toEqual({ uuid: '{a}', displayName: 'Camille' });
+        });
     });
 
     it('repository errors translated from their code and parameters', () => {
