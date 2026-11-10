@@ -11,12 +11,15 @@ Common rules:
 - the `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`;
 - error: status other than 2xx and body `ApiErrorBody` = `{ error: { code, message, params? } }`:
   - `code` is stable (`ErrorCode`): `NO_TOKEN` (409), `BB_UNAUTHORIZED` (401), `BB_FORBIDDEN` (403), `BB_NOT_FOUND` (404),
-    `BB_UNREACHABLE`, `BB_ERROR`, `BAD_REQUEST` (400), `VERSION_UNAVAILABLE` (410), `FORBIDDEN`, `NOT_FOUND`, `INTERNAL`;
+    `BB_UNREACHABLE`, `BB_ERROR`, `BAD_REQUEST` (400), `VERSION_UNAVAILABLE` (410), `FORBIDDEN`, `NOT_FOUND`, `INTERNAL`,
+    `SETTING_UNREGISTERED` (409, VS Code only: the extension was updated and the window must be reloaded before a new
+    setting can be saved);
   - `message` is always in English (it is also what shows in the terminal and in logs);
   - `params` (`ErrorParams`) holds the values a client needs to translate the message itself, so the server never sends
     translated text: `reason` (`invalid-email`, `email-required`, `profile-unreadable`, `no-versions`), `path`
     (Bitbucket API path), `status` (Bitbucket's HTTP status), `detail` (Bitbucket's or the system's own text, shown as is)
-    and `version` (the version concerned by `VERSION_UNAVAILABLE`). Which parameters appear depends on the code;
+    `version` (the version concerned by `VERSION_UNAVAILABLE`) and `setting` (the VS Code setting concerned by
+    `SETTING_UNREGISTERED`). Which parameters appear depends on the code;
   - a client that does not know a code, or that lacks the parameters of its translation, shows `message` as is;
 - `GET /api/home` reports repositories it could not read in `errors`, with the same fields (`repo`, `code`, `message`,
   `params`); the other repositories are still listed.
@@ -26,6 +29,7 @@ Common rules:
 | GET | `/api/health` | — | `Health` |
 | GET | `/api/settings` | — | `Settings` |
 | GET | `/api/settings/followed` | — | `FollowedList` (local; the pages read it before a follow, since a read of `/api/settings` retitles the VS Code panel) |
+| GET | `/api/settings/contributors` | — | `ContributorList` (`Home.contributors` of the shared home; empty without a token or repository) |
 | PUT | `/api/settings` | `SettingsUpdate` | `Settings` |
 | POST | `/api/settings/test` | — | `ConnectionTest` |
 | GET | `/api/home[?fresh=1]` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key; see "Review queue contract"). `fresh=1` (the Refresh button) skips the home shared by the windows and re-reads live data |
@@ -48,20 +52,31 @@ Common rules:
   `success` or `none`, with counts), `needsRebase: boolean | null` (own open PRs only, `null` when not computed), `head`
   (source head commit, 12 characters, `''` if Bitbucket gave none; it is what lets a notification fire once per PR and
   head) and `draft` (Bitbucket draft PR: never `to-do`, never notified).
+- `Home.hideUnfollowed: boolean`: the page and the tree hide the PRs of unfollowed contributors
+  (`src/shared/home-filter.ts`). It is the effective flag: `review.hideUnfollowed` is on and at least one contributor is
+  followed. Display only: `Home.groups` still holds every PR.
+- `Home.contributors: User[]`: authors of the listed PRs (hidden ones included), me excepted, unique by uuid, sorted by
+  name.
 - `Home.truncated: { repo, count }[]`: repositories with more open PRs than Revspan reads (200); only the first `count`
   are listed.
-- `HomeGroupKey` is `'to-do' | 'mine' | 'waiting' | 'others'`, in that order in `Home.groups`. `HomeGroup` is
-  `{ key, prs }`, with no title: the page and the VS Code tree each translate the key. The old keys `to-review`,
-  `rebase-only` and `up-to-date` are gone.
+- `HomeGroupKey` is `'to-do' | 'to-rebase' | 'mine' | 'waiting' | 'others'`, in that order in `Home.groups`. `to-do`
+  is shown as "To review" (« À relire »); `to-rebase` holds my open PRs whose destination moved since their base
+  (`needsRebase === true`), which leave `mine`. Once a contributor is followed, `to-do` keeps only the followed
+  authors', designated and engaged PRs (see DESIGN.md). `HomeGroup` is `{ key, prs }`, with no title: the page and the
+  VS Code tree each translate the key. The old keys `to-review`, `rebase-only` and `up-to-date` are gone.
 - `PrDetail.build: BuildCheck[] | null`: the checks of the head commit (`key`, `name`, `state` of `success`, `failed`,
   `running` or `stopped`, `url`, `updatedOn`). `[]` means no build is attached, `null` means the statuses could not be
   read. `PrDetail.needsRebase: boolean | null` follows the same rule as the card.
-- `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `notifications`,
-  `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
+- `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `hideUnfollowed`,
+  `notifications`, `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
   by key); an invalid value is replaced by its default.
 - `GET /api/settings/followed` returns `FollowedList` (`{ followed }`), read from the local configuration with no
   Bitbucket call. It exists because the pages need the current list before a follow or an unfollow, and reading
   `/api/settings` has a side effect in VS Code (it retitles the panel).
+- `GET /api/settings/contributors` returns `ContributorList` (`{ contributors }`): `Home.contributors` of the home the
+  windows share (no Bitbucket request when it is recent, otherwise the home is computed and shared as for the page).
+  The Settings page reads it for its **Add** picker; it is under `/settings/` because a read of `/api/home` retitles the
+  VS Code panel.
 
 Page: Vue SPA served from `dist/web`, hash routing (`#/`, `#/pr/:ws/:repo/:id?from=&to=`, `#/settings`).
 `GET /open?url=<Bitbucket PR URL>` redirects to `/#/pr/...`.

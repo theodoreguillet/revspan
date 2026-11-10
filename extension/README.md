@@ -8,19 +8,25 @@ versions, without the noise brought in by rebases.
 
 ## Features
 
-- **Review queue** in the "My PRs" view in the activity bar, in four groups: **To do** (PRs needing your review or
-  your attention), **My PRs**, **Waiting on the author** (you approved, or your approval still holds after rebase-only
-  pushes) and **Other open PRs**. A PR needs review while it has fewer approvals than the minimum (2 by default),
-  counted like Bitbucket's merge rule, your approval included. Where you are a designated reviewer, the PR stays in
-  "To do" until you approve it, or until you request changes and only neutral pushes follow. Draft PRs go to "Other
-  open PRs" (yours stay in "My PRs") and never notify.
-- **Followed contributors**: follow an author from a PR row to see their PRs first and be notified of new ones.
+- **Review queue** in the "My PRs" view in the activity bar, in five groups: **To review** (PRs needing your review),
+  **To rebase** (your PRs whose destination branch moved since their base), **My PRs**, **Waiting on the author** (you
+  approved, or your approval still holds after rebase-only pushes) and **Other open PRs**. A PR needs review while it
+  has fewer approvals than the minimum (2 by default), counted like Bitbucket's merge rule, your approval included.
+  Where you are a designated reviewer, the PR stays in "To review" until you approve it, or until you request changes
+  and only neutral pushes follow. Draft PRs go to "Other open PRs" (yours stay with your PRs) and never notify.
+- **Followed contributors**: follow an author from a PR row, from the PR page or from Settings (**Add**). Their PRs come
+  first and can notify you. Once you follow someone, "To review" lists only the PRs of followed authors, the ones where
+  you are a designated reviewer and the ones you reviewed that changed since; while you follow nobody, every PR needing
+  review is listed.
+- **Hide unfollowed contributors** (on by default): PRs of authors you do not follow are left out of the view and the
+  home page. Your own PRs, designated reviews and PRs you reviewed or approved always stay. Nothing is hidden while you
+  follow nobody.
 - **Notifications** for a new PR needing review, a new code version on a PR you reviewed, and (optionally) a failed
   build on your PRs. See "Notifications" below.
 - **Build status** from any CI that publishes statuses to Bitbucket: a badge on the cards and in the PR header, and a
   "Builds" tab.
-- **Needs rebase** flag on your own PRs when the destination branch moved.
-- **Grouping** of "To do" and "Other open PRs" by repository, contributor or not at all (the choice is remembered
+- **Needs rebase** flag on your own PRs when the destination branch moved; they are listed in "To rebase".
+- **Grouping** of "To review" and "Other open PRs" by repository, contributor or not at all (the choice is remembered
   separately for the view and for the page).
 - **Version timeline**: one dot per push, rebases detected, with a summary of each version (code, dependencies only,
   rebase only, message only).
@@ -57,7 +63,7 @@ versions, without the noise brought in by rebases.
 | Revspan: Open a PR (URL) | Opens a pull request from its Bitbucket URL. |
 | Revspan: Settings (token, repositories) | Opens the settings page: e-mail, token, followed repositories. |
 | Revspan: Refresh | Reloads the "My PRs" view from Bitbucket (including your PRs' build checks). |
-| Revspan: Group by… | Splits "To do" and "Other open PRs" by repository, by contributor or not at all. |
+| Revspan: Group by… | Splits "To review" and "Other open PRs" by repository, by contributor or not at all. |
 | Follow the author / Unfollow the author | On a PR row of the view: lists that author's PRs first and notifies their new PRs. |
 
 ## Settings
@@ -65,22 +71,28 @@ versions, without the noise brought in by rebases.
 | Setting | Default | What it does |
 |---|---|---|
 | `revspan.repositories` | `[]` | Repositories whose open PRs appear, one `workspace/repository` (or the URL) per entry. Editable here or from the panel's Settings; follows Settings Sync and is per profile. |
-| `revspan.review.requiredApprovals` | `2` | Approvals a PR needs to leave your "To do" queue. |
+| `revspan.review.requiredApprovals` | `2` | Approvals a PR needs to leave your "To review" queue. |
 | `revspan.review.requiredApprovalsByRepository` | `{}` | Override per repository, for example `{ "acme/records-api": 1 }`. |
-| `revspan.review.followedContributors` | `[]` | Followed authors, managed from a PR row. |
+| `revspan.review.followedContributors` | `[]` | Followed authors, managed from a PR row or from Settings (**Add**). |
+| `revspan.review.hideUnfollowed` | `true` | Hide the PRs of contributors you do not follow (no effect while you follow nobody). |
 | `revspan.notifications.newPullRequest` | `true` | Notify a new PR needing review. |
 | `revspan.notifications.newVersion` | `true` | Notify a new code version on a PR you reviewed. |
 | `revspan.notifications.buildFailed` | `false` | Notify a failed build on your PRs. |
 | `revspan.refreshIntervalMinutes` | `5` | Background refresh interval, in minutes. |
 
-The repositories, per-repository minimum, followed contributors, notification options and refresh interval are
-restricted settings: an untrusted workspace cannot change them.
+The repositories, per-repository minimum, followed contributors, hiding of unfollowed contributors, notification options
+and refresh interval are restricted settings: an untrusted workspace cannot change them.
+
+After updating the extension, reload the window (**Developer: Reload Window**) before changing a new setting from the
+Revspan settings page: until then VS Code does not know it, and the page asks you to reload.
 
 ## Notifications
 
 - **New PR needing review**: opened by a followed contributor, or you are a designated reviewer.
 - **New version**: code or dependencies changed on a PR you reviewed or approved. Rebase-only pushes never notify.
-- **Build failed**: one of your own PRs has a failing build (off by default).
+- **Build failed**: one of your own PRs ("To rebase" or "My PRs") has a failing build (off by default).
+
+Hiding unfollowed contributors changes only what is listed: notifications are the same either way.
 
 Revspan raises one notification per PR and commit, even with several VS Code windows. Nothing is shown on first run, and
 switching an option on does not replay the backlog. At most 3 notifications are shown at a time, followed by a summary.

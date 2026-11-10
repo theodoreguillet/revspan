@@ -77,26 +77,42 @@ Approvals are counted the way Bitbucket counts them for the merge rule: the `app
 except the author, **your own approval included**. The minimum is 2 by default, with an optional override per
 repository. An invalid value (0, negative, not a whole number) falls back to the default.
 
-Four groups, shown in this order: `to-do` ("To do"), `mine` ("My PRs"), `waiting` ("Waiting on the author") and
-`others` ("Other open PRs"). For one PR, these rules are tried **in this order** and the first that matches wins:
+Five groups, shown in this order: `to-do` ("To review"), `to-rebase` ("To rebase"), `mine` ("My PRs"), `waiting`
+("Waiting on the author") and `others` ("Other open PRs"). For one PR, these rules are tried **in this order** and the
+first that matches wins:
 
 | # | Rule | Group |
 |---|---|---|
 | 1 | The token cannot read your profile (no `read:user:bitbucket`); the page says why. | `others` |
-| 2 | You are the author (a draft included). | `mine` |
+| 2 | You are the author (a draft included): `to-rebase` when the destination branch moved since the PR's base, `mine` otherwise. | `to-rebase` / `mine` |
 | 3 | The PR is a **draft** (not ready for review). | `others` |
 | 4 | You approved the latest version, or your approval still holds because only rebase-only pushes arrived since (Bitbucket keeps it). | `waiting` |
 | 5 | You are a designated reviewer, you **requested changes**, and only neutral versions arrived since. | `waiting` |
 | 6 | You are a **designated reviewer** (and none of the above). | `to-do` |
 | 7 | You reviewed or approved it and only neutral versions arrived since. | `waiting` |
-| 8 | It needs review (fewer approvals than the minimum). | `to-do` |
+| 8 | It needs review (fewer approvals than the minimum) and its author is followed, or you follow nobody. | `to-do` |
 | 9 | You reviewed or approved it and code or dependencies changed since (a version whose type is not computed yet counts as code). | `to-do` |
 | 10 | Anything else: enough approvals, nothing asked of you. | `others` |
 
 A designated reviewer who commented without approving stays in `to-do` (rule 6), since Bitbucket explicitly asks for
-their approval. "To do" and "Other open PRs" can be grouped by repository, by contributor or not at all. "My PRs" is always
-by repository and "Waiting" is never grouped. The choice is stored **separately** for the page (browser) and for the
-VS Code tree. Followed contributors' PRs come first.
+their approval.
+
+**Followed contributors narrow "To review".** While you follow nobody, every PR needing review is in "To review", so a
+new user never sees an empty list. Once you follow at least one person, "To review" keeps only the PRs of followed
+authors, the ones where you are a designated reviewer, and the ones you reviewed or approved whose code changed since
+(you are already engaged with them); any other PR needing review goes to "Other open PRs". Follow someone from a PR row
+(☆ Follow), from the PR header, or from Settings › Followed contributors (**Add** lists the authors of the open PRs in
+your repositories).
+
+**Hiding unfollowed contributors** (`revspan.review.hideUnfollowed`, on by default): the home page and the VS Code tree
+leave out the PRs of authors you do not follow. Your own PRs ("To rebase", "My PRs"), the PRs where you are a designated
+reviewer and the ones you reviewed or approved are always shown, and nothing is hidden while you follow nobody. The page
+shows how many PRs are hidden, with a link to the setting. It is a display filter only: notifications and the request
+budget are unchanged.
+
+"To review" and "Other open PRs" can be grouped by repository, by contributor or not at all. "To rebase" and "My PRs"
+are always by repository and "Waiting" is never grouped. The choice is stored **separately** for the page (browser) and
+for the VS Code tree. Followed contributors' PRs come first.
 
 ### Settings
 
@@ -108,15 +124,20 @@ Settings screen and in `config.json`.
 | `revspan.repositories` | `[]` | Tracked repositories, one `workspace/repo` per entry. |
 | `revspan.review.requiredApprovals` | `2` | Approvals a PR needs (1 to 20). |
 | `revspan.review.requiredApprovalsByRepository` | `{}` | Override per repository, `{ "workspace/repo": n }`. A key that is not a tracked repository is ignored. |
-| `revspan.review.followedContributors` | `[]` | Followed authors (`{ uuid, displayName }`), managed from the "Follow" action on a PR row. |
+| `revspan.review.followedContributors` | `[]` | Followed authors (`{ uuid, displayName }`), managed from the "Follow" action on a PR row or from Settings (**Add**). Once someone is followed, "To review" is limited to followed, designated and engaged PRs. |
+| `revspan.review.hideUnfollowed` | `true` | Hide the PRs of contributors you do not follow (yours, designated and reviewed ones stay; no effect while nobody is followed). |
 | `revspan.notifications.newPullRequest` | `true` | Notify a new PR needing review from a followed contributor, or one where you are a designated reviewer. |
 | `revspan.notifications.newVersion` | `true` | Notify a new code or dependencies version on a PR you reviewed or approved. |
 | `revspan.notifications.buildFailed` | `false` | Notify a failed build on one of your own PRs. |
 | `revspan.refreshIntervalMinutes` | `5` | Background refresh interval (1 to 120). |
 
 `revspan.repositories`, `revspan.review.requiredApprovalsByRepository`, `revspan.review.followedContributors`,
-`revspan.refreshIntervalMinutes` and the three `revspan.notifications.*` settings are `restrictedConfigurations`: VS Code
-ignores a value set by an untrusted workspace.
+`revspan.review.hideUnfollowed`, `revspan.refreshIntervalMinutes` and the three `revspan.notifications.*` settings are
+`restrictedConfigurations`: VS Code ignores a value set by an untrusted workspace.
+
+After an update of the extension, VS Code only knows a new setting once the window is reloaded. Saving it before that
+shows "Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings." instead of an
+internal error.
 
 ### Notifications (VS Code)
 
@@ -124,7 +145,7 @@ ignores a value set by an untrusted workspace.
   approve; a PR already seen is notified once for that designation).
 - **New version**: a PR you reviewed or approved has a new head with code or dependencies. Rebase-only, message-only or
   erased versions **never** notify.
-- **Build failed**: a build of one of your own PRs failed (off by default).
+- **Build failed**: a build of one of your own PRs ("To rebase" or "My PRs") failed (off by default).
 
 Draft PRs never notify; once ready for review, a draft is treated like a new PR.
 
@@ -158,7 +179,8 @@ Known trade-offs:
 ### Needs rebase
 
 On your own open PRs, a flag appears when the destination branch head differs from the PR's merge base, meaning the
-destination moved since the base (never on a merged or declined PR). The destination head is read **once per repository and per interval**.
+destination moved since the base (never on a merged or declined PR); these PRs are listed in "To rebase" instead of "My
+PRs". The destination head is read **once per repository and per interval**.
 
 ### Request budget
 
