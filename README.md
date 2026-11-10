@@ -77,17 +77,24 @@ Approvals are counted the way Bitbucket counts them for the merge rule: the `app
 except the author, **your own approval included**. The minimum is 2 by default, with an optional override per
 repository. An invalid value (0, negative, not a whole number) falls back to the default.
 
-Four groups, in this order. For one PR, the first rule that matches wins:
+Four groups, shown in this order: `to-do` ("To do"), `mine` ("My PRs"), `waiting` ("Waiting on the author") and
+`others` ("Other open PRs"). For one PR, these rules are tried **in this order** and the first that matches wins:
 
-| Group | What puts a PR there |
-|---|---|
-| `to-do` ("To do") | Not mine, and either you are a **designated reviewer** and have not approved the latest version, or it needs review, or you reviewed or approved it and code or dependencies changed since (a version whose type is not computed yet counts as code). |
-| `mine` ("My PRs") | You are the author. |
-| `waiting` ("Waiting on the author") | You approved the latest version, or your approval still holds because only rebase-only pushes arrived since (Bitbucket keeps it), or you reviewed it and nothing but neutral versions arrived since. |
-| `others` ("Other open PRs") | Everything else: enough approvals, nothing asked of you. Also every PR when the token cannot read your profile (no `read:user:bitbucket`); the page says why. |
+| # | Rule | Group |
+|---|---|---|
+| 1 | The token cannot read your profile (no `read:user:bitbucket`); the page says why. | `others` |
+| 2 | You are the author (a draft included). | `mine` |
+| 3 | The PR is a **draft** (not ready for review). | `others` |
+| 4 | You approved the latest version, or your approval still holds because only rebase-only pushes arrived since (Bitbucket keeps it). | `waiting` |
+| 5 | You are a designated reviewer, you **requested changes**, and only neutral versions arrived since. | `waiting` |
+| 6 | You are a **designated reviewer** (and none of the above). | `to-do` |
+| 7 | You reviewed or approved it and only neutral versions arrived since. | `waiting` |
+| 8 | It needs review (fewer approvals than the minimum). | `to-do` |
+| 9 | You reviewed or approved it and code or dependencies changed since (a version whose type is not computed yet counts as code). | `to-do` |
+| 10 | Anything else: enough approvals, nothing asked of you. | `others` |
 
-A designated reviewer who commented without approving stays in `to-do`, since Bitbucket explicitly asks for their
-approval. "To do" and "Other open PRs" can be grouped by repository, by contributor or not at all. "My PRs" is always
+A designated reviewer who commented without approving stays in `to-do` (rule 6), since Bitbucket explicitly asks for
+their approval. "To do" and "Other open PRs" can be grouped by repository, by contributor or not at all. "My PRs" is always
 by repository and "Waiting" is never grouped. The choice is stored **separately** for the page (browser) and for the
 VS Code tree. Followed contributors' PRs come first.
 
@@ -107,8 +114,9 @@ Settings screen and in `config.json`.
 | `revspan.notifications.buildFailed` | `false` | Notify a failed build on one of your own PRs. |
 | `revspan.refreshIntervalMinutes` | `5` | Background refresh interval (1 to 120). |
 
-`revspan.repositories`, `revspan.review.requiredApprovalsByRepository` and `revspan.review.followedContributors` are
-`restrictedConfigurations`: VS Code ignores a value set by an untrusted workspace.
+`revspan.repositories`, `revspan.review.requiredApprovalsByRepository`, `revspan.review.followedContributors`,
+`revspan.refreshIntervalMinutes` and the three `revspan.notifications.*` settings are `restrictedConfigurations`: VS Code
+ignores a value set by an untrusted workspace.
 
 ### Notifications (VS Code)
 
@@ -118,8 +126,12 @@ Settings screen and in `config.json`.
   erased versions **never** notify.
 - **Build failed**: a build of one of your own PRs failed (off by default).
 
+Draft PRs never notify; once ready for review, a draft is treated like a new PR.
+
 Guarantees: one notification per PR and head, even with several windows; none on first run and no backlog when an
-option is switched on (a silent baseline is recorded per repository); only tracked repositories. A PR whose head
+option is switched on (a silent baseline is recorded per repository); only tracked repositories. Windows tracking
+different repositories (workspace settings) share what was notified without silencing each other; a repository removed
+from the settings is forgotten, so tracking it again records a new silent baseline. A PR whose head
 changed while VS Code was closed notifies once at the next poll. At most **3** notifications per poll (failed builds,
 then new PRs, then new versions), followed by one summary. The background refresh starts when VS Code starts
 (`onStartupFinished`) and does nothing, with no request, when the three options are off and neither the view nor the
@@ -127,20 +139,26 @@ panel is visible.
 
 ### Build status
 
-Generic: Revspan reads the statuses Bitbucket attaches to the PR's latest commit, whatever CI publishes them. It never
-calls a CI. A badge shows the aggregate (`failed`, `running`, `success`, or nothing) on the cards and in the PR header,
-and the PR page has a **Builds** tab listing each check with its link. Settled checks are cached per commit.
+Generic: Revspan reads the statuses Bitbucket attaches to the PR's latest commit
+(`GET /repositories/{workspace}/{repo}/commit/{head}/statuses`, one request), whatever CI publishes them. It never calls a
+CI. A badge shows the aggregate (`failed`, `running`, `success`, or nothing) on the cards and in the PR header, and the
+PR page has a **Builds** tab listing each check with its link.
+
+For the first hour after a push, the checks are read again once per interval even when they all look finished: a
+second CI (tests after lint, for example) may not have posted yet. Past that hour, finished checks are kept for that
+commit and never read again by the home.
 
 Known trade-offs:
 
-- a re-run on the same commit shows only when the PR page is opened (the home never re-reads settled checks);
+- a re-run on the same commit more than an hour after the push shows when the PR page is opened, or, for your own PRs,
+  with **Refresh**;
 - a CI that posts its first status more than 1 hour after the push is treated as "no CI" for that commit on the home
   page (the PR page still shows it).
 
 ### Needs rebase
 
-On your own PRs, a flag appears when the destination branch head differs from the PR's merge base, meaning the
-destination moved since the base. The destination head is read **once per repository and per interval**.
+On your own open PRs, a flag appears when the destination branch head differs from the PR's merge base, meaning the
+destination moved since the base (never on a merged or declined PR). The destination head is read **once per repository and per interval**.
 
 ### Request budget
 
@@ -153,12 +171,15 @@ Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one rep
 | Two windows, in phase | **3** (was 60) |
 | Two windows, out of phase | 3, then 0 for the second window that reuses the first one's result |
 | After one code push on a PR you reviewed, with the version check | **19** (was 47) |
-| Explicit Refresh | **3** (was 30) |
+| Explicit Refresh (VS Code command or the page's ↻ button) | **3** (was 30) |
+| A repository fails (rate limit, outage), second window within 60 s | **0**: the failed home is shared for 60 s |
 
 Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only
 one window computes) and `home.drop` (a counter bumped on every write, so a result computed before a write is not
 reused), all in the config or storage directory. Trade-off: with several windows, a new push can show up after up to
-about **1.5 intervals** instead of 1.
+about **1.5 intervals** instead of 1. A home with a repository error is shared for 60 s only, so the error is tried
+again soon without every window recomputing on every poll. During the hour after a push, that PR's build checks cost
+one request per interval even once finished (see "Build status").
 
 ## A PR page
 
@@ -233,6 +254,9 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
   thread placed on an erased version is shown at file level.
 - **Comment on a line**: only on the latest version (Bitbucket anchors comments on the current version). On a deleted
   line, the tool posts a general comment that quotes the line.
+- **Large repositories**: Revspan reads the first 200 open PRs of a repository (4 pages of 50). Beyond that, the home
+  page and the VS Code view say the list was cut, and the PRs left out are neither shown nor notified until they come
+  into the first 200.
 - `npm audit` reports moderate alerts in the lint tooling (minimatch via typescript-eslint, with no fix
   other than a downgrade); nothing in what runs at use time.
 
@@ -240,7 +264,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
 `config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit,
-can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
+and each PR's activity as the home reads it: user ids, dates, commit hashes, comment ids, no text; can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 
 ## License
