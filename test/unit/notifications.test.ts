@@ -431,6 +431,11 @@ describe('new version candidates and code check', () => {
         expect(versionCandidates(home, EMPTY)).toEqual([]);
     });
 
+    it('N1: a draft with a new head is never a candidate (its result would be discarded)', () => {
+        const home = homeOf({ others: [card(1, { lastReviewed: 1, draft: true, head: headOf(1, 2) })], 'to-do': [card(2, { myApproval: true, head: headOf(2, 2) })] });
+        expect(versionCandidates(home, state).map((c) => c.ref.id)).toEqual([2]);
+    });
+
     const v = (name: string, kind: Parameters<typeof codeChangedSince>[0][number]['kind']): { hash: string; kind: typeof kind } => ({ hash: `${name}`.padEnd(40, '0'), kind });
 
     it('code check since the previous head, up to the current head', () => {

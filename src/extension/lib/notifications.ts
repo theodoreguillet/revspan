@@ -72,7 +72,8 @@ export function versionCandidates(home: Home, state: NotifiedState): VersionCand
     for (const group of home.groups) {
         for (const card of group.prs) {
             const recorded = state.seen[prKeyOf(card)];
-            if (card.head && baselined(state, card) && hasNewHead(group.key, card, recorded)) {
+            // A draft is neither notified nor recorded: checking its versions would be wasted.
+            if (card.head && !card.draft && baselined(state, card) && hasNewHead(group.key, card, recorded)) {
                 candidates.push({ ref: { workspace: card.workspace, repo: card.repo, id: card.id }, previousHead: headsOf(recorded)[0] ?? '', head: card.head });
             }
         }
