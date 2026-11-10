@@ -1,6 +1,6 @@
 // Runs the REAL Revspan server (built page) wired to the fake Bitbucket, then the Playwright UI test.
 // Usage: npm run test:e2e   (builds then runs; Python: argument or PYTHON variable)
-// The UI test receives the server URL, the URL of the recorded calls and the list of the fake Bitbucket's PRs.
+// The UI test receives the server URL, the URLs of the recorded calls and requests and the list of the fake Bitbucket's PRs.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,6 +23,7 @@ const code = await new Promise<number>((resolve) => {
             ...process.env,
             REVSPAN_BASE_URL: app.url,
             REVSPAN_CALLS_URL: `http://127.0.0.1:${fake.port}/__calls`,
+            REVSPAN_REQUESTS_URL: `http://127.0.0.1:${fake.port}/__requests`,
             REVSPAN_PR: `${WS}/${REPO}/${FAKE_PRS.main}`,
             REVSPAN_FAKE_PRS: JSON.stringify(FAKE_PRS),
             REVSPAN_FAKE_EMAIL: FAKE_EMAIL,

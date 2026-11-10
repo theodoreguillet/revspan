@@ -1,6 +1,6 @@
 // In-memory fake Bitbucket Cloud (API 2.0) for integration tests, the UI and development.
 // Repository acme/demo-repo, several PRs covering the page's cases (see FAKE_PRS). Writes are
-// recorded (GET /__calls). Manual launch: node test/support/fake-bitbucket.ts [port]
+// recorded (GET /__calls), so are all requests (GET /__requests). Manual launch: node test/support/fake-bitbucket.ts [port]
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -427,6 +427,9 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         const path = decodeURIComponent(url.pathname);
         if (path === '/__calls') {
             return send(res, 200, calls);
+        }
+        if (path === '/__requests') {
+            return send(res, 200, requests);
         }
         if (path === '/__fail-next') {
             failNext = Number(url.searchParams.get('status'));

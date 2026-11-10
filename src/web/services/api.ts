@@ -94,7 +94,8 @@ export const api = {
     /** Not GET /settings: in VS Code, a read of /settings retitles the panel "Settings". */
     followed: () => request<FollowedList>('GET', '/settings/followed'),
     testConnection: () => request<ConnectionTest>('POST', '/settings/test', {}),
-    home: () => request<Home>('GET', '/home'),
+    /** fresh: the Refresh button, which reads Bitbucket again instead of the home shared by the windows. */
+    home: ({ fresh = false }: { fresh?: boolean } = {}) => request<Home>('GET', fresh ? '/home?fresh=1' : '/home'),
 
     pr: (ref: PrRef) => request<PrDetail>('GET', prPath(ref)),
     summary: (ref: PrRef) => request<Summary>('GET', `${prPath(ref)}/summary`),

@@ -25,7 +25,8 @@ watchEffect(() => {
     document.title = t('home.docTitle');
 });
 
-async function load(): Promise<void> {
+/** fresh: the Refresh button (reads Bitbucket again); the first load reuses the home the windows share. */
+async function load({ fresh = false }: { fresh?: boolean } = {}): Promise<void> {
     if (loading.value) {
         return;
     }
@@ -33,7 +34,7 @@ async function load(): Promise<void> {
     error.value = null;
     home.value = null;
     try {
-        home.value = await api.home();
+        home.value = await api.home({ fresh });
     } catch (e) {
         if (e instanceof ApiError && e.code === 'NO_TOKEN') {
             void router.push('/settings');
@@ -74,7 +75,7 @@ function onFollow(user: User, follow: boolean): void {
     void setFollow(user, follow);
 }
 
-onMounted(load);
+onMounted(() => load());
 </script>
 
 <template>
@@ -83,7 +84,7 @@ onMounted(load);
         <div class="rv-home-top">
             <h1>{{ t('home.title') }}</h1>
             <UrlInput />
-            <button :class="['rv-btn', { busy: loading }]" type="button" :title="t('home.reloadTitle')" :disabled="loading" :aria-busy="loading" @click="load()">
+            <button :class="['rv-btn', { busy: loading }]" type="button" :title="t('home.reloadTitle')" :disabled="loading" :aria-busy="loading" @click="load({ fresh: true })">
                 {{ loading ? t('home.refresh') : `↻ ${t('home.refresh')}` }}
             </button>
         </div>

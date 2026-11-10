@@ -41,6 +41,13 @@ describe('in a VS Code panel', () => {
         await expect(home).resolves.toEqual(body);
     });
 
+    it('I3: the home read fresh (the Refresh button) asks /api/home?fresh=1; a plain read does not', async () => {
+        const { api } = await import('../../src/web/services/api.ts');
+        void api.home({ fresh: true });
+        void api.home();
+        expect(posted.map((m) => (m.type === 'request' ? m.path : m.type))).toEqual(['/api/home?fresh=1', '/api/home']);
+    });
+
     it('writes: JSON body (cloneable copy), {} when there is none', async () => {
         const { api } = await import('../../src/web/services/api.ts');
         void api.comment(ref, { raw: 'Merci', parentId: 7 });

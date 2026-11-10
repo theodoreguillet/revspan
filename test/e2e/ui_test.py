@@ -7,6 +7,7 @@ Normal launch (after "npx --no-install vite build"):
 run-against-fake.ts starts the fake Bitbucket and the server, then runs this script with:
     REVSPAN_BASE_URL    URL of the Revspan server (required).
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
+    REVSPAN_REQUESTS_URL  Log of every request received by the fake Bitbucket, reads included (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
     REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting.
     REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Credentials of the fake Bitbucket (token put back after deletion).
@@ -31,6 +32,7 @@ from playwright.sync_api import expect, sync_playwright
 
 BASE = os.environ.get('REVSPAN_BASE_URL', '').rstrip('/')
 CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
+REQUESTS_URL = os.environ.get('REVSPAN_REQUESTS_URL')
 MAIN_PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/42')
 FAKE_PRS = json.loads(os.environ.get('REVSPAN_FAKE_PRS', '{}'))
 FAKE_TOKEN = os.environ.get('REVSPAN_FAKE_TOKEN', '')
@@ -309,6 +311,22 @@ def run_checks(page):
             expect(page.locator('.rv-roww [data-action="mark-reviewed"]')).to_have_count(0)
             expect(page.locator(f'.rv-roww[data-row="{fake_ref("mine")}"] .rv-row-more')).to_have_count(0)  # nobody to follow
         queue_groups(page)
+
+        @check('home: "Refresh" reads Bitbucket again, where a reload reuses the home just computed')
+        def refresh_fresh(page):
+            assert REQUESTS_URL, 'REVSPAN_REQUESTS_URL missing'
+            lists = lambda: sum(1 for r in http_json(REQUESTS_URL) if r['path'].endswith('/pullrequests'))  # noqa: E731
+            page.goto(url(''))
+            expect(page.locator('section[data-group="to-do"]')).to_be_visible(timeout=20000)
+            before = lists()
+            page.reload()
+            expect(page.locator('section[data-group="to-do"]')).to_be_visible(timeout=20000)
+            assert lists() == before, 'a plain reload must reuse the home'
+            with page.expect_response(lambda r: '/api/home?fresh=1' in r.url):
+                page.click('.rv-home-top .rv-btn')
+            expect(page.locator('section[data-group="to-do"]')).to_be_visible(timeout=20000)
+            assert lists() > before, 'Refresh must read the PR list from Bitbucket'
+        refresh_fresh(page)
 
         @check('home: grouping by contributor regroups "to do" and survives a reload')
         def grouping(page):
