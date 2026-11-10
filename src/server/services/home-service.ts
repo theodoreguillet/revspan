@@ -344,6 +344,7 @@ export class HomeService {
             build: null,
             needsRebase: null,
             head: head.slice(0, 12),
+            draft: raw.draft === true,
         };
         const queue: QueueInput = {
             isMine,
@@ -351,6 +352,7 @@ export class HomeService {
             needsReview: base.needsReview,
             designatedReviewer,
             changesRequested: participants.some((p) => p.state === 'changes_requested' && isMe(p.user?.uuid)),
+            draft: base.draft,
             myApprovalCurrent: false,
             approvalHolds: false,
             reviewedOrApproved: false,

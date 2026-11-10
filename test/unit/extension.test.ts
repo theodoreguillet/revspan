@@ -403,7 +403,7 @@ describe('"My PRs" tree', () => {
         workspace: 'acme', repo: 'records-api', id, title: `PR ${id}`, author: { uuid: '{a}', displayName: 'Camille' }, url: '',
         createdOn: '', updatedOn: '', versionsCount: 3, lastPushAt: '', lastReviewed: 1, newVersions: 2, newCodeVersions: 1,
         approvals: 1, requiredApprovals: 2, myApproval: false, newComments: 2, needsReview: true, designatedReviewer: false,
-        followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', ...extra,
+        followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', draft: false, ...extra,
     });
     const home: Home = {
         me: { uuid: '{me}', displayName: 'Moi' },
@@ -504,6 +504,12 @@ describe('"My PRs" tree', () => {
         expect(repoErrorLabel(enT, error)).toBe('acme/no-such-repo: Not found on Bitbucket: /repositories/acme/no-such-repo');
         expect(repoErrorLabel(frT, error)).toBe('acme/no-such-repo : Introuvable sur Bitbucket : /repositories/acme/no-such-repo');
         expect(repoErrorLabel(frT, { repo: 'acme/x', code: 'BB_ERROR', message: 'Bitbucket redirect refused on /x' })).toBe('acme/x : Bitbucket redirect refused on /x');
+    });
+
+    it('M7: a draft PR says so in its description, in English and in French', () => {
+        const drafted: Home = { ...home, groups: [{ key: 'others', prs: [card(3, { draft: true, newVersions: 0, newComments: 0 })] }] };
+        expect(buildHomeTree(drafted, en)[0]?.prs[0]?.description).toBe('draft');
+        expect(buildHomeTree(drafted, fr)[0]?.prs[0]?.description).toBe('brouillon');
     });
 
     it('I5: a repository whose open PR list was cut, in English and in French', () => {

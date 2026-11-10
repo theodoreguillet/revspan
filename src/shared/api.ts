@@ -147,6 +147,8 @@ export interface PrCard extends PrRef {
     needsRebase: boolean | null;
     /** Source head commit abbreviated to 12 characters ('' if Bitbucket did not give it): one notification per head. */
     head: string;
+    /** Draft PR (not ready for review): never "to-do", never notified. */
+    draft: boolean;
 }
 
 /** A home group: the page and the VS Code tree each show their own translation of the key. */

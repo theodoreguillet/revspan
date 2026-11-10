@@ -507,6 +507,17 @@ describe('home', () => {
         expect(groupsOf(body)[FAKE_PRS.main]).toBe('to-do');
     });
 
+    it('M7: a draft PR is in "others" even where I am a designated reviewer; my own draft stays in "mine"', async () => {
+        const { fake } = await setup();
+        fake.data.prs.get(FAKE_PRS.neverReviewed)!.pr.draft = true;
+        fake.data.prs.get(FAKE_PRS.mine)!.pr.draft = true;
+        const { body } = await api<Home>('GET', '/api/home');
+        expect(groupsOf(body)[FAKE_PRS.neverReviewed]).toBe('others');
+        expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ draft: true, designatedReviewer: true });
+        expect(groupsOf(body)[FAKE_PRS.mine]).toBe('mine');
+        expect(cardOf(body, FAKE_PRS.main)?.draft).toBe(false);
+    });
+
     it('M8: designated reviewer who requested changes: "waiting" on the author until new code arrives', async () => {
         const { fake } = await setup();
         await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/request-changes`);

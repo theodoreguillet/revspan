@@ -322,7 +322,7 @@ describe('cycles on stubbed services', () => {
         workspace: WS, repo: REPO, id, title: `PR ${id}`, author: { uuid: '{cam}', displayName: 'Camille' }, url: '', createdOn: '', updatedOn: '',
         versionsCount: 2, lastPushAt: '', lastReviewed: null, newVersions: 0, newCodeVersions: null, approvals: 0, requiredApprovals: 2,
         myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false, followed: false, approvalHolds: false, build: null,
-        needsRebase: null, head: `${id}`.padEnd(12, 'a'), ...over,
+        needsRebase: null, head: `${id}`.padEnd(12, 'a'), draft: false, ...over,
     });
     const todo = (...prs: PrCard[]): Home => home({ groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }] });
 

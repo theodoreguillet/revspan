@@ -34,6 +34,7 @@ function card(over: Partial<PrCard> = {}): PrCard {
         build: null,
         needsRebase: null,
         head: '',
+        draft: false,
         ...over,
     };
 }

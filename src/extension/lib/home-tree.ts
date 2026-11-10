@@ -72,6 +72,9 @@ const approvals = ({ t, isSingular }: L10n, count: number): string =>
 function badges(l10n: L10n, card: PrCard, key: HomeGroupKey): string[] {
     const { t } = l10n;
     const out: string[] = [];
+    if (card.draft) {
+        out.push(t('draft'));
+    }
     if (key !== 'mine' && card.lastReviewed === null) {
         out.push(t('not reviewed yet'));
     } else if (key !== 'mine' && card.newVersions > 0) {

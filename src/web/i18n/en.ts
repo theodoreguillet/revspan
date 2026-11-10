@@ -76,6 +76,7 @@ export const en = {
     'home.group.mine': 'My PRs',
     'home.group.waiting': 'Waiting on the author',
     'home.group.others': 'Other open PRs',
+    'home.badge.draft': 'draft',
     'home.badge.notReviewed': 'not reviewed yet',
     'home.badge.newVersions': { one: '+{count} version', other: '+{count} versions' },
     'home.badge.withCode': '{count} with code',

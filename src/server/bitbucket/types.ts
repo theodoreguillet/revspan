@@ -31,6 +31,8 @@ export interface BbPullRequest {
     comment_count?: number;
     participants?: BbParticipant[];
     reviewers?: BbUser[];
+    /** Draft PR (not ready for review yet). */
+    draft?: boolean;
     links?: { html?: { href?: string } };
 }
 

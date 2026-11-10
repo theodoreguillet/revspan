@@ -8,6 +8,7 @@ const input = (over: Partial<QueueInput>): QueueInput => ({
     needsReview: false,
     designatedReviewer: false,
     changesRequested: false,
+    draft: false,
     myApprovalCurrent: false,
     approvalHolds: false,
     reviewedOrApproved: false,
@@ -27,6 +28,13 @@ describe('needsReview', () => {
 describe('classifyPr', () => {
     it('me unknown: every PR in "others", whatever else is true', () => {
         expect(classifyPr(input({ meKnown: false, isMine: true, needsReview: true, designatedReviewer: true }))).toBe('others');
+    });
+
+    it('M7: a draft is never "to-do" (nor "waiting"): "others"; my own draft stays "mine"', () => {
+        expect(classifyPr(input({ draft: true, needsReview: true, designatedReviewer: true }))).toBe('others');
+        expect(classifyPr(input({ draft: true, reviewedOrApproved: true, newCodeVersions: 2 }))).toBe('others');
+        expect(classifyPr(input({ draft: true, myApprovalCurrent: true, reviewedOrApproved: true }))).toBe('others');
+        expect(classifyPr(input({ draft: true, isMine: true }))).toBe('mine');
     });
 
     it('my PR: "mine"', () => {

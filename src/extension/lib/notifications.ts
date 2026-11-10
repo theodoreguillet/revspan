@@ -161,8 +161,9 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
             const buildKey = `${key}${BUILD_SUFFIX}`;
             const reviewerKey = `${key}${REVIEWER_SUFFIX}`;
             const change = codeChanged[key];
-            if (!card.head || change === 'pending') {
-                // Nothing to compare yet: what was recorded stays.
+            if (!card.head || change === 'pending' || card.draft) {
+                // Nothing to compare yet, or a draft (asks nothing yet: once ready, it notifies as a new PR): what was
+                // recorded stays.
                 [key, buildKey, reviewerKey].forEach(keep);
                 continue;
             }

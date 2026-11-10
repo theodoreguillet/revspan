@@ -75,6 +75,7 @@ export const fr: Catalog = {
     'home.group.mine': 'Mes PR',
     'home.group.waiting': 'En attente de l\'auteur',
     'home.group.others': 'Autres PR ouvertes',
+    'home.badge.draft': 'brouillon',
     'home.badge.notReviewed': 'pas encore relue',
     'home.badge.newVersions': { one: '+{count} version', other: '+{count} versions' },
     'home.badge.withCode': 'dont {count} avec du code',

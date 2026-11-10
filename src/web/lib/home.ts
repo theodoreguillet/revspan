@@ -21,6 +21,9 @@ export const GROUP_TITLES = {
 export function cardBadges(tr: Translator, card: PrCard, me: User | null): Badge[] {
     const mine = !!me && card.author?.uuid === me.uuid;
     const badges: Badge[] = [];
+    if (card.draft) {
+        badges.push({ text: tr.t('home.badge.draft'), tone: 'grey' });
+    }
     if (card.lastReviewed == null && !mine) {
         // versionsCount null: PR that does not concern me, history not loaded
         const text = card.versionsCount == null

@@ -72,7 +72,7 @@ describe('home cards', () => {
         workspace: 'acme', repo: 'records-api', id: 1, title: 't', author: { uuid: '{a}', displayName: 'Auteur' }, url: 'u',
         createdOn: '2026-10-14T09:10:00Z', updatedOn: '2026-11-05T12:00:00Z', versionsCount: 10, lastPushAt: '2026-11-05T12:00:00Z',
         lastReviewed: 7, newVersions: 3, newCodeVersions: 1, approvals: 2, requiredApprovals: 2, myApproval: false, newComments: 2,
-        needsReview: false, designatedReviewer: false, followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', ...over,
+        needsReview: false, designatedReviewer: false, followed: false, approvalHolds: false, build: null, needsRebase: null, head: '', draft: false, ...over,
     });
     const badges = (c: PrCard): string[] => cardBadges(fr, c, me).map((b) => b.text);
 
@@ -80,6 +80,11 @@ describe('home cards', () => {
         expect(badges(card({}))).toEqual(['+3 versions', 'dont 1 avec du code', '💬 2 nouveaux']);
         expect(badges(card({ newCodeVersions: 0, newComments: 0, myApproval: true }))).toEqual(['+3 versions', 'rebase seul', '✓ approuvée']);
         expect(badges(card({ newCodeVersions: null, newComments: 0 }))).toEqual(['+3 versions']);
+    });
+
+    it('M7: a draft says so first', () => {
+        expect(badges(card({ draft: true, newComments: 0 }))).toEqual(['brouillon', '+3 versions', 'dont 1 avec du code']);
+        expect(cardBadges(en, card({ draft: true, newVersions: 0, newComments: 0 }), me).map((b) => b.text)).toEqual(['draft']);
     });
 
     it('never reviewed: with the version count, or without it if unknown (light card)', () => {

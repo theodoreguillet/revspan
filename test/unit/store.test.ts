@@ -253,7 +253,7 @@ describe('notified state (Store)', () => {
             workspace: 'acme', repo: 'records-api', id: 7, title: 'PR 7', author: { uuid: '{cam}', displayName: 'Camille' }, url: '',
             createdOn: '', updatedOn: '', versionsCount: 2, lastPushAt: '', lastReviewed: 1, newVersions: 1, newCodeVersions: 1,
             approvals: 0, requiredApprovals: 2, myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false,
-            followed: true, approvalHolds: false, build: null, needsRebase: null, head,
+            followed: true, approvalHolds: false, build: null, needsRebase: null, head, draft: false,
         });
         const home = (prs: PrCard[]): Home => ({
             me: { uuid: '{me}', displayName: 'Robin' }, repos: ['acme/records-api'], errors: [], truncated: [],

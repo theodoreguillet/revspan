@@ -19,7 +19,7 @@ const card = (id: number, over: Partial<PrCard> = {}): PrCard => ({
     workspace: 'acme', repo: 'records-api', id, title: `PR ${id}`, author: CAM, url: '', createdOn: '', updatedOn: '',
     versionsCount: null, lastPushAt: '', lastReviewed: null, newVersions: 0, newCodeVersions: null, approvals: 0,
     requiredApprovals: 2, myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false, followed: false,
-    approvalHolds: false, build: null, needsRebase: null, head: headOf(id), ...over,
+    approvalHolds: false, build: null, needsRebase: null, head: headOf(id), draft: false, ...over,
 });
 
 const homeOf = (groups: Partial<Record<HomeGroupKey, PrCard[]>>, over: Partial<Home> = {}): Home => ({
@@ -378,6 +378,24 @@ describe('notification planner', () => {
         const caughtUp = run(pushed, lagging.next, ALL_ON, { [`${REPO}#92`]: true });
         expect(caughtUp.sent).toEqual(['newVersion #92']);
         expect(run(pushed, caughtUp.next).sent).toEqual([]);
+    });
+
+    it('M7: a draft never notifies and is not recorded; once ready for review it notifies like a new PR, once', () => {
+        const baseline = baselineOf(homeOf({ others: [card(94, { draft: true, followed: true, lastReviewed: 1 })], mine: [card(95, { author: ME })] }));
+        expect(baseline.seen[`${REPO}#94`]).toBeUndefined();
+        const drafts = homeOf({
+            others: [card(94, { draft: true, followed: true, lastReviewed: 1, head: headOf(94, 2) }), card(96, { draft: true, designatedReviewer: true })],
+            mine: [card(95, { author: ME, draft: true, build: failedBuild })],
+        });
+        const quiet = run(drafts, baseline);
+        expect(quiet.sent).toEqual([]);
+        // Drafts are not recorded (#95 keeps what its baseline recorded, its failed build is not covered).
+        expect(Object.keys(quiet.next.seen).filter((key) => /#9[456]/.test(key))).toEqual([`${REPO}#95`]);
+        expect(quiet.next.seen[`${REPO}#95`]).toBe(baseline.seen[`${REPO}#95`]);
+        const ready = homeOf({ 'to-do': [card(96, { designatedReviewer: true })], mine: [card(95, { author: ME })] });
+        const published = run(ready, quiet.next);
+        expect(published.sent).toEqual(['newPullRequest #96']);
+        expect(run(ready, published.next).sent).toEqual([]);
     });
 
     it('a card without a head keeps what was recorded for it', () => {

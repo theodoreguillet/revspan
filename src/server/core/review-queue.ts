@@ -15,6 +15,8 @@ export interface QueueInput {
     designatedReviewer: boolean;
     /** My current review state on Bitbucket is "changes requested". */
     changesRequested: boolean;
+    /** Draft PR: asks no review yet. */
+    draft: boolean;
     /** My approval is on the latest version. */
     myApprovalCurrent: boolean;
     /** My approval is still active and only neutral versions arrived since (approvalHoldsSince). */
@@ -32,6 +34,10 @@ export function classifyPr(input: QueueInput): HomeGroupKey {
     }
     if (input.isMine) {
         return 'mine';
+    }
+    // A draft asks no review yet: nothing to do, nothing to wait for.
+    if (input.draft) {
+        return 'others';
     }
     if (input.myApprovalCurrent || input.approvalHolds) {
         return 'waiting';
