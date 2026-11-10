@@ -897,13 +897,35 @@ describe('request budget', () => {
         expect(kept?.key).toContain(fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash);
     });
 
-    it('a home with a repository error or without my profile is not shared with the other windows', async () => {
+    it('M6: a home with a repository error is shared with the other windows for 60 s only, then computed again', async () => {
         fakeTime();
         const current = await setup();
         await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/missing-repo`] });
-        expect((await home()).errors).toHaveLength(1);
-        expect(current.app.store.homeSnapshot()).toBeNull();
-        await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`] });
+        const first = await home();
+        expect(first.errors).toHaveLength(1);
+        const second = await startRevspan(current.dir, current.fake);
+        try {
+            const other = async (): Promise<Home> => (await fetch(`${second.url}/api/home`)).json() as Promise<Home>;
+            await (await fetch(`${second.url}/api/settings`)).json();
+            elapse(50_000);
+            let reused: Home | null = null;
+            expect(await requestsOf(async () => {
+                reused = await other();
+            })).toEqual([]);
+            expect(reused).toEqual(first);
+            // Past 60 s the error is tried again, by any window, well before half an interval.
+            elapse(11_000);
+            expect(labels(await requestsOf(other))).toContain('list p1');
+            elapse(1000);
+            expect(await requestsOf(home)).toEqual([]);
+        } finally {
+            await second.close();
+        }
+    });
+
+    it('a home without my profile is not shared with the other windows', async () => {
+        fakeTime();
+        const current = await setup();
         await restart(current);
         await fetch(`http://127.0.0.1:${current.fake.port}/__fail-next?status=403`);
         expect((await home()).me).toBeNull();

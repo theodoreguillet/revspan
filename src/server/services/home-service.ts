@@ -26,6 +26,11 @@ const POLL_JITTER_MS = 15_000;
 const LEASE_MS = 60_000;
 /** Pause between two looks at the home another window is computing. */
 const WAIT_STEP_MS = 100;
+/**
+ * Reuse of a home with a repository error (rate limit, outage): short, so the error is tried again soon, but shared, so
+ * a failing repository does not make every window compute the home on every poll.
+ */
+const ERROR_REUSE_MS = 60_000;
 /** To increment if the activity kept for the home changes shape (invalidates the disk cache). */
 const ACTIVITY_FORMAT = 2;
 /** To increment if the shared home changes shape (a window running an older version then ignores it). */
@@ -119,8 +124,8 @@ export class HomeService {
     /** Computations in progress in this window, per home key (the tree and the poll share one). */
     private readonly pending = new Map<string, Promise<Home>>();
     /**
-     * Last home this window computed, reused like the shared one, including a home that is not shared (repository error,
-     * profile unknown): the tree refresh after a poll must not compute it again.
+     * Last home this window computed, reused like the shared one, including a home that is not shared (profile unknown):
+     * the tree refresh after a poll must not compute it again.
      */
     private last: { key: string; at: number; home: Home } | null = null;
     /** Per PR, the list key under which the activity read did not match the list (kept if the next read still does not). */
@@ -155,14 +160,21 @@ export class HomeService {
         return pending;
     }
 
-    /** The home this window or another one computed less than reuseMs ago for the same key, if any. */
+    /**
+     * The home this window or another one computed less than reuseMs ago for the same key, if any (at most
+     * ERROR_REUSE_MS ago for a home with a repository error).
+     */
     private shared(key: string, reuseMs: number): Home | null {
         // The more recent of this window's own home and the shared one.
         const latest = [this.last, this.store.homeSnapshot()]
             .filter((candidate) => candidate?.key === key)
             .reduce<{ at: number; home: Home } | null>((best, candidate) => (candidate && (!best || candidate.at > best.at) ? candidate : best), null);
-        const age = latest ? Date.now() - latest.at : -1;
-        return latest && age >= 0 && age < reuseMs ? latest.home : null;
+        if (!latest) {
+            return null;
+        }
+        const age = Date.now() - latest.at;
+        const maxAge = latest.home.errors.length > 0 ? Math.min(reuseMs, ERROR_REUSE_MS) : reuseMs;
+        return age >= 0 && age < maxAge ? latest.home : null;
     }
 
     /**
@@ -236,8 +248,9 @@ export class HomeService {
         truncated.sort((a, b) => a.repo.localeCompare(b.repo));
         const home: Home = { me, repos: [...repos], groups, errors, truncated };
         this.last = { key, at: startedAt, home };
-        // An incomplete home (unreadable repository, unknown profile) is not shared: the other windows try for themselves.
-        if (errors.length === 0 && me !== null) {
+        // A home without my profile (every PR in "others") is never shared. One with a repository error is, for
+        // ERROR_REUSE_MS only (see shared()).
+        if (me !== null) {
             this.store.saveHomeSnapshot({ at: startedAt, key, home }, generation);
         }
         return home;
