@@ -11,11 +11,16 @@ export function withFollowed(list: readonly FollowedUser[], user: FollowedUser, 
     return list.some((u) => u.uuid === user.uuid) ? [...list] : [...list, { uuid: user.uuid, displayName: user.displayName }];
 }
 
-/** A new home whose cards are marked followed from `list` (the server's cards stay untouched). */
+/**
+ * A new home whose cards are marked followed from `list` (the server's cards stay untouched). Unfollowing the last
+ * contributor turns hiding off at once (nothing is hidden while nobody is followed); following never turns it on here,
+ * the server decides it from the setting and the profile.
+ */
 export function withFollowedCards(home: Home, list: readonly FollowedUser[]): Home {
     const uuids = new Set(list.map((u) => u.uuid));
     return {
         ...home,
+        hideUnfollowed: home.hideUnfollowed && list.length > 0,
         groups: home.groups.map((group) => ({
             ...group,
             prs: group.prs.map((card) => ({ ...card, followed: !!card.author && uuids.has(card.author.uuid) })),

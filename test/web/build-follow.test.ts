@@ -77,4 +77,12 @@ describe('follow', () => {
         expect(next.groups[0]?.prs.map((c) => c.followed)).toEqual([true, false, false]);
         expect(cards.map((c) => c.followed)).toEqual([false, true, false]);
     });
+
+    it('unfollowing the last contributor turns hiding off at once (nothing is hidden while nobody is followed)', () => {
+        const home: Home = { me: null, repos: [], errors: [], truncated: [], hideUnfollowed: true, contributors: [], groups: [] };
+        expect(withFollowedCards(home, []).hideUnfollowed).toBe(false);
+        expect(withFollowedCards(home, [cam]).hideUnfollowed).toBe(true);
+        // Following someone never turns it on locally: the server decides (setting and profile), the reload tells.
+        expect(withFollowedCards({ ...home, hideUnfollowed: false }, [cam]).hideUnfollowed).toBe(false);
+    });
 });

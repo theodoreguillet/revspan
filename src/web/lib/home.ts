@@ -60,6 +60,17 @@ export function cardSubtitle(tr: Translator, card: PrCard, me: User | null): str
     return parts.join(' · ');
 }
 
+/** Why the home lists no PR, if it lists none: no repository, every PR hidden by the unfollowed filter, or no open PR. */
+export function emptyHome({ repos, shown, hidden }: { repos: number; shown: number; hidden: number }): 'no-repos' | 'all-hidden' | 'no-open-prs' | null {
+    if (repos === 0) {
+        return 'no-repos';
+    }
+    if (shown > 0) {
+        return null;
+    }
+    return hidden > 0 ? 'all-hidden' : 'no-open-prs';
+}
+
 /** A repository with more open PRs than Revspan reads: only the first ones are listed. */
 export function truncatedNotice(tr: Translator, { repo, count }: Home['truncated'][number]): string {
     return tr.t('home.truncated', { repo, count });

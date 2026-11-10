@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
-import { GROUP_TITLES, cardBadges, cardSubtitle, truncatedNotice } from '../../src/web/lib/home.ts';
+import { GROUP_TITLES, cardBadges, cardSubtitle, emptyHome, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
 import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
 import { prLong } from './fixtures.ts';
@@ -114,6 +114,15 @@ describe('home notices', () => {
         const titles = (tr: typeof fr): string[] => (['to-do', 'to-rebase', 'mine', 'waiting', 'others'] as const).map((key) => tr.t(GROUP_TITLES[key]));
         expect(titles(en)).toEqual(['To review', 'To rebase', 'My PRs', 'Waiting on the author', 'Other open PRs']);
         expect(titles(fr)).toEqual(['À relire', 'À rebaser', 'Mes PR', 'En attente de l\'auteur', 'Autres PR ouvertes']);
+    });
+
+    it('empty home: no repositories, every PR hidden (not "no open PRs"), or no open PR at all', () => {
+        expect(emptyHome({ repos: 0, shown: 0, hidden: 0 })).toBe('no-repos');
+        expect(emptyHome({ repos: 1, shown: 0, hidden: 3 })).toBe('all-hidden');
+        expect(emptyHome({ repos: 1, shown: 0, hidden: 0 })).toBe('no-open-prs');
+        expect(emptyHome({ repos: 1, shown: 2, hidden: 3 })).toBeNull();
+        expect(fr.t('home.allHidden')).toBe('Toutes les PR ouvertes sont celles de contributeurs non suivis.');
+        expect(en.t('home.allHidden')).toBe('Every open PR is from a contributor you don’t follow.');
     });
 
     it('hidden PRs of unfollowed contributors: a discreet count', () => {

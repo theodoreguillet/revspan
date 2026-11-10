@@ -8,7 +8,7 @@ import { t, tr, type MessageKey } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
 import { withFollowedCards } from '../../shared/follow.ts';
 import { visibleGroups as filterHome } from '../../shared/home-filter.ts';
-import { GROUP_TITLES, truncatedNotice } from '../lib/home.ts';
+import { GROUP_TITLES, emptyHome, truncatedNotice } from '../lib/home.ts';
 import { GROUPINGS, groupCards, groupingFor, isGrouping, type Grouping } from '../../shared/home-grouping.ts';
 import { api, ApiError } from '../services/api.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
@@ -71,6 +71,8 @@ const visibleGroups = computed(() => filtered.value.groups.filter((g) => g.prs.l
     const mode = groupingFor(group.key, grouping.value);
     return { ...group, mode, description: GROUP_DESCRIPTIONS[group.key] ?? null, subgroups: groupCards(group.prs, mode) };
 }));
+
+const empty = computed(() => (home.value ? emptyHome({ repos: home.value.repos.length, shown: visibleGroups.value.length, hidden: filtered.value.hidden }) : null));
 
 /**
  * Follow from a row: the cards are marked from the saved list at once, then the home is read again quietly, since the
@@ -177,7 +179,7 @@ onMounted(() => load());
                     />
                 </template>
             </component>
-            <div v-if="!home.repos.length" class="rv-panel-msg" data-testid="no-repos">
+            <div v-if="empty === 'no-repos'" class="rv-panel-msg" data-testid="no-repos">
                 <h2>{{ t('home.noRepos') }}</h2>
                 <p>
                     <I18nText k="home.noReposHelp">
@@ -185,7 +187,8 @@ onMounted(() => load());
                     </I18nText>
                 </p>
             </div>
-            <div v-else-if="!visibleGroups.length" class="rv-panel-msg">
+            <p v-else-if="empty === 'all-hidden'" class="rv-hidden-note" data-testid="all-hidden">{{ t('home.allHidden') }}</p>
+            <div v-else-if="empty === 'no-open-prs'" class="rv-panel-msg">
                 <h2>{{ t('home.noOpenPrs') }}</h2>
                 <p>{{ t('home.noOpenPrsHelp') }} <RouterLink to="/settings">{{ t('home.editRepos') }}</RouterLink>.</p>
             </div>

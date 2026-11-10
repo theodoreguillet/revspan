@@ -91,6 +91,7 @@ export const fr: Catalog = {
     'home.groupDesc.toRebase': 'la branche cible a avancé depuis leur base',
     'home.hidden': { one: '{count} PR masquée (contributeur non suivi)', other: '{count} PR masquées (contributeurs non suivis)' },
     'home.hiddenSetting': 'modifier dans les réglages',
+    'home.allHidden': 'Toutes les PR ouvertes sont celles de contributeurs non suivis.',
     'home.groupDesc.waiting': 'rien à faire de ton côté',
     'home.unknownAuthor': 'Auteur inconnu',
     'home.followedMark': 'Contributeur suivi',

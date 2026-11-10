@@ -92,6 +92,7 @@ export const en = {
     'home.groupDesc.toRebase': 'the target branch moved since their base',
     'home.hidden': { one: '{count} PR hidden (a contributor you don’t follow)', other: '{count} PRs hidden (contributors you don’t follow)' },
     'home.hiddenSetting': 'change in the settings',
+    'home.allHidden': 'Every open PR is from a contributor you don’t follow.',
     'home.groupDesc.waiting': 'nothing to do on your side',
     'home.unknownAuthor': 'Unknown author',
     'home.followedMark': 'Followed contributor',
