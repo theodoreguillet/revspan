@@ -16,9 +16,15 @@ export interface CardGroup {
 
 const NO_GROUP_KEY = 'all';
 
-/** The user's choice applies to "to-do" and "others"; "mine" is always by repository, "waiting" is not grouped. */
+/** The groups that hold my own PRs: "to-rebase" (destination moved since their base) and "mine". */
+export const isOwnGroup = (group: HomeGroupKey): boolean => group === 'to-rebase' || group === 'mine';
+
+/**
+ * The user's choice applies to "to-do" and "others"; my own PRs ("to-rebase", "mine") are always by repository,
+ * "waiting" is not grouped.
+ */
 export function groupingFor(group: HomeGroupKey, choice: Grouping): Grouping {
-    if (group === 'mine') {
+    if (isOwnGroup(group)) {
         return 'repository';
     }
     if (group === 'waiting') {

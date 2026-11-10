@@ -28,6 +28,12 @@ describe('error messages translated from the code and its parameters', () => {
         expect(errorText(fr, { code: 'INTERNAL', message: 'x', params: { detail: 'boom' } })).toBe('Erreur interne de Revspan : boom');
     });
 
+    it('a setting VS Code does not know yet: reload the window', () => {
+        const error = { code: 'SETTING_UNREGISTERED' as const, message: 'x', params: { setting: 'revspan.review.hideUnfollowed' } };
+        expect(errorText(fr, error)).toBe('Revspan vient d’être mis à jour : recharge la fenêtre VS Code (Developer: Reload Window) pour enregistrer les réglages.');
+        expect(errorText(en, error)).toBe('Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.');
+    });
+
     it('settings errors', () => {
         expect(errorText(fr, { code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } })).toBe('Adresse e-mail invalide.');
         expect(errorText(en, { code: 'BAD_REQUEST', message: 'x', params: { reason: 'email-required' } })).toBe('Enter the Atlassian account email first.');

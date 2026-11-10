@@ -6,6 +6,7 @@ import {
     type Comment,
     type Comparison,
     type ConnectionTest,
+    type ContributorList,
     type FollowedList,
     type Home,
     type NewComment,
@@ -93,6 +94,8 @@ export const api = {
     saveSettings: (update: SettingsUpdate) => request<Settings>('PUT', '/settings', update),
     /** Not GET /settings: in VS Code, a read of /settings retitles the panel "Settings". */
     followed: () => request<FollowedList>('GET', '/settings/followed'),
+    /** Authors of the open PRs (for the Settings "Add" picker); not GET /home, which would retitle the VS Code panel. */
+    contributors: () => request<ContributorList>('GET', '/settings/contributors'),
     testConnection: () => request<ConnectionTest>('POST', '/settings/test', {}),
     /** fresh: the Refresh button, which reads Bitbucket again instead of the home shared by the windows. */
     home: ({ fresh = false }: { fresh?: boolean } = {}) => request<Home>('GET', fresh ? '/home?fresh=1' : '/home'),

@@ -43,5 +43,7 @@ export function errorText(t: Translate, error: ErrorLike): string {
             return t('Request refused.');
         case 'internal':
             return t('Revspan internal error: {detail}', { detail: message.detail });
+        case 'reloadWindow':
+            return t('Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.');
     }
 }

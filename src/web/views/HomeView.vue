@@ -7,6 +7,7 @@ import { useLocalPref } from '../composables/useLocalPref.ts';
 import { t, tr, type MessageKey } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
 import { withFollowedCards } from '../../shared/follow.ts';
+import { visibleGroups as filterHome } from '../../shared/home-filter.ts';
 import { GROUP_TITLES, truncatedNotice } from '../lib/home.ts';
 import { GROUPINGS, groupCards, groupingFor, isGrouping, type Grouping } from '../../shared/home-grouping.ts';
 import { api, ApiError } from '../services/api.ts';
@@ -20,6 +21,8 @@ const router = useRouter();
 const home = shallowRef<Home | null>(null);
 const error = shallowRef<unknown>(null);
 const loading = ref(false);
+/** Bumped by every load: a quiet reload answered after a newer load is dropped. */
+let generation = 0;
 
 watchEffect(() => {
     document.title = t('home.docTitle');
@@ -31,6 +34,7 @@ async function load({ fresh = false }: { fresh?: boolean } = {}): Promise<void> 
         return;
     }
     loading.value = true;
+    generation++;
     error.value = null;
     home.value = null;
     try {
@@ -52,22 +56,37 @@ const GROUPING_LABELS = {
     none: 'home.grouping.none',
 } as const satisfies Record<Grouping, MessageKey>;
 
-const GROUP_DESCRIPTIONS: Partial<Record<HomeGroupKey, 'home.groupDesc.toDo' | 'home.groupDesc.waiting'>> = {
-    'to-do': 'home.groupDesc.toDo',
+const GROUP_DESCRIPTIONS: Partial<Record<HomeGroupKey, 'home.groupDesc.toReview' | 'home.groupDesc.toRebase' | 'home.groupDesc.waiting'>> = {
+    'to-do': 'home.groupDesc.toReview',
+    'to-rebase': 'home.groupDesc.toRebase',
     waiting: 'home.groupDesc.waiting',
 };
 
 const grouping = useLocalPref<Grouping>('home.grouping', 'repository', isGrouping);
 
-const visibleGroups = computed(() => (home.value?.groups.filter((g) => g.prs.length > 0) ?? []).map((group) => {
+/** The home without the PRs hidden by the unfollowed filter (display only: the server sends them all). */
+const filtered = computed(() => (home.value ? filterHome(home.value) : { groups: [], hidden: 0 }));
+
+const visibleGroups = computed(() => filtered.value.groups.filter((g) => g.prs.length > 0).map((group) => {
     const mode = groupingFor(group.key, grouping.value);
     return { ...group, mode, description: GROUP_DESCRIPTIONS[group.key] ?? null, subgroups: groupCards(group.prs, mode) };
 }));
 
-// Follow from a row: the cards are marked from the saved list at once, without reloading the PRs.
+/**
+ * Follow from a row: the cards are marked from the saved list at once, then the home is read again quietly, since the
+ * followed list decides which PRs are "To review" and which are hidden (the list is part of the home's key: the server
+ * recomputes it from what it keeps, without asking Bitbucket for fresh data).
+ */
 const { busy: followBusy, setFollow } = useFollow((list) => {
     if (home.value) {
         home.value = withFollowedCards(home.value, list);
+        const reload = ++generation;
+        // On failure the marked cards stay: the next load shows the new groups.
+        void api.home().then((next) => {
+            if (reload === generation) {
+                home.value = next;
+            }
+        }, () => undefined);
     }
 });
 
@@ -105,6 +124,9 @@ onMounted(() => load());
                 </ul>
             </div>
             <p v-for="cut in home.truncated" :key="cut.repo" class="rv-notice" data-testid="truncated">{{ truncatedNotice(tr(), cut) }}</p>
+            <p v-if="filtered.hidden" class="rv-hidden-note" data-testid="hidden">
+                {{ t('home.hidden', { count: filtered.hidden }) }} · <RouterLink to="/settings">{{ t('home.hiddenSetting') }}</RouterLink>
+            </p>
             <p v-if="!home.me" class="rv-notice" data-testid="no-profile">
                 {{ t('home.noProfile') }}
                 <I18nText k="home.noProfileFix">

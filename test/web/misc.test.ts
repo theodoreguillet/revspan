@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
-import { cardBadges, cardSubtitle, truncatedNotice } from '../../src/web/lib/home.ts';
+import { GROUP_TITLES, cardBadges, cardSubtitle, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
 import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
 import { prLong } from './fixtures.ts';
@@ -108,6 +108,19 @@ describe('home notices', () => {
     it('I5: a repository whose open PR list was cut', () => {
         expect(truncatedNotice(en, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api: only the first 200 open PRs are listed.');
         expect(truncatedNotice(fr, { repo: 'acme/records-api', count: 200 })).toBe('acme/records-api : seules les 200 premières PR ouvertes sont listées.');
+    });
+
+    it('group titles: "To review" and "To rebase", in English and in French', () => {
+        const titles = (tr: typeof fr): string[] => (['to-do', 'to-rebase', 'mine', 'waiting', 'others'] as const).map((key) => tr.t(GROUP_TITLES[key]));
+        expect(titles(en)).toEqual(['To review', 'To rebase', 'My PRs', 'Waiting on the author', 'Other open PRs']);
+        expect(titles(fr)).toEqual(['À relire', 'À rebaser', 'Mes PR', 'En attente de l\'auteur', 'Autres PR ouvertes']);
+    });
+
+    it('hidden PRs of unfollowed contributors: a discreet count', () => {
+        expect(fr.t('home.hidden', { count: 12 })).toBe('12 PR masquées (contributeurs non suivis)');
+        expect(fr.t('home.hidden', { count: 1 })).toBe('1 PR masquée (contributeur non suivi)');
+        expect(en.t('home.hidden', { count: 12 })).toBe('12 PRs hidden (contributors you don’t follow)');
+        expect(en.t('home.hidden', { count: 1 })).toBe('1 PR hidden (a contributor you don’t follow)');
     });
 });
 

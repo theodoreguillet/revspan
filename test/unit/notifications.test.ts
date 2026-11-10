@@ -27,7 +27,9 @@ const homeOf = (groups: Partial<Record<HomeGroupKey, PrCard[]>>, over: Partial<H
     repos: [REPO],
     errors: [],
     truncated: [],
-    groups: (['to-do', 'mine', 'waiting', 'others'] as const).map((key) => ({ key, prs: groups[key] ?? [] })),
+    hideUnfollowed: false,
+    contributors: [],
+    groups: (['to-do', 'to-rebase', 'mine', 'waiting', 'others'] as const).map((key) => ({ key, prs: groups[key] ?? [] })),
     ...over,
 });
 
@@ -146,6 +148,7 @@ describe('notification planner', () => {
 
         it('my own push on my PR: none, even when I commented on it', () => {
             expect(run(homeOf({ mine: [card(24, { author: ME, lastReviewed: 1, newCodeVersions: 1, head: headOf(24, 2) })] }), baseline).sent).toEqual([]);
+            expect(run(homeOf({ 'to-rebase': [card(24, { author: ME, lastReviewed: 1, newCodeVersions: 1, needsRebase: true, head: headOf(24, 2) })] }), baseline).sent).toEqual([]);
         });
 
         it('a new version that also matches "new PR" (followed, designated) gives a single notification', () => {
@@ -172,6 +175,15 @@ describe('notification planner', () => {
 
         it('only on my own PRs', () => {
             expect(run(homeOf({ 'to-do': [card(30, { build: failedBuild })] }), baseline).sent).toEqual([]);
+        });
+
+        it('also on my PR in "to-rebase", once per head, recorded like the others (shared by the windows)', () => {
+            const toRebase = (version: number, build: PrCard['build']): Home => homeOf({ 'to-rebase': [card(30, { author: ME, build, needsRebase: true, head: headOf(30, version) })] });
+            const first = run(toRebase(1, failedBuild), baseline);
+            expect(first.sent).toEqual(['buildFailed #30']);
+            expect(first.next.seen[`${REPO}#30#build`]).toBe(headOf(30, 1));
+            // Moving between "to-rebase" and "mine" does not notify the same head again.
+            expect(run(mine(1, failedBuild), first.next).sent).toEqual([]);
         });
     });
 
@@ -412,6 +424,7 @@ describe('new version candidates and code check', () => {
     const before = homeOf({
         'to-do': [card(1, { lastReviewed: 1 }), card(2, { myApproval: true }), card(3), card(4, { lastReviewed: 1 })],
         mine: [card(5, { author: ME, lastReviewed: 1 })],
+        'to-rebase': [card(8, { author: ME, lastReviewed: 1, needsRebase: true })],
     });
     const state = baselineOf(before);
 
@@ -423,6 +436,7 @@ describe('new version candidates and code check', () => {
                 card(7, { repo: 'records-web', lastReviewed: 1, head: headOf(7, 2) }),
             ],
             mine: [card(5, { author: ME, lastReviewed: 1, head: headOf(5, 2) })],
+            'to-rebase': [card(8, { author: ME, lastReviewed: 1, needsRebase: true, head: headOf(8, 2) })],
         }, { repos: [REPO, 'acme/records-web'] });
         expect(versionCandidates(home, state)).toEqual([
             { ref: { workspace: 'acme', repo: 'records-api', id: 1 }, previousHead: headOf(1, 1), head: headOf(1, 2) },

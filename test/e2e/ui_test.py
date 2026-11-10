@@ -274,7 +274,7 @@ def run_checks(page):
             expect(page.locator('section[data-group="to-do"]')).to_contain_text(data['pr']['title'])
             expect(card).to_contain_text(f'+{n - lr} versions')
             expect(card).to_contain_text('💬 2 nouveaux')
-            expect(page.locator(f'section[data-group="mine"] .rv-row[data-pr="{fake_ref("mine")}"]')).to_contain_text('toi')
+            expect(page.locator(f'section[data-group="to-rebase"] .rv-row[data-pr="{fake_ref("mine")}"]')).to_contain_text('toi')
             others = page.locator('details[data-group="others"]')
             assert not others.evaluate('d => d.open'), '"Autres PR ouvertes" must be collapsed when the user is known'
             others.locator('summary').click()
@@ -285,16 +285,22 @@ def run_checks(page):
     if FAKE_PRS:
         ws, repo, _ = MAIN_PR.split('/')
 
-        @check('home: the four groups, build badges, "needs rebase" on my PR, no "mark as reviewed"')
+        @check('home: the groups ("À relire", "À rebaser"…), build badges, "needs rebase" on my PR, no "mark as reviewed"')
         def queue_groups(page):
             page.goto(url(''))
             todo = page.locator('section[data-group="to-do"]')
             expect(todo).to_be_visible(timeout=20000)
-            expect(page.locator('section[data-group="mine"]')).to_be_visible()
+            rebase = page.locator('section[data-group="to-rebase"]')
+            expect(rebase).to_be_visible()
+            expect(page.locator('section[data-group="mine"]')).to_have_count(0)  # my only PR needs a rebase
             expect(page.locator('section[data-group="waiting"]')).to_be_visible()
             expect(page.locator('details[data-group="others"]')).to_be_visible()
-            expect(todo.locator('.rv-lgrp')).to_contain_text('À faire')
-            expect(todo.locator('.rv-lgrp .desc')).to_have_text('PR qui attendent une action de ta part')
+            titles = page.locator('.rv-lgrp').evaluate_all('els => els.map((el) => el.firstChild.textContent.trim())')
+            assert titles == ['À relire', 'À rebaser', 'En attente de l\'auteur', 'Autres PR ouvertes'], titles
+            expect(todo.locator('.rv-lgrp')).to_contain_text('À relire')
+            expect(todo.locator('.rv-lgrp .desc')).to_have_text('PR qui attendent ta relecture')
+            expect(rebase.locator('.rv-lgrp')).to_contain_text('À rebaser')
+            expect(rebase.locator('.rv-lgrp .desc')).to_have_text('la branche cible a avancé depuis leur base')
             waiting = page.locator('section[data-group="waiting"]')
             expect(waiting.locator('.rv-lgrp')).to_contain_text('En attente de l\'auteur')
             expect(waiting.locator('.rv-lgrp .desc')).to_have_text('rien à faire de ton côté')
@@ -304,7 +310,7 @@ def run_checks(page):
             expect(main_row.locator('.rv-build')).to_have_attribute('data-build', 'failed')
             expect(main_row).to_contain_text('1/2 approbation')
             expect(main_row.locator('[data-chip="designated"]')).to_have_text('désigné relecteur')
-            mine_row = page.locator(f'section[data-group="mine"] .rv-row[data-pr="{fake_ref("mine")}"]')
+            mine_row = rebase.locator(f'.rv-row[data-pr="{fake_ref("mine")}"]')
             expect(mine_row.locator('[data-chip="needs-rebase"]')).to_have_text('à rebaser')
             expect(mine_row.locator('.rv-build')).to_have_attribute('data-build', 'running')
             expect(page.locator('[data-chip="needs-rebase"]')).to_have_count(1)  # own PRs only
@@ -338,7 +344,7 @@ def run_checks(page):
             page.click('.rv-home-bar button[data-grouping="contributor"]')
             expect(subs).to_have_text(by_author)
             assert len(by_author) > 1, by_author
-            expect(page.locator('section[data-group="mine"] .rv-sg')).to_have_text([f'{ws}/{repo} · 1'])  # always by repository
+            expect(page.locator('section[data-group="to-rebase"] .rv-sg')).to_have_text([f'{ws}/{repo} · 1'])  # always by repository
             expect(page.locator('section[data-group="waiting"] .rv-sg')).to_have_count(0)  # never grouped
             page.reload()
             expect(page.locator('.rv-home-bar button[data-grouping="contributor"]')).to_have_attribute('aria-pressed', 'true', timeout=20000)
@@ -896,6 +902,59 @@ def run_checks(page):
         assert api('/settings')['review'] == before
     review_settings(page)
 
+    if FAKE_PRS:
+        @check('settings: follow a contributor with « Ajouter », the home hides the unfollowed PRs, then the setting shows them')
+        def follow_from_settings(page):
+            before = api('/settings')['review']
+            assert before['followed'] == [] and before['hideUnfollowed'] is True, before
+            page.goto(url('settings'))
+            picker = page.locator('#set-follow')
+            expect(picker).to_be_visible(timeout=20000)
+            expect(picker.locator('option:not([disabled])')).to_have_text(['Camille Durand', 'Yann Bernard'])
+            expect(page.locator('.rv-field', has=picker)).to_contain_text(
+                'Les PR à relire de ces personnes te sont proposées dans « À relire ». Tu peux aussi suivre quelqu’un depuis une PR (☆ Suivre).')
+            add = page.locator('[data-action="follow-add"]')
+            expect(add).to_have_text('Ajouter')
+            expect(add).to_be_disabled()
+            picker.select_option(label='Camille Durand')
+            add.click()
+            expect(page.locator('.rv-status')).to_have_text('Tu suis maintenant Camille Durand.')
+            expect(page.locator('.rv-followed li')).to_have_count(1)
+            expect(page.locator('.rv-followed li span')).to_have_text('Camille Durand')
+            expect(picker.locator('option:not([disabled])')).to_have_text(['Yann Bernard'])
+            wait_api(lambda: followed_uuids() == ['{cam}'], 'Camille saved in review.followed')
+            hide = page.locator('#set-hide-unfollowed')
+            expect(hide).to_be_checked()
+            expect(page.locator('.rv-hide-toggle')).to_contain_text('Masquer les PR des contributeurs non suivis')
+
+            # Home: Yann's PR that asks nothing of me is hidden, with a discreet count and a link to the setting.
+            page.goto(url(''))
+            note = page.locator('[data-testid="hidden"]')
+            expect(note).to_have_text('1 PR masquée (contributeur non suivi) · modifier dans les réglages', timeout=20000)
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("others")}"]')).to_have_count(0)
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("neverReviewed")}"]')).to_be_visible()  # designated reviewer
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("waiting")}"]')).to_be_visible()  # approved by me
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("mine")}"]')).to_be_visible()  # my own PR
+            note.locator('a').click()
+            expect(page).to_have_url(re.compile('#/settings$'))
+
+            # Setting off: every PR is listed again.
+            page.locator('#set-hide-unfollowed').uncheck()
+            page.click('.rv-settings button[type="submit"]')
+            expect(page.locator('.rv-status')).to_have_text('Réglages enregistrés.')
+            page.goto(url(''))
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("others")}"]')).to_have_count(1, timeout=20000)
+            expect(page.locator('[data-testid="hidden"]')).to_have_count(0)
+
+            # Back to the defaults for the next checks.
+            page.goto(url('settings'))
+            page.locator('.rv-followed li >> text=Retirer').click()
+            page.locator('#set-hide-unfollowed').check()
+            page.click('.rv-settings button[type="submit"]')
+            expect(page.locator('.rv-status')).to_have_text('Réglages enregistrés.')
+            assert api('/settings')['review'] == before, api('/settings')['review']
+        follow_from_settings(page)
+
     if FAKE_TOKEN:
         @check('token deleted: the home page points to the settings, then token put back')
         def no_token(page):
@@ -941,7 +1000,7 @@ def run_language_checks(page, fr_page):
         expect(page.locator('.rv-home h1')).to_have_text('My PRs')
         expect(page.locator('.rv-home-top .rv-btn')).to_have_text('↻ Refresh', timeout=20000)
         expect(page.locator(f'.rv-row[data-pr="{MAIN_PR}"]')).to_be_visible(timeout=20000)
-        titles = {'To do', 'My PRs', 'Waiting on the author', 'Other open PRs'}
+        titles = {'To review', 'To rebase', 'My PRs', 'Waiting on the author', 'Other open PRs'}
         for title in page.locator('.rv-lgrp').evaluate_all('els => els.map((el) => el.textContent.trim())'):
             assert title.split(' · ')[0] in titles or title.rsplit(' · ', 1)[0] in titles, f'untranslated group title: {title}'
         expect(page.locator('.rv-nav .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')
@@ -952,6 +1011,10 @@ def run_language_checks(page, fr_page):
         def en_queue(page):
             page.goto(url(''))
             expect(page.locator('section[data-group="waiting"] .rv-lgrp')).to_contain_text('Waiting on the author', timeout=20000)
+            expect(page.locator('section[data-group="to-do"] .rv-lgrp')).to_contain_text('To review')
+            expect(page.locator('section[data-group="to-do"] .rv-lgrp .desc')).to_have_text('PRs waiting for your review')
+            expect(page.locator('section[data-group="to-rebase"] .rv-lgrp')).to_contain_text('To rebase')
+            expect(page.locator('section[data-group="to-rebase"] .rv-lgrp .desc')).to_have_text('the target branch moved since their base')
             expect(page.locator('.rv-home-bar')).to_contain_text('Group by')
             expect(page.locator('.rv-home-bar button')).to_have_text(['Repository', 'Contributor', 'None'])
             mine_row = page.locator(f'.rv-row[data-pr="{fake_ref("mine")}"]')
@@ -997,6 +1060,12 @@ def run_language_checks(page, fr_page):
     def en_settings(page):
         page.goto(url('settings'))
         expect(page.locator('label[for="set-email"]')).to_have_text('Atlassian email')
+        if FAKE_PRS:
+            expect(page.locator('[data-action="follow-add"]')).to_have_text('Add', timeout=20000)
+            expect(page.locator('#set-follow option[disabled]')).to_have_text('Choose a contributor…')
+            expect(page.locator('.rv-field', has=page.locator('#set-follow'))).to_contain_text(
+                'Their PRs that need a review are put in “To review” for you. You can also follow someone from a PR (☆ Follow).')
+            expect(page.locator('.rv-hide-toggle')).to_contain_text('Hide the PRs of contributors I don’t follow')
         expect(page.locator('.rv-helpbox')).to_contain_text('Create an Atlassian API token at id.atlassian.com')
         assert (page.locator('#set-token').get_attribute('placeholder') or '').startswith('Token saved'), 'token placeholder'
         page.click('.rv-settings button[type="submit"]')

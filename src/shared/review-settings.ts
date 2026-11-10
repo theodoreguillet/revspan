@@ -18,6 +18,8 @@ export interface ReviewSettings {
     /** Override per repository, key "workspace/repo". */
     requiredApprovalsByRepo: Record<string, number>;
     followed: FollowedUser[];
+    /** Hide the PRs of contributors I do not follow (mine, designated and reviewed ones stay); only while someone is followed. */
+    hideUnfollowed: boolean;
     notifications: NotificationPrefs;
     refreshMinutes: number;
 }
@@ -26,6 +28,7 @@ export const DEFAULT_REVIEW_SETTINGS: ReviewSettings = {
     requiredApprovals: 2,
     requiredApprovalsByRepo: {},
     followed: [],
+    hideUnfollowed: true,
     notifications: { newPullRequest: true, newVersion: true, buildFailed: false },
     refreshMinutes: 5,
 };
@@ -82,6 +85,7 @@ export function normalizeReviewSettings(raw: unknown): ReviewSettings {
         requiredApprovals: intInRange(source.requiredApprovals, MAX_APPROVALS) ?? defaults.requiredApprovals,
         requiredApprovalsByRepo: normalizeByRepo(source.requiredApprovalsByRepo),
         followed: normalizeFollowed(source.followed),
+        hideUnfollowed: typeof source.hideUnfollowed === 'boolean' ? source.hideUnfollowed : defaults.hideUnfollowed,
         notifications: { newPullRequest: flag('newPullRequest'), newVersion: flag('newVersion'), buildFailed: flag('buildFailed') },
         refreshMinutes: intInRange(source.refreshMinutes, MAX_REFRESH_MINUTES) ?? defaults.refreshMinutes,
     };
@@ -91,3 +95,13 @@ export function normalizeReviewSettings(raw: unknown): ReviewSettings {
 export function requiredApprovalsFor(settings: ReviewSettings, repo: string): number {
     return settings.requiredApprovalsByRepo[repo] ?? settings.requiredApprovals;
 }
+
+/**
+ * Following at least one contributor turns the follow filter on: "To review" then keeps the followed authors' PRs (plus
+ * the designated and engaged ones). While nobody is followed, every PR needing review is proposed.
+ */
+export const followFilterOn = (settings: Pick<ReviewSettings, 'followed'>): boolean => settings.followed.length > 0;
+
+/** Whether the unfollowed contributors' PRs are hidden: the setting is on and the follow filter applies. */
+export const hidesUnfollowed = (settings: Pick<ReviewSettings, 'followed' | 'hideUnfollowed'>): boolean =>
+    settings.hideUnfollowed && followFilterOn(settings);

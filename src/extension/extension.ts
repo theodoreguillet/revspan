@@ -54,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     async function chooseGrouping(): Promise<void> {
         const current = currentGrouping();
         const items = GROUPINGS.map((grouping) => ({ label: groupingLabel(grouping), description: grouping === current ? vscode.l10n.t('current') : '', grouping }));
-        const picked = await vscode.window.showQuickPick(items, { title: vscode.l10n.t('Group by…'), placeHolder: vscode.l10n.t('How to split “To do” and “Other open PRs”') });
+        const picked = await vscode.window.showQuickPick(items, { title: vscode.l10n.t('Group by…'), placeHolder: vscode.l10n.t('How to split “To review” and “Other open PRs”') });
         if (picked) {
             await context.globalState.update(GROUPING_KEY, picked.grouping);
             tree.refresh();

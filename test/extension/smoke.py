@@ -89,8 +89,9 @@ def run() -> None:
         page.screenshot(path=f'{SHOTS}/02-mes-pr.png')
         tree_text = ' | '.join(page.locator('.pane-body .monaco-list-row').all_inner_texts())
         check('"My PRs" tree: main PR listed', row.count() > 0, tree_text[:400])
-        check('"My PRs" tree: groups', 'To do' in tree_text and 'My PRs' in tree_text, tree_text[:400])
-        check('"My PRs" tree: four-group queue titles', 'Waiting on the author' in tree_text or 'Other open PRs' in tree_text, tree_text[:600])
+        check('"My PRs" tree: "To review" and "To rebase" groups', 'To review (' in tree_text and 'To rebase (' in tree_text, tree_text[:400])
+        check('"My PRs" tree: no old "To do" title', 'To do (' not in tree_text, tree_text[:400])
+        check('"My PRs" tree: queue titles', 'Waiting on the author' in tree_text or 'Other open PRs' in tree_text, tree_text[:600])
         check('"My PRs" tree: repository subgroups by default', 'acme/' in tree_text, tree_text[:600])
         # Group by contributor (command from the palette, then the quick pick).
         page.keyboard.press('F1')

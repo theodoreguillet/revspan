@@ -411,6 +411,7 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
 .rv-errs .r { font-family: var(--rv-mono); font-size: 11.5px; }
 .rv-notice { border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--selected-bg); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; }
 .rv-notice code { font-family: var(--rv-mono); font-size: 11.5px; }
+.rv-hidden-note { color: var(--text-secondary); font-size: 12px; margin: 0 0 12px; }
 
 /* ---------- Skeletons ---------- */
 .rv-skel { background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-primary) 50%, var(--bg-tertiary) 75%); background-size: 200% 100%; animation: rv-shimmer 1.3s linear infinite; border-radius: 4px; }
@@ -440,8 +441,9 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
 .rv-add { margin-bottom: 4px; }
 .rv-followed { list-style: none; margin: 0 0 8px; padding: 0; }
 .rv-followed li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.rv-toggles .rv-check { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: 13px; margin-bottom: 6px; }
-.rv-toggles .rv-check input { width: auto; }
+.rv-follow-add select { flex: 1; min-width: 0; border: 1px solid var(--input-border); border-radius: 6px; padding: 5px 8px; background: var(--input-bg); color: var(--input-fg); font-size: 13px; }
+.rv-toggles .rv-check, .rv-hide-toggle .rv-check { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: 13px; margin-bottom: 6px; }
+.rv-toggles .rv-check input, .rv-hide-toggle .rv-check input { width: auto; }
 .rv-form-acts { display: flex; gap: 8px; align-items: center; margin-top: 18px; }
 .rv-status { font-size: 12.5px; }
 .rv-status.ok { color: var(--rv-add); } .rv-status.err { color: var(--rv-del); }

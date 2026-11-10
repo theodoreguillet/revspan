@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ApiErrorBody, Comparison, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import {
@@ -126,6 +126,7 @@ describe('settings and security', () => {
             requiredApprovals: 2,
             requiredApprovalsByRepo: {},
             followed: [],
+            hideUnfollowed: true,
             notifications: { newPullRequest: true, newVersion: true, buildFailed: false },
             refreshMinutes: 5,
         });
@@ -200,8 +201,8 @@ describe('settings and security', () => {
         const { body: home } = await api<Home>('GET', '/api/home');
         expect(home.errors).toEqual([expect.objectContaining({ repo: `${WS}/no-such-repo`, code: 'BB_NOT_FOUND', params: { path: expect.stringContaining('no-such-repo') } })]);
         // Language-neutral groups: the page and the VS Code tree translate the key.
-        expect(home.groups.map((g) => Object.keys(g).sort())).toEqual(Array(4).fill(['key', 'prs']));
-        expect(home.groups.map((g) => g.key)).toEqual(['to-do', 'mine', 'waiting', 'others']);
+        expect(home.groups.map((g) => Object.keys(g).sort())).toEqual(Array(5).fill(['key', 'prs']));
+        expect(home.groups.map((g) => g.key)).toEqual(['to-do', 'to-rebase', 'mine', 'waiting', 'others']);
 
         const email = await api<ApiErrorBody>('PUT', '/api/settings', { email: 'not-an-email' });
         expect(email.body.error).toEqual({ code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } });
@@ -445,7 +446,8 @@ describe('home', () => {
             [FAKE_PRS.main]: 'to-do',
             [FAKE_PRS.long]: 'to-do',
             [FAKE_PRS.rebaseOnly]: 'to-do',
-            [FAKE_PRS.mine]: 'mine',
+            // Mine, and master moved since its base.
+            [FAKE_PRS.mine]: 'to-rebase',
             [FAKE_PRS.neverReviewed]: 'to-do',
             // Not about me, minimum of 2 approvals reached.
             [FAKE_PRS.others]: 'others',
@@ -507,14 +509,14 @@ describe('home', () => {
         expect(groupsOf(body)[FAKE_PRS.main]).toBe('to-do');
     });
 
-    it('M7: a draft PR is in "others" even where I am a designated reviewer; my own draft stays in "mine"', async () => {
+    it('M7: a draft PR is in "others" even where I am a designated reviewer; my own draft stays with my PRs', async () => {
         const { fake } = await setup();
         fake.data.prs.get(FAKE_PRS.neverReviewed)!.pr.draft = true;
         fake.data.prs.get(FAKE_PRS.mine)!.pr.draft = true;
         const { body } = await api<Home>('GET', '/api/home');
         expect(groupsOf(body)[FAKE_PRS.neverReviewed]).toBe('others');
         expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ draft: true, designatedReviewer: true });
-        expect(groupsOf(body)[FAKE_PRS.mine]).toBe('mine');
+        expect(groupsOf(body)[FAKE_PRS.mine]).toBe('to-rebase');
         expect(cardOf(body, FAKE_PRS.main)?.draft).toBe(false);
     });
 
@@ -548,9 +550,11 @@ describe('home', () => {
         expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ build: null, needsRebase: null });
     });
 
-    it('mine: needs-rebase is false once master is back on the PR base', async () => {
+    it('mine: needs-rebase is false once master is back on the PR base, and the PR moves from "to-rebase" to "mine"', async () => {
         const { fake } = await setup();
-        expect(cardOf((await api<Home>('GET', '/api/home')).body, FAKE_PRS.mine)?.needsRebase).toBe(true);
+        const before = (await api<Home>('GET', '/api/home')).body;
+        expect(cardOf(before, FAKE_PRS.mine)?.needsRebase).toBe(true);
+        expect(groupsOf(before)[FAKE_PRS.mine]).toBe('to-rebase');
         const mineHead = fake.data.prs.get(FAKE_PRS.mine)?.pr.source?.commit?.hash ?? '';
         const baseKey = [...fake.data.mergeBases.keys()].find((k) => k.startsWith(mineHead));
         const base = baseKey ? fake.data.mergeBases.get(baseKey) : undefined;
@@ -559,6 +563,8 @@ describe('home', () => {
         fake.data.mergeBases.set(`${mineHead}..${base}`, base ?? '');
         const { body } = await api<Home>('GET', '/api/home?fresh=1');
         expect(cardOf(body, FAKE_PRS.mine)?.needsRebase).toBe(false);
+        expect(groupsOf(body)[FAKE_PRS.mine]).toBe('mine');
+        expect(body.groups.find((g) => g.key === 'to-rebase')?.prs).toEqual([]);
     });
 
     it('a statuses failure leaves build null and the home still loads', async () => {
@@ -625,6 +631,85 @@ describe('home', () => {
         const { status, body } = await api<FollowedList>('GET', '/api/settings/followed');
         expect(status).toBe(200);
         expect(body).toEqual({ followed: [{ uuid: '{yan}', displayName: 'Yann Bernard' }] });
+    });
+
+    describe('3.2.0: "To review" from followed contributors, hidden PRs, contributors', () => {
+        const CAMILLE = { uuid: '{cam}', displayName: 'Camille Durand' };
+        const YANN = { uuid: '{yan}', displayName: 'Yann Bernard' };
+        /** #47 (Yann, 2 approvals) needs review once the repository asks for 3. */
+        const needThree = (): Promise<unknown> => api('PUT', '/api/settings', { review: { requiredApprovalsByRepo: { [`${WS}/${REPO}`]: 3 } } });
+
+        it('nobody followed: a PR needing review from anyone is "to-do"', async () => {
+            await setup();
+            await needThree();
+            expect(groupsOf((await api<Home>('GET', '/api/home')).body)[FAKE_PRS.others]).toBe('to-do');
+        });
+
+        it('someone followed: "to-do" keeps the followed authors\' PRs and the designated ones, the rest goes to "others"', async () => {
+            await setup();
+            await needThree();
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            let groups = groupsOf((await api<Home>('GET', '/api/home')).body);
+            expect(groups[FAKE_PRS.others]).toBe('others');
+            // Yann's PR where I am a designated reviewer stays.
+            expect(groups[FAKE_PRS.neverReviewed]).toBe('to-do');
+            await api('PUT', '/api/settings', { review: { followed: [YANN] } });
+            groups = groupsOf((await api<Home>('GET', '/api/home')).body);
+            expect(groups[FAKE_PRS.others]).toBe('to-do');
+        });
+
+        it('someone followed: a PR I reviewed with new code since stays in "to-do", followed author or not', async () => {
+            const { fake } = await setup();
+            await needThree();
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            await api('POST', `${prPath(FAKE_PRS.others)}/reviewed`, { version: 1 });
+            pushVersion(fake.data, FAKE_PRS.others, {
+                commit: 'others:v2', from: 'others:v1', base: 'others:m0', changes: { 'src/others.ts': 'x\ny1\ny2\n' }, date: new Date(Date.now() + 60_000).toISOString(),
+            });
+            expect(groupsOf((await api<Home>('GET', '/api/home?fresh=1')).body)[FAKE_PRS.others]).toBe('to-do');
+        });
+
+        it('hideUnfollowed: off while nobody is followed, on once someone is (default), off when unset; every PR stays in the groups', async () => {
+            await setup();
+            let home = (await api<Home>('GET', '/api/home')).body;
+            expect(home.hideUnfollowed).toBe(false);
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            home = (await api<Home>('GET', '/api/home')).body;
+            expect(home.hideUnfollowed).toBe(true);
+            // A display filter: the unfollowed author's PR is still sent (the notifier reads every PR).
+            expect(groupsOf(home)[FAKE_PRS.others]).toBe('others');
+            const off = await api<Settings>('PUT', '/api/settings', { review: { hideUnfollowed: false } });
+            expect(off.body.review.hideUnfollowed).toBe(false);
+            expect((await api<Home>('GET', '/api/home')).body.hideUnfollowed).toBe(false);
+        });
+
+        it('switching hideUnfollowed costs no Bitbucket request', async () => {
+            const { fake } = await setup();
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            await api<Home>('GET', '/api/home');
+            await api('PUT', '/api/settings', { review: { hideUnfollowed: false } });
+            const start = fake.requests.length;
+            expect((await api<Home>('GET', '/api/home')).body.hideUnfollowed).toBe(false);
+            expect(fake.requests.slice(start)).toEqual([]);
+        });
+
+        it('contributors: the authors of the open PRs, me excepted, unique and sorted, from the home with no extra request', async () => {
+            const { fake } = await setup();
+            await api('PUT', '/api/settings', { review: { followed: [CAMILLE] } });
+            const home = (await api<Home>('GET', '/api/home')).body;
+            const expected = [{ uuid: '{cam}', displayName: 'Camille Durand', nickname: 'cdurand' }, { uuid: '{yan}', displayName: 'Yann Bernard', nickname: 'ybernard' }];
+            expect(home.contributors).toEqual(expected);
+            const start = fake.requests.length;
+            const list = await api<ContributorList>('GET', '/api/settings/contributors');
+            expect(list.status).toBe(200);
+            expect(list.body).toEqual({ contributors: expected });
+            expect(fake.requests.slice(start)).toEqual([]);
+        });
+
+        it('contributors without a token: an empty list, no error', async () => {
+            await setup({ withToken: false });
+            expect((await api<ContributorList>('GET', '/api/settings/contributors')).body).toEqual({ contributors: [] });
+        });
     });
 
     it('me unknown (token without read:user): every PR in "others", no history loaded, no error', async () => {
@@ -718,6 +803,17 @@ describe('request budget', () => {
         expect(second).toEqual(first);
     });
 
+    it('(a) steady state with a followed contributor and hiding on: still the same 3 requests', async () => {
+        fakeTime();
+        await setup();
+        await api('PUT', '/api/settings', { review: { followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }], hideUnfollowed: true } });
+        const first = await home();
+        expect(first.hideUnfollowed).toBe(true);
+        elapse(INTERVAL_MS + 1000);
+        const spent = await requestsOf(home);
+        expect(labels(spent)).toEqual(['list p1', 'refs', `statuses #${FAKE_PRS.mine}`]);
+    });
+
     it('(b) after a push on one PR: only that PR\'s data is fetched again, plus the lists', async () => {
         fakeTime();
         const { fake } = await setup();
@@ -800,7 +896,7 @@ describe('request budget', () => {
             fake.data.prs.get(id)!.pr.author = ME;
         }
         const first = await home();
-        expect(first.groups.find((g) => g.key === 'mine')?.prs.length).toBeGreaterThanOrEqual(4);
+        expect(first.groups.filter((g) => g.key === 'mine' || g.key === 'to-rebase').flatMap((g) => g.prs).length).toBeGreaterThanOrEqual(4);
         const refs = (list: RecordedRequest[]): number => list.filter((r) => r.path.includes('/refs/branches/')).length;
         expect(refs(fake.requests)).toBe(1);
         elapse(INTERVAL_MS + 1000);

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Hono } from 'hono';
 import type * as vscode from 'vscode';
-import type { PrDetail, Settings } from '../../src/shared/api.ts';
+import type { ApiErrorBody, PrDetail, Settings } from '../../src/shared/api.ts';
 import { createHttpApp } from '../../src/server/http/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import { Store } from '../../src/server/infra/config.ts';
@@ -18,7 +18,7 @@ import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
 import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
-import { ConfigurationTarget, FakeWebviewPanel, Uri, env, recorded, resetFakeVscode, workspace } from '../support/fake-vscode.ts';
+import { ConfigurationTarget, FakeWebviewPanel, Uri, env, recorded, resetFakeVscode, settingWrites, unregisteredSettings, workspace } from '../support/fake-vscode.ts';
 
 vi.mock('vscode', () => import('../support/fake-vscode.ts'));
 
@@ -126,6 +126,35 @@ describe('review settings in the VS Code configuration', () => {
 
         await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { requiredApprovals: 3 } } });
         expect(settings().inspect('review.requiredApprovals')).toMatchObject({ workspaceValue: 3, globalValue: undefined });
+    });
+
+    it('hideUnfollowed: on by default (manifest), read from and written to revspan.review.hideUnfollowed', async () => {
+        const { http: app, store } = await bridge();
+        expect(store.config.review.hideUnfollowed).toBe(true);
+        const put = await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { hideUnfollowed: false } } });
+        expect(put.status).toBe(200);
+        expect((put.body as Settings).review.hideUnfollowed).toBe(false);
+        expect(settings().inspect('review.hideUnfollowed')?.globalValue).toBe(false);
+    });
+
+    it('a setting VS Code does not know yet (updated, window not reloaded): SETTING_UNREGISTERED, not an internal error', async () => {
+        const { http: app } = await bridge();
+        unregisteredSettings.add('revspan.review.hideUnfollowed');
+        const put = await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { hideUnfollowed: false } } });
+        expect(put.status).toBe(409);
+        expect((put.body as ApiErrorBody).error).toMatchObject({
+            code: 'SETTING_UNREGISTERED',
+            message: expect.stringContaining('reload the VS Code window') as string,
+            params: { setting: 'revspan.review.hideUnfollowed' },
+        });
+    });
+
+    it('any other write failure stays an internal error with VS Code\'s text', async () => {
+        const { http: app } = await bridge();
+        settingWrites.failure = new Error('Unable to write into user settings. Please open the user settings to correct errors/warnings in it and try again.');
+        const put = await callApi(app, { method: 'PUT', path: '/api/settings', body: { review: { requiredApprovals: 3 } } });
+        expect(put.status).toBe(500);
+        expect((put.body as ApiErrorBody).error).toMatchObject({ code: 'INTERNAL', params: { detail: expect.stringContaining('Unable to write into user settings') as string } });
     });
 
     it('untrusted workspace: written at the user level', async () => {

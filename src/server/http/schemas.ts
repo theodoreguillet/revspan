@@ -27,6 +27,7 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
         requiredApprovals: z.any(),
         requiredApprovalsByRepo: z.any(),
         followed: z.any(),
+        hideUnfollowed: z.any(),
         notifications: z.record(z.string(), z.any()).optional(),
         refreshMinutes: z.any(),
     }).partial().optional(),

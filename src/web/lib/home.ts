@@ -12,7 +12,8 @@ export interface Badge {
 
 /** Title of each home group, translated from its key (the server sends no title). */
 export const GROUP_TITLES = {
-    'to-do': 'home.group.toDo',
+    'to-do': 'home.group.toReview',
+    'to-rebase': 'home.group.toRebase',
     mine: 'home.group.mine',
     waiting: 'home.group.waiting',
     others: 'home.group.others',

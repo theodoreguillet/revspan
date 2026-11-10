@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { byRepoRows, reviewFromForm, type ReviewForm } from '../../src/web/lib/review-form.ts';
+import { byRepoRows, followCandidates, reviewFromForm, type ReviewForm } from '../../src/web/lib/review-form.ts';
 
 const form = (over: Partial<ReviewForm> = {}): ReviewForm => ({
     requiredApprovals: 2,
     byRepo: [],
     refreshMinutes: 5,
     followed: [],
+    hideUnfollowed: true,
     notifications: { newPullRequest: true, newVersion: true, buildFailed: false },
     ...over,
 });
@@ -28,6 +29,26 @@ describe('reviewFromForm', () => {
             expect(reviewFromForm(form({ byRepo: [row] }))).toEqual({ ok: false, error: 'settings.invalidByRepo' });
         }
         expect(reviewFromForm(form({ byRepo: [{ repo: 'acme/records-api', approvals: 1 }, { repo: 'acme/records-api', approvals: 2 }] }))).toEqual({ ok: false, error: 'settings.invalidByRepo' });
+    });
+});
+
+describe('hideUnfollowed and the contributors to follow', () => {
+    it('the checkbox value is saved as is', () => {
+        expect(reviewFromForm(form({ hideUnfollowed: false }))).toEqual({ ok: true, review: expect.objectContaining({ hideUnfollowed: false }) });
+        expect(reviewFromForm(form({ hideUnfollowed: true }))).toEqual({ ok: true, review: expect.objectContaining({ hideUnfollowed: true }) });
+    });
+
+    it('candidates: the contributors not followed yet, sorted by name', () => {
+        const contributors = [
+            { uuid: '{yan}', displayName: 'Yann Bernard' },
+            { uuid: '{cam}', displayName: 'Camille Durand' },
+            { uuid: '{jul}', displayName: 'Jules Mercier' },
+        ];
+        expect(followCandidates(contributors, [{ uuid: '{jul}', displayName: 'Jules Mercier' }])).toEqual([
+            { uuid: '{cam}', displayName: 'Camille Durand' },
+            { uuid: '{yan}', displayName: 'Yann Bernard' },
+        ]);
+        expect(followCandidates([], [])).toEqual([]);
     });
 });
 

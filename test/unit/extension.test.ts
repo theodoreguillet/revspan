@@ -13,7 +13,7 @@ import type { ErrorLike } from '../../src/shared/error-text.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { errorText as pageErrorText } from '../../src/web/lib/errors.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
-import { settingTarget } from '../../src/extension/lib/setting-target.ts';
+import { isUnregisteredSetting, settingTarget } from '../../src/extension/lib/setting-target.ts';
 import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
 import { settingsChangeActions } from '../../src/extension/lib/settings-change.ts';
 
@@ -65,7 +65,7 @@ describe('extension manifest', () => {
             supported: 'limited',
             restrictedConfigurations: [
                 'revspan.repositories', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors',
-                'revspan.refreshIntervalMinutes', 'revspan.notifications.newPullRequest', 'revspan.notifications.newVersion',
+                'revspan.review.hideUnfollowed', 'revspan.refreshIntervalMinutes', 'revspan.notifications.newPullRequest', 'revspan.notifications.newVersion',
                 'revspan.notifications.buildFailed',
             ],
         });
@@ -80,7 +80,7 @@ describe('settings change', () => {
     const changed = (...ids: string[]) => (section: string): boolean => ids.some((id) => id === section || id.startsWith(`${section}.`));
 
     it('the tree is refreshed when the repositories or a review setting change (approvals, overrides, followed)', () => {
-        for (const id of ['revspan.review.requiredApprovals', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors']) {
+        for (const id of ['revspan.review.requiredApprovals', 'revspan.review.requiredApprovalsByRepository', 'revspan.review.followedContributors', 'revspan.review.hideUnfollowed']) {
             expect(settingsChangeActions(changed(id)), id).toEqual({ refreshTree: true, repositoriesChanged: false, rearm: false });
         }
         expect(settingsChangeActions(changed('revspan.repositories'))).toEqual({ refreshTree: true, repositoriesChanged: true, rearm: false });
@@ -103,6 +103,17 @@ describe('tracked repositories setting', () => {
 
     it('untrusted workspace: VS Code ignores its value, we write at the user level', () => {
         expect(settingTarget({ workspaceValue: ['acme/records-api'] }, false)).toBe('global');
+    });
+
+    it('a failed write to a setting VS Code does not know: by its message (English or French) or by the missing default', () => {
+        const english = new Error('Unable to write to User Settings because revspan.review.hideUnfollowed is not a registered configuration.');
+        const french = new Error('Impossible d’écrire dans Paramètres utilisateur, car revspan.review.hideUnfollowed n’est pas une configuration inscrite.');
+        expect(isUnregisteredSetting(english, { defaultValue: true })).toBe(true);
+        expect(isUnregisteredSetting(french, { defaultValue: true })).toBe(true);
+        // Every Revspan setting has a default: none means VS Code does not know it, whatever the language of the error.
+        expect(isUnregisteredSetting(new Error('Schreiben nicht möglich'), { defaultValue: undefined })).toBe(true);
+        expect(isUnregisteredSetting(new Error('Schreiben nicht möglich'), undefined)).toBe(true);
+        expect(isUnregisteredSetting(new Error('Unable to write into user settings: fix the errors first.'), { defaultValue: 2 })).toBe(false);
     });
 });
 
@@ -414,6 +425,8 @@ describe('"My PRs" tree', () => {
         repos: ['acme/records-api'],
         errors: [],
         truncated: [],
+        hideUnfollowed: false,
+        contributors: [],
         groups: [
             { key: 'to-do', prs: [card(1)] },
             { key: 'waiting', prs: [] },
@@ -423,7 +436,7 @@ describe('"My PRs" tree', () => {
 
     it('non-empty groups, badges, "Other" collapsed when I am known', () => {
         const tree = buildHomeTree(home, fr);
-        expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À faire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
+        expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À relire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
         expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, label: 'records-api #1 · PR 1', description: '+2 versions · dont 1 avec du code · 💬 2' });
         expect(tree[1]?.prs[0]).toMatchObject({ label: 'records-api #2 · PR 2', description: 'pas encore relue · 💬 2' });
         expect(buildHomeTree({ ...home, me: null }, fr).find((g) => g.key === 'others')?.collapsed).toBe(false);
@@ -431,7 +444,7 @@ describe('"My PRs" tree', () => {
 
     it('in English: group titles from the key, badges and tooltip', () => {
         const tree = buildHomeTree(home, en);
-        expect(tree.map((g) => g.label)).toEqual(['To do (1)', 'Other open PRs (1)']);
+        expect(tree.map((g) => g.label)).toEqual(['To review (1)', 'Other open PRs (1)']);
         expect(tree[0]?.prs[0]).toMatchObject({ description: '+2 versions · 1 with code · 💬 2' });
         expect(tree[0]?.prs[0]?.tooltip).toBe('PR 1\nacme/records-api #1 · Camille\n3 versions\n1 approval\n+2 versions\n1 with code\n💬 2');
         expect(tree[1]?.prs[0]).toMatchObject({ description: 'not reviewed yet · 💬 2' });
@@ -448,6 +461,29 @@ describe('"My PRs" tree', () => {
         const one = { ...home, groups: [{ key: 'to-do' as const, prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
         expect(buildHomeTree(one, en)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
         expect(buildHomeTree(one, fr)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
+    });
+
+    it('"To rebase": my PRs whose destination moved, by repository, with its own icon, in English and in French', () => {
+        const mine = card(20, { author: home.me, needsRebase: true });
+        const rebase: Home = { ...home, groups: [{ key: 'to-rebase', prs: [mine] }, { key: 'mine', prs: [card(21, { author: home.me })] }] };
+        const tree = buildHomeTree(rebase, en, 'contributor');
+        expect(tree.map((g) => [g.key, g.label, g.icon, g.collapsed])).toEqual([
+            ['to-rebase', 'To rebase (1)', 'repo-sync', false],
+            ['mine', 'My PRs (1)', 'account', false],
+        ]);
+        expect(tree[0]?.subgroups.map((s) => s.label)).toEqual(['acme/records-api (1)']);
+        expect(tree[0]?.subgroups[0]?.prs[0]?.contextValue).toBe('pr-readonly');
+        expect(buildHomeTree(rebase, fr).map((g) => g.label)).toEqual(['À rebaser (1)', 'Mes PR (1)']);
+    });
+
+    it('hidden PRs of unfollowed contributors are left out of the tree when the home says so', () => {
+        const followed = card(30, { author: { uuid: '{y}', displayName: 'Yann' }, followed: true });
+        const unfollowed = card(31, { lastReviewed: null, myApproval: false });
+        const filtered: Home = { ...home, groups: [{ key: 'others', prs: [followed, unfollowed] }] };
+        expect(buildHomeTree({ ...filtered, hideUnfollowed: true }, en)[0]?.prs.map((p) => p.ref.id)).toEqual([30]);
+        expect(buildHomeTree({ ...filtered, hideUnfollowed: false }, en)[0]?.prs.map((p) => p.ref.id)).toEqual([30, 31]);
+        // A group left empty by the filter is not shown.
+        expect(buildHomeTree({ ...home, hideUnfollowed: true, groups: [{ key: 'others', prs: [unfollowed] }] }, en)).toEqual([]);
     });
 
     describe('review queue: subgroups, marks, follow state', () => {
@@ -557,6 +593,7 @@ describe('error messages of the extension', () => {
         { code: 'BAD_REQUEST', message: 'x', params: { reason: 'email-required' } },
         { code: 'FORBIDDEN', message: 'x' },
         { code: 'INTERNAL', message: 'x', params: { detail: 'boom' } },
+        { code: 'SETTING_UNREGISTERED', message: 'x', params: { setting: 'revspan.review.hideUnfollowed' } },
         { code: 'BAD_REQUEST', message: 'Invalid comparison: from 3 to 2.' },
         { code: 'BB_ERROR', message: 'Bitbucket redirect refused on /x' },
         { code: 'NOT_FOUND', message: 'Unknown route: GET /api/x' },
@@ -567,6 +604,12 @@ describe('error messages of the extension', () => {
             expect(extensionErrorText(enT, error), JSON.stringify(error)).toBe(pageErrorText(createTranslator('en'), error));
             expect(extensionErrorText(frT, error), JSON.stringify(error)).toBe(pageErrorText(createTranslator('fr'), error));
         }
+    });
+
+    it('a setting VS Code does not know yet (update without reload): asks to reload the window', () => {
+        const error: ErrorLike = { code: 'SETTING_UNREGISTERED', message: 'x', params: { setting: 'revspan.review.hideUnfollowed' } };
+        expect(extensionErrorText(enT, error)).toBe('Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.');
+        expect(extensionErrorText(frT, error)).toBe('Revspan vient d’être mis à jour : recharge la fenêtre VS Code (Developer: Reload Window) pour enregistrer les réglages.');
     });
 
     it('errors that only the page can see keep the raw message', () => {

@@ -1,6 +1,7 @@
 // "My PRs" tree of the side bar, built from the home page data (same groups as the page).
 import type { Home, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
-import { groupCards, groupingFor, type Grouping } from '../../shared/home-grouping.ts';
+import { visibleGroups } from '../../shared/home-filter.ts';
+import { groupCards, groupingFor, isOwnGroup, type Grouping } from '../../shared/home-grouping.ts';
 import { errorText } from './error-text.ts';
 import type { L10n, Translate } from './l10n.ts';
 
@@ -41,6 +42,7 @@ const BUILD_ICONS = { failed: 'error', running: 'sync~spin', success: 'pass' } a
 
 const ICONS: Record<HomeGroupKey, string> = {
     'to-do': 'eye',
+    'to-rebase': 'repo-sync',
     'mine': 'account',
     'waiting': 'clock',
     'others': 'git-pull-request',
@@ -50,7 +52,9 @@ const ICONS: Record<HomeGroupKey, string> = {
 function groupTitle(t: Translate, key: HomeGroupKey): string {
     switch (key) {
         case 'to-do':
-            return t('To do');
+            return t('To review');
+        case 'to-rebase':
+            return t('To rebase');
         case 'mine':
             return t('My PRs');
         case 'waiting':
@@ -75,9 +79,10 @@ function badges(l10n: L10n, card: PrCard, key: HomeGroupKey): string[] {
     if (card.draft) {
         out.push(t('draft'));
     }
-    if (key !== 'mine' && card.lastReviewed === null) {
+    const own = isOwnGroup(key);
+    if (!own && card.lastReviewed === null) {
         out.push(t('not reviewed yet'));
-    } else if (key !== 'mine' && card.newVersions > 0) {
+    } else if (!own && card.newVersions > 0) {
         out.push(newVersions(l10n, card.newVersions));
         if (card.newCodeVersions !== null && card.newCodeVersions > 0) {
             out.push(t('{count} with code', { count: card.newCodeVersions }));
@@ -133,11 +138,11 @@ function subgroupLabel(t: Translate, label: string, cards: PrCard[], byContribut
 }
 
 /**
- * Non-empty groups; "Other open PRs" collapsed (expanded if the tool does not know who I am).
- * `grouping` splits "to-do" and "others" (the other groups follow `groupingFor`).
+ * Non-empty groups, without the PRs hidden by the unfollowed filter; "Other open PRs" collapsed (expanded if the tool
+ * does not know who I am). `grouping` splits "to-do" and "others" (the other groups follow `groupingFor`).
  */
 export function buildHomeTree(home: Home, l10n: L10n, grouping: Grouping = 'none'): GroupNode[] {
-    return home.groups
+    return visibleGroups(home).groups
         .filter((group) => group.prs.length > 0)
         .map((group) => {
             const effective = groupingFor(group.key, grouping);

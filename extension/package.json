@@ -33,6 +33,7 @@
                 "revspan.repositories",
                 "revspan.review.requiredApprovalsByRepository",
                 "revspan.review.followedContributors",
+                "revspan.review.hideUnfollowed",
                 "revspan.refreshIntervalMinutes",
                 "revspan.notifications.newPullRequest",
                 "revspan.notifications.newVersion",
@@ -91,6 +92,11 @@
                     },
                     "default": [],
                     "markdownDescription": "%configuration.followedContributors%"
+                },
+                "revspan.review.hideUnfollowed": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "%configuration.hideUnfollowed%"
                 },
                 "revspan.notifications.newPullRequest": {
                     "type": "boolean",

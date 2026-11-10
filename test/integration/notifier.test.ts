@@ -317,14 +317,14 @@ describe('background refresh and notifications', () => {
 
 describe('cycles on stubbed services', () => {
     const ME: User = { uuid: '{me}', displayName: 'Me' };
-    const home = (over: Partial<Home>): Home => ({ me: ME, repos: [`${WS}/${REPO}`], groups: [], errors: [], truncated: [], ...over });
+    const home = (over: Partial<Home>): Home => ({ me: ME, repos: [`${WS}/${REPO}`], groups: [], errors: [], truncated: [], hideUnfollowed: false, contributors: [], ...over });
     const card = (id: number, over: Partial<PrCard> = {}): PrCard => ({
         workspace: WS, repo: REPO, id, title: `PR ${id}`, author: { uuid: '{cam}', displayName: 'Camille' }, url: '', createdOn: '', updatedOn: '',
         versionsCount: 2, lastPushAt: '', lastReviewed: null, newVersions: 0, newCodeVersions: null, approvals: 0, requiredApprovals: 2,
         myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false, followed: false, approvalHolds: false, build: null,
         needsRebase: null, head: `${id}`.padEnd(12, 'a'), draft: false, ...over,
     });
-    const todo = (...prs: PrCard[]): Home => home({ groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }] });
+    const todo = (...prs: PrCard[]): Home => home({ groups: [{ key: 'to-do', prs }, { key: 'to-rebase', prs: [] }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }] });
 
     /** Notifier on stubbed session, home and PR services (no Bitbucket). */
     async function stubbed({ hasToken = true, me = ME, get = async () => home({}), repos = [`${WS}/${REPO}`], kinds = async () => [] as { hash: string; kind: VersionKind }[] }: {

@@ -10,8 +10,9 @@ import { createHttpApp } from '../server/http/app.ts';
 import { Cache } from '../server/infra/cache.ts';
 import { Store, type RepoSource, type ReviewSource } from '../server/infra/config.ts';
 import { createServices, type Services } from '../server/services/index.ts';
+import { AppError } from '../server/errors.ts';
 import { IN_MEMORY_HOST } from './lib/bridge.ts';
-import { settingTarget } from './lib/setting-target.ts';
+import { isUnregisteredSetting, settingTarget } from './lib/setting-target.ts';
 
 export interface ExtensionApp {
     services: Services;
@@ -25,13 +26,26 @@ export const REPOS_SETTING = { section: 'revspan', key: 'repositories', id: 'rev
 
 const TOKEN_KEY_PREFIX = 'revspan.bitbucket-token:';
 
-/** Writes a revspan.* setting at the level that gives the effective value (otherwise a .vscode/settings.json would mask the save). */
+/**
+ * Writes a revspan.* setting at the level that gives the effective value (otherwise a .vscode/settings.json would mask the
+ * save). A setting VS Code does not know yet (extension updated, window not reloaded) gives SETTING_UNREGISTERED, which
+ * the page turns into "reload the window" instead of an internal error.
+ */
 async function writeSetting(key: string, value: unknown): Promise<void> {
     const config = vscode.workspace.getConfiguration(REPOS_SETTING.section);
-    const target = settingTarget(config.inspect(key), vscode.workspace.isTrusted) === 'workspace'
+    const inspection = config.inspect(key);
+    const target = settingTarget(inspection, vscode.workspace.isTrusted) === 'workspace'
         ? vscode.ConfigurationTarget.Workspace
         : vscode.ConfigurationTarget.Global;
-    await config.update(key, value, target);
+    try {
+        await config.update(key, value, target);
+    } catch (error) {
+        if (isUnregisteredSetting(error, inspection)) {
+            const setting = `${REPOS_SETTING.section}.${key}`;
+            throw new AppError(409, 'SETTING_UNREGISTERED', `Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings (${setting} is not registered yet).`, { setting });
+        }
+        throw error;
+    }
 }
 
 function vscodeRepoSource(): RepoSource {
@@ -50,6 +64,7 @@ export const REVIEW_SETTING_KEYS = {
     requiredApprovals: 'review.requiredApprovals',
     requiredApprovalsByRepo: 'review.requiredApprovalsByRepository',
     followed: 'review.followedContributors',
+    hideUnfollowed: 'review.hideUnfollowed',
     newPullRequest: 'notifications.newPullRequest',
     newVersion: 'notifications.newVersion',
     buildFailed: 'notifications.buildFailed',
@@ -67,6 +82,7 @@ export function vscodeReviewSource(): ReviewSource {
                 requiredApprovals: read(keys.requiredApprovals),
                 requiredApprovalsByRepo: read(keys.requiredApprovalsByRepo),
                 followed: read(keys.followed),
+                hideUnfollowed: read(keys.hideUnfollowed),
                 notifications: { newPullRequest: read(keys.newPullRequest), newVersion: read(keys.newVersion), buildFailed: read(keys.buildFailed) },
                 refreshMinutes: read(keys.refreshMinutes),
             };
@@ -76,6 +92,7 @@ export function vscodeReviewSource(): ReviewSource {
                 [keys.requiredApprovals, review.requiredApprovals],
                 [keys.requiredApprovalsByRepo, review.requiredApprovalsByRepo],
                 [keys.followed, review.followed],
+                [keys.hideUnfollowed, review.hideUnfollowed],
                 [keys.newPullRequest, review.notifications.newPullRequest],
                 [keys.newVersion, review.notifications.newVersion],
                 [keys.buildFailed, review.notifications.buildFailed],

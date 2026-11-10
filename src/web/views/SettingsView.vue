@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watchEffect } from 'vue';
-import type { Settings } from '../../shared/api.ts';
+import type { Settings, User } from '../../shared/api.ts';
 import { t, tr } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
 import { api, errorInfo } from '../services/api.ts';
@@ -10,8 +10,10 @@ import TopNav from '../components/TopNav.vue';
 import { showError } from '../composables/useErrors.ts';
 import { parseRepoList } from '../../shared/repos.ts';
 import { TOKEN_STORE_LABELS, tokenStorageHelp } from '../lib/settings.ts';
-import { byRepoRows, reviewFromForm, type ByRepoRow } from '../lib/review-form.ts';
+import { byRepoRows, followCandidates, reviewFromForm, type ByRepoRow } from '../lib/review-form.ts';
 import type { ReviewSettings } from '../../shared/review-settings.ts';
+import { withFollowed } from '../../shared/follow.ts';
+import { useFollow } from '../composables/useFollow.ts';
 import ConfirmButton from '../components/ConfirmButton.vue';
 import I18nText from '../components/I18nText.vue';
 
@@ -26,6 +28,10 @@ const requiredApprovals = ref<number | string | null>(2);
 const byRepo = ref<ByRepoRow[]>([]);
 const refreshMinutes = ref<number | string | null>(5);
 const followed = ref<ReviewSettings['followed']>([]);
+const hideUnfollowed = ref(true);
+/** Authors of the open PRs in the tracked repositories (from the home the windows share). */
+const contributors = shallowRef<User[]>([]);
+const toFollow = ref('');
 const notifications = ref<ReviewSettings['notifications']>({ newPullRequest: true, newVersion: true, buildFailed: false });
 const status = ref<{ text: string; tone: '' | 'ok' | 'err' }>({ text: '', tone: '' });
 const saving = ref(false);
@@ -48,6 +54,7 @@ function fill(settings: Settings): void {
     byRepo.value = byRepoRows(settings.review.requiredApprovalsByRepo);
     refreshMinutes.value = settings.review.refreshMinutes;
     followed.value = settings.review.followed.map((user) => ({ ...user }));
+    hideUnfollowed.value = settings.review.hideUnfollowed;
     notifications.value = { ...settings.review.notifications };
 }
 
@@ -57,8 +64,34 @@ function readReview(): ReturnType<typeof reviewFromForm> {
         byRepo: byRepo.value,
         refreshMinutes: refreshMinutes.value,
         followed: followed.value,
+        hideUnfollowed: hideUnfollowed.value,
         notifications: notifications.value,
     });
+}
+
+const candidates = computed(() => followCandidates(contributors.value, followed.value));
+
+/**
+ * "Add": saved at once, like the ☆ Follow of a PR (same path). The form keeps its other unsaved input, and the saved
+ * value is noted so the form does not count the addition as a pending change.
+ */
+const { busy: followBusy, setFollow } = useFollow((list) => {
+    if (loaded.value) {
+        loaded.value = { ...loaded.value, review: { ...loaded.value.review, followed: list } };
+    }
+});
+
+async function addFollowed(): Promise<void> {
+    const user = candidates.value.find((candidate) => candidate.uuid === toFollow.value);
+    if (!user) {
+        return;
+    }
+    await setFollow(user, true);
+    if (loaded.value?.review.followed.some((saved) => saved.uuid === user.uuid)) {
+        followed.value = withFollowed(followed.value, user, true);
+        toFollow.value = '';
+        setStatus(t('settings.followAdded', { name: user.displayName }), 'ok');
+    }
 }
 
 function addOverride(): void {
@@ -155,7 +188,12 @@ onMounted(async () => {
         fill(await api.settings());
     } catch (error) {
         loadError.value = error;
+        return;
     }
+    // Secondary: without a token or a readable repository, the picker simply stays hidden.
+    api.contributors().then(({ contributors: list }) => {
+        contributors.value = list;
+    }, () => undefined);
 });
 </script>
 
@@ -246,7 +284,18 @@ onMounted(async () => {
                         </li>
                     </ul>
                     <div v-else class="help">{{ t('settings.followedEmpty') }}</div>
+                    <div v-if="candidates.length" class="inline rv-follow-add">
+                        <select id="set-follow" v-model="toFollow" :aria-label="t('settings.followPick')">
+                            <option value="" disabled>{{ t('settings.followPickPlaceholder') }}</option>
+                            <option v-for="user in candidates" :key="user.uuid" :value="user.uuid">{{ user.displayName }}</option>
+                        </select>
+                        <button :class="['rv-btn', { busy: followBusy }]" type="button" data-action="follow-add" :disabled="!toFollow || followBusy" :aria-busy="followBusy" @click="addFollowed()">{{ t('settings.followAdd') }}</button>
+                    </div>
                     <div class="help">{{ t('settings.followedHelp') }}</div>
+                </div>
+                <div class="rv-field rv-hide-toggle">
+                    <label class="rv-check"><input id="set-hide-unfollowed" v-model="hideUnfollowed" type="checkbox"> {{ t('settings.hideUnfollowed') }}</label>
+                    <div class="help">{{ t('settings.hideUnfollowedHelp') }}</div>
                 </div>
                 <div class="rv-field">
                     <label for="set-refresh">{{ t('settings.refreshMinutes') }}</label>

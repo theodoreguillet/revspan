@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyPr, needsReview, type QueueInput } from '../../src/server/core/review-queue.ts';
+import { classifyPr, needsReview, ownGroup, type QueueInput } from '../../src/server/core/review-queue.ts';
 
 /** Someone else's PR, me known, with no approval or review of mine, minimum already reached. */
 const input = (over: Partial<QueueInput>): QueueInput => ({
@@ -13,6 +13,8 @@ const input = (over: Partial<QueueInput>): QueueInput => ({
     approvalHolds: false,
     reviewedOrApproved: false,
     newCodeVersions: null,
+    followed: false,
+    followFilter: false,
     ...over,
 });
 
@@ -77,5 +79,48 @@ describe('classifyPr', () => {
         expect(classifyPr(input({ reviewedOrApproved: true, approvalHolds: false, newCodeVersions: 2 }))).toBe('to-do');
         // Types of the new versions not computed yet: assume code, so the PR is not hidden.
         expect(classifyPr(input({ reviewedOrApproved: true, newCodeVersions: null }))).toBe('to-do');
+    });
+});
+
+describe('"To review" limited to followed contributors (3.2.0)', () => {
+    /** Someone's PR that needs review, while I follow at least one contributor. */
+    const filtered = (over: Partial<QueueInput>): QueueInput => input({ needsReview: true, followFilter: true, ...over });
+
+    it('nobody followed: every PR needing review is "to-do", as before', () => {
+        expect(classifyPr(input({ needsReview: true, followFilter: false }))).toBe('to-do');
+    });
+
+    it('someone followed: a PR needing review goes to "to-do" only if its author is followed', () => {
+        expect(classifyPr(filtered({ followed: true }))).toBe('to-do');
+        expect(classifyPr(filtered({ followed: false }))).toBe('others');
+    });
+
+    it('someone followed: a designated reviewer still gets the PR in "to-do", followed author or not', () => {
+        expect(classifyPr(filtered({ designatedReviewer: true }))).toBe('to-do');
+        expect(classifyPr(filtered({ designatedReviewer: true, needsReview: false }))).toBe('to-do');
+    });
+
+    it('someone followed: a PR I reviewed or approved with code since stays in "to-do" (I am engaged)', () => {
+        expect(classifyPr(filtered({ reviewedOrApproved: true, newCodeVersions: 1 }))).toBe('to-do');
+        expect(classifyPr(filtered({ reviewedOrApproved: true, newCodeVersions: null }))).toBe('to-do');
+        // Only neutral versions since my review: still waiting on the author.
+        expect(classifyPr(filtered({ reviewedOrApproved: true, newCodeVersions: 0 }))).toBe('waiting');
+    });
+
+    it('someone followed: a followed author\'s PR with enough approvals asks nothing: "others"', () => {
+        expect(classifyPr(filtered({ followed: true, needsReview: false }))).toBe('others');
+    });
+
+    it('my own PRs and drafts are not affected by the filter', () => {
+        expect(classifyPr(filtered({ isMine: true }))).toBe('mine');
+        expect(classifyPr(filtered({ draft: true, followed: true }))).toBe('others');
+    });
+});
+
+describe('ownGroup', () => {
+    it('my open PR whose destination moved: "to-rebase"; otherwise (or unknown) "mine"', () => {
+        expect(ownGroup(true)).toBe('to-rebase');
+        expect(ownGroup(false)).toBe('mine');
+        expect(ownGroup(null)).toBe('mine');
     });
 });

@@ -1,6 +1,7 @@
 // Review section of the settings form: rows as typed in the page -> ReviewSettings, or the message to show.
 import { normalizeRepo } from '../../shared/repos.ts';
-import { MAX_APPROVALS, MAX_REFRESH_MINUTES, type ReviewSettings } from '../../shared/review-settings.ts';
+import type { User } from '../../shared/api.ts';
+import { MAX_APPROVALS, MAX_REFRESH_MINUTES, type FollowedUser, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { MessageKey } from '../i18n/index.ts';
 
 /** Messages without placeholders. */
@@ -16,6 +17,7 @@ export interface ReviewForm {
     byRepo: ByRepoRow[];
     refreshMinutes: number | string | null;
     followed: ReviewSettings['followed'];
+    hideUnfollowed: boolean;
     notifications: ReviewSettings['notifications'];
 }
 
@@ -51,8 +53,14 @@ export function reviewFromForm(form: ReviewForm): ReviewFormResult {
     }
     return {
         ok: true,
-        review: { requiredApprovals, requiredApprovalsByRepo, followed: form.followed, notifications: { ...form.notifications }, refreshMinutes },
+        review: { requiredApprovals, requiredApprovalsByRepo, followed: form.followed, hideUnfollowed: form.hideUnfollowed, notifications: { ...form.notifications }, refreshMinutes },
     };
+}
+
+/** Contributors the "Add" picker offers: the ones not followed yet, sorted by name. */
+export function followCandidates(contributors: readonly User[], followed: readonly FollowedUser[]): User[] {
+    const taken = new Set(followed.map((user) => user.uuid));
+    return contributors.filter((user) => !taken.has(user.uuid)).sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 /** Rows to display for the saved overrides, sorted by repository. */

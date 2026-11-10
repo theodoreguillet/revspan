@@ -16,7 +16,9 @@ export type ErrorCode =
     | 'VERSION_UNAVAILABLE'
     | 'FORBIDDEN'
     | 'NOT_FOUND'
-    | 'INTERNAL';
+    | 'INTERNAL'
+    /** VS Code does not know a Revspan setting yet (extension updated, window not reloaded): the write failed. */
+    | 'SETTING_UNREGISTERED';
 
 /** Finer cause within an error code, so the page can show a specific translated message. */
 export type ErrorReason = 'invalid-email' | 'email-required' | 'profile-unreadable' | 'no-versions';
@@ -32,6 +34,8 @@ export interface ErrorParams {
     detail?: string;
     /** Version concerned (VERSION_UNAVAILABLE). */
     version?: number;
+    /** VS Code setting concerned (SETTING_UNREGISTERED), e.g. "revspan.review.hideUnfollowed". */
+    setting?: string;
 }
 
 /** An error: stable code, English message (also read in the terminal), optional parameters for translation. */
@@ -90,10 +94,11 @@ export type ConnectionTest = { ok: true; me: User } | { ok: false; error: ApiErr
 // ---------- Home ----------
 
 /**
- * to-do: waits for an action from me; mine: my PRs; waiting: I reviewed or approved it and nothing new needs me;
- * others: has its minimum of approvals or asks nothing of me (every PR when the token cannot tell who I am).
+ * to-do ("To review"): waits for a review from me; to-rebase: my PRs whose destination branch moved since their base;
+ * mine: my other PRs; waiting: I reviewed or approved it and nothing new needs me; others: has its minimum of approvals
+ * or asks nothing of me (every PR when the token cannot tell who I am).
  */
-export type HomeGroupKey = 'to-do' | 'mine' | 'waiting' | 'others';
+export type HomeGroupKey = 'to-do' | 'to-rebase' | 'mine' | 'waiting' | 'others';
 
 /** Aggregate of the build statuses Bitbucket attaches to a PR's latest commit. */
 export type BuildState = 'failed' | 'running' | 'success' | 'none';
@@ -166,6 +171,18 @@ export interface Home {
     errors: ({ repo: string } & ErrorPayload)[];
     /** Repositories with more open PRs than Revspan reads: only the first `count` are listed. */
     truncated: { repo: string; count: number }[];
+    /**
+     * The page and the tree hide the PRs of contributors I do not follow (src/shared/home-filter.ts): review.hideUnfollowed
+     * is on and at least one contributor is followed. Display only: the groups above hold every PR.
+     */
+    hideUnfollowed: boolean;
+    /** Authors of the listed PRs (hidden ones included), me excepted, unique by uuid, sorted by name. */
+    contributors: User[];
+}
+
+/** GET /api/settings/contributors: the authors of the open PRs in the tracked repositories, from the home. */
+export interface ContributorList {
+    contributors: User[];
 }
 
 // ---------- PR ----------

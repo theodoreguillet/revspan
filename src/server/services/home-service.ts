@@ -7,12 +7,13 @@
 //   are read at most once per interval; merge bases are immutable.
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import { approvalHoldsSince } from '../../shared/approval.ts';
-import { requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
+import { isOwnGroup } from '../../shared/home-grouping.ts';
+import { followFilterOn, hidesUnfollowed, requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbActivity, BbPullRequest } from '../bitbucket/types.ts';
 import { summarizeBuild } from '../core/build.ts';
 import { buildParticipants, computeReview, extractUpdates, prUrl, userOf } from '../core/model.ts';
-import { classifyPr, needsReview, type QueueInput } from '../core/review-queue.ts';
+import { classifyPr, needsReview, ownGroup, type QueueInput } from '../core/review-queue.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
 import { errorPayload } from '../errors.ts';
@@ -34,10 +35,10 @@ const ERROR_REUSE_MS = 60_000;
 /** To increment if the activity kept for the home changes shape (invalidates the disk cache). */
 const ACTIVITY_FORMAT = 2;
 /** To increment if the shared home changes shape (a window running an older version then ignores it). */
-const HOME_FORMAT = 2;
+const HOME_FORMAT = 3;
 
 /** Group order of the home page and the VS Code tree (each translates the key into its title). */
-const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'mine', 'waiting', 'others'];
+const GROUP_ORDER: readonly HomeGroupKey[] = ['to-do', 'to-rebase', 'mine', 'waiting', 'others'];
 
 interface Card {
     group: HomeGroupKey;
@@ -96,6 +97,17 @@ function trimActivity(activity: readonly BbActivity[]): BbActivity[] {
 
 const sameCommit = (a: string, b: string): boolean => a.startsWith(b) || b.startsWith(a);
 
+/** Authors of the cards, me excepted, unique by uuid, sorted by name (the Settings page offers to follow them). */
+function contributorsOf(cards: readonly Card[], me: User | null): User[] {
+    const authors = new Map<string, User>();
+    for (const { data } of cards) {
+        if (data.author && data.author.uuid !== me?.uuid && !authors.has(data.author.uuid)) {
+            authors.set(data.author.uuid, data.author);
+        }
+    }
+    return [...authors.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 /**
  * Whether an activity is at least as recent as the list that led to reading it: its last push is the list's head, every
  * approval or change request of the list has its event, and it has all the comments the list counts. A read lagging behind
@@ -151,15 +163,29 @@ export class HomeService {
         const generation = this.store.homeGeneration();
         const key = homeKey(email, repos, review, this.store.localSignature(), generation);
         const compute = (): Promise<Home> => this.compute(client, key, generation, repos, review, fresh);
+        // A display setting, applied to whichever home is returned (it may come from a window with other workspace
+        // settings): switching it never recomputes the home.
+        const withDisplay = (home: Home): Home => ({ ...home, hideUnfollowed: hidesUnfollowed(review) });
         if (fresh) {
-            return compute();
+            return withDisplay(await compute());
         }
         let pending = this.pending.get(key);
         if (!pending) {
             pending = this.sharedOrComputed(key, review.refreshMinutes * MINUTE_MS / 2, compute).finally(() => this.pending.delete(key));
             this.pending.set(key, pending);
         }
-        return pending;
+        return withDisplay(await pending);
+    }
+
+    /**
+     * Authors the Settings page can follow, from the home this window or another one computed (no request when it is
+     * recent; otherwise the home is computed as for the page, and shared). Empty without a token or a repository.
+     */
+    async contributors(): Promise<User[]> {
+        if (this.store.config.repos.length === 0 || !await this.session.hasToken()) {
+            return [];
+        }
+        return (await this.get()).contributors;
     }
 
     /**
@@ -239,6 +265,11 @@ export class HomeService {
                 return head;
             };
             await Promise.all(repoCards.map((card) => this.withHealth(client, card, recheckMs, branchHead, fresh)));
+            for (const card of repoCards) {
+                if (card.group === 'mine') {
+                    card.group = ownGroup(card.data.needsRebase);
+                }
+            }
             cards.push(...repoCards);
         }));
 
@@ -248,7 +279,7 @@ export class HomeService {
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
         truncated.sort((a, b) => a.repo.localeCompare(b.repo));
-        const home: Home = { me, repos: [...repos], groups, errors, truncated };
+        const home: Home = { me, repos: [...repos], groups, errors, truncated, hideUnfollowed: hidesUnfollowed(review), contributors: contributorsOf(cards, me) };
         this.last = { key, at: startedAt, home };
         // A home without my profile (every PR in "others") is never shared. One with a repository error is, for
         // ERROR_REUSE_MS only (see shared()).
@@ -259,18 +290,20 @@ export class HomeService {
     }
 
     /**
-     * Build state for "to-do" and "mine" cards, needs-rebase for "mine" only. Failures leave null. fresh (explicit Refresh)
-     * also re-reads the kept checks of my own PRs, where a re-run on the same commit matters.
+     * Build state for "to-do" cards and my own PRs, needs-rebase for my own PRs only (it decides between "to-rebase" and
+     * "mine" afterwards). Failures leave null. fresh (explicit Refresh) also re-reads the kept checks of my own PRs, where
+     * a re-run on the same commit matters.
      */
     private async withHealth(client: BitbucketClient, card: Card, recheckMs: number, branchHead: BranchHeadReader, fresh: boolean): Promise<void> {
-        if (card.group !== 'to-do' && card.group !== 'mine') {
+        const own = isOwnGroup(card.group);
+        if (card.group !== 'to-do' && !own) {
             return;
         }
-        const recheck = fresh && card.group === 'mine';
+        const recheck = fresh && own;
         const [checks, needsRebase] = await Promise.all([
             // lastPushAt: the last push, or the PR's last update for a light card (never earlier than the push).
             loadBuildChecks(client, card.data, card.head, { maxAgeMs: recheckMs, pushedAt: card.data.lastPushAt, recheck }),
-            card.group === 'mine' && card.open ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
+            own && card.open ? loadNeedsRebase(client, card.data, card.head, card.destBranch, branchHead) : null,
         ]);
         card.data.build = checks ? summarizeBuild(checks) : null;
         card.data.needsRebase = needsRebase;
@@ -357,6 +390,8 @@ export class HomeService {
             approvalHolds: false,
             reviewedOrApproved: false,
             newCodeVersions: null,
+            followed: base.followed,
+            followFilter: followFilterOn(settings),
         };
         // PR that does not concern me (not author, designated reviewer or participant, never marked reviewed), or me
         // unknown: light card without the history, so the home page stays fast with many repositories.

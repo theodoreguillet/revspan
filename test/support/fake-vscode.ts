@@ -156,6 +156,14 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../../extension/package.jso
     contributes: { configuration: { properties: Record<string, { default?: unknown }> } };
 };
 const settingDefault = (id: string): unknown => manifest.contributes.configuration.properties[id]?.default;
+/**
+ * Settings VS Code does not know, as after an update of the extension without "Reload Window" (the old manifest stays
+ * loaded): a write fails like VS Code's and inspect() gives no default.
+ */
+export const unregisteredSettings = new Set<string>();
+/** Error every write throws while set (settings.json with errors, file system...). */
+export const settingWrites: { failure: Error | null } = { failure: null };
+const registered = (id: string): boolean => !unregisteredSettings.has(id) && id in manifest.contributes.configuration.properties;
 
 export const workspace = {
     workspaceFolders: [] as { uri: Uri }[],
@@ -168,11 +176,18 @@ export const workspace = {
                 const levels = settingLevels.get(id(key));
                 return (levels?.workspace ?? levels?.global ?? settingDefault(id(key))) as T | undefined;
             },
-            inspect(key: string): { globalValue?: unknown; workspaceValue?: unknown } {
+            inspect(key: string): { defaultValue?: unknown; globalValue?: unknown; workspaceValue?: unknown } {
                 const levels = settingLevels.get(id(key));
-                return { globalValue: levels?.global, workspaceValue: levels?.workspace };
+                return { defaultValue: registered(id(key)) ? settingDefault(id(key)) : undefined, globalValue: levels?.global, workspaceValue: levels?.workspace };
             },
             async update(key: string, value: unknown, target: number): Promise<void> {
+                if (settingWrites.failure) {
+                    throw settingWrites.failure;
+                }
+                if (!registered(id(key))) {
+                    const level = target === ConfigurationTarget.Workspace ? 'Workspace Settings' : 'User Settings';
+                    throw new Error(`Unable to write to ${level} because ${id(key)} is not a registered configuration.`);
+                }
                 const levels = settingLevels.get(id(key)) ?? {};
                 levels[target === ConfigurationTarget.Workspace ? 'workspace' : 'global'] = value;
                 settingLevels.set(id(key), levels);
@@ -224,5 +239,7 @@ export function resetFakeVscode(): void {
     workspace.workspaceFolders = [];
     workspace.isTrusted = true;
     settingLevels.clear();
+    unregisteredSettings.clear();
+    settingWrites.failure = null;
     env.language = 'en';
 }

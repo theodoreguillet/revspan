@@ -44,6 +44,8 @@ function messageText(tr: Translator, message: ErrorMessage): string {
             return tr.t('error.refused');
         case 'internal':
             return tr.t('error.internal', { detail: message.detail });
+        case 'reloadWindow':
+            return tr.t('error.reloadWindow');
     }
 }
 

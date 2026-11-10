@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
-import { groupCards, groupingFor, isGrouping } from '../../src/shared/home-grouping.ts';
+import { groupCards, groupingFor, isGrouping, isOwnGroup } from '../../src/shared/home-grouping.ts';
 
 const CAM: User = { uuid: '{cam}', displayName: 'Camille Durand' };
 const YAN: User = { uuid: '{yan}', displayName: 'Yann Bernard' };
@@ -110,6 +110,7 @@ describe('groupingFor', () => {
         expect(groupingFor('to-do', 'contributor')).toBe('contributor');
         expect(groupingFor('others', 'none')).toBe('none');
         expect(groupingFor('mine', 'contributor')).toBe('repository');
+        expect(groupingFor('to-rebase', 'none')).toBe('repository');
         expect(groupingFor('waiting', 'repository')).toBe('none');
     });
 });
@@ -119,5 +120,13 @@ describe('isGrouping', () => {
         expect(['repository', 'contributor', 'none'].every(isGrouping)).toBe(true);
         expect(isGrouping('author')).toBe(false);
         expect(isGrouping(null)).toBe(false);
+    });
+});
+
+describe('isOwnGroup', () => {
+    it('"to-rebase" and "mine" hold my own PRs, the other groups never do', () => {
+        expect(isOwnGroup('to-rebase')).toBe(true);
+        expect(isOwnGroup('mine')).toBe(true);
+        expect(['to-do', 'waiting', 'others'].map((key) => isOwnGroup(key as 'to-do'))).toEqual([false, false, false]);
     });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_REVIEW_SETTINGS, normalizeReviewSettings, requiredApprovalsFor } from '../../src/shared/review-settings.ts';
+import { DEFAULT_REVIEW_SETTINGS, followFilterOn, hidesUnfollowed, normalizeReviewSettings, requiredApprovalsFor } from '../../src/shared/review-settings.ts';
 
 describe('normalizeReviewSettings', () => {
     it('anything unusable gives the defaults', () => {
@@ -46,6 +46,26 @@ describe('normalizeReviewSettings', () => {
     it('notifications: booleans kept, anything else gives the default of that key', () => {
         expect(normalizeReviewSettings({ notifications: { newPullRequest: false, buildFailed: true, newVersion: 'yes' } }).notifications)
             .toEqual({ newPullRequest: false, newVersion: true, buildFailed: true });
+    });
+});
+
+describe('hideUnfollowed and the follow filter', () => {
+    it('hideUnfollowed: on by default, a boolean kept, anything else gives the default', () => {
+        expect(DEFAULT_REVIEW_SETTINGS.hideUnfollowed).toBe(true);
+        expect(normalizeReviewSettings({ hideUnfollowed: false }).hideUnfollowed).toBe(false);
+        expect(normalizeReviewSettings({ hideUnfollowed: 'no' }).hideUnfollowed).toBe(true);
+    });
+
+    it('the follow filter is on as soon as one contributor is followed', () => {
+        expect(followFilterOn(DEFAULT_REVIEW_SETTINGS)).toBe(false);
+        expect(followFilterOn(normalizeReviewSettings({ followed: [{ uuid: '{a}', displayName: 'Alice Martin' }] }))).toBe(true);
+    });
+
+    it('hiding applies only when the setting is on and someone is followed (nothing hidden while nobody is)', () => {
+        const alice = [{ uuid: '{a}', displayName: 'Alice Martin' }];
+        expect(hidesUnfollowed(normalizeReviewSettings({ hideUnfollowed: true, followed: alice }))).toBe(true);
+        expect(hidesUnfollowed(normalizeReviewSettings({ hideUnfollowed: true, followed: [] }))).toBe(false);
+        expect(hidesUnfollowed(normalizeReviewSettings({ hideUnfollowed: false, followed: alice }))).toBe(false);
     });
 });
 

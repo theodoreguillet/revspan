@@ -25,6 +25,10 @@ export interface QueueInput {
     reviewedOrApproved: boolean;
     /** Versions with code or dependencies since my review; null: their types are not computed yet. */
     newCodeVersions: number | null;
+    /** The author is one of my followed contributors. */
+    followed: boolean;
+    /** At least one contributor is followed: a PR needing review then goes to "to-do" only from a followed author. */
+    followFilter: boolean;
 }
 
 /** Rules applied in order: the first that matches gives the group. */
@@ -52,12 +56,19 @@ export function classifyPr(input: QueueInput): HomeGroupKey {
     if (input.reviewedOrApproved && input.newCodeVersions === 0) {
         return 'waiting';
     }
-    if (input.needsReview) {
+    // While nobody is followed, every PR needing review is proposed, so a new user never sees an empty queue.
+    if (input.needsReview && (!input.followFilter || input.followed)) {
         return 'to-do';
     }
-    // Stale approval or new code since my review (unknown types count as code, so the PR is not hidden).
+    // Stale approval or new code since my review (unknown types count as code, so the PR is not hidden): I am engaged
+    // with it, followed author or not.
     if (input.reviewedOrApproved && (input.newCodeVersions ?? 1) > 0) {
         return 'to-do';
     }
     return 'others';
+}
+
+/** Group of one of my PRs once its rebase state is known: the ones whose destination moved since their base come first. */
+export function ownGroup(needsRebase: boolean | null): HomeGroupKey {
+    return needsRebase === true ? 'to-rebase' : 'mine';
 }

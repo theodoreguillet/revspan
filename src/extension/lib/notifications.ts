@@ -1,5 +1,6 @@
 // Which VS Code notifications a home refresh raises: pure rules, the notifier applies them to the shared state.
 import type { Home, HomeGroupKey, PrCard, PrRef, VersionKind } from '../../shared/api.ts';
+import { isOwnGroup } from '../../shared/home-grouping.ts';
 import type { NotificationPrefs } from '../../shared/review-settings.ts';
 import { versionsAfter } from '../../server/core/model.ts';
 import { prKeyOf, type NotifiedState } from '../../server/infra/config.ts';
@@ -58,9 +59,9 @@ function withHead(value: string | undefined, head: string): string {
 
 const baselined = (state: NotifiedState, card: PrCard): boolean => state.initialized && state.seen[`${card.workspace}/${card.repo}`] === REPO_BASELINE;
 
-/** Someone else's PR I reviewed or approved, whose head is not among the recorded ones. */
+/** Someone else's PR I reviewed or approved, whose head is not among the recorded ones (my own pushes never count). */
 function hasNewHead(group: HomeGroupKey, card: PrCard, recorded: string | undefined): recorded is string {
-    return group !== 'mine' && recorded !== undefined && !headsOf(recorded).includes(card.head) && (card.lastReviewed !== null || card.myApproval);
+    return !isOwnGroup(group) && recorded !== undefined && !headsOf(recorded).includes(card.head) && (card.lastReviewed !== null || card.myApproval);
 }
 
 /**
@@ -96,7 +97,7 @@ export function codeChangedSince(versions: readonly { hash: string; kind: Versio
 
 /**
  * What a card calls for, in order of preference, preferences aside:
- * - buildFailed: my PR's build failed on a head not covered yet;
+ * - buildFailed: my PR's build failed on a head not covered yet ("to-rebase" or "mine");
  * - newPullRequest: a "to-do" PR from a followed contributor, or where I am a designated reviewer, never seen before;
  * - newVersion: a new head on someone else's PR I reviewed or approved, unless only neutral versions arrived since the
  *   previous head (not checked: counts as code);
@@ -104,7 +105,7 @@ export function codeChangedSince(versions: readonly { hash: string; kind: Versio
  */
 function kindsOf(group: HomeGroupKey, card: PrCard, state: NotifiedState, codeChanged: boolean | null): Kind[] {
     const key = prKeyOf(card);
-    if (group === 'mine') {
+    if (isOwnGroup(group)) {
         return card.build?.state === 'failed' && !headsOf(state.seen[`${key}${BUILD_SUFFIX}`]).includes(card.head) ? ['buildFailed'] : [];
     }
     const recorded = state.seen[key];
@@ -170,7 +171,7 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
             }
             const kind = baselined(state, card) ? kindsOf(group.key, card, state, change ?? null).find((k) => prefs[k]) : undefined;
             seen[key] = withHead(state.seen[key], card.head);
-            if (group.key === 'mine' && card.build?.state === 'failed') {
+            if (isOwnGroup(group.key) && card.build?.state === 'failed') {
                 seen[buildKey] = withHead(state.seen[buildKey], card.head);
             } else {
                 keep(buildKey);

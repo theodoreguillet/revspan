@@ -71,7 +71,7 @@ describe('follow', () => {
             { ...base, id: 2, author: yan, followed: true },
             { ...base, id: 3, author: null, followed: false },
         ] as PrCard[];
-        const home = { me: null, repos: [], errors: [], truncated: [], groups: [{ key: 'to-do', prs: cards }] } as Home;
+        const home: Home = { me: null, repos: [], errors: [], truncated: [], hideUnfollowed: false, contributors: [], groups: [{ key: 'to-do', prs: cards }] };
         const next = withFollowedCards(home, [cam]);
         expect(next).not.toBe(home);
         expect(next.groups[0]?.prs.map((c) => c.followed)).toEqual([true, false, false]);

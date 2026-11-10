@@ -6,7 +6,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { ApiErrorBody, ErrorCode, ErrorParams, Health, PrRef } from '../../shared/api.ts';
+import type { ApiErrorBody, ContributorList, ErrorCode, ErrorParams, Health, PrRef } from '../../shared/api.ts';
 import { MUTATION_HEADER } from '../../shared/api.ts';
 import { parsePrUrl } from '../../shared/pr-url.ts';
 import { AppError } from '../errors.ts';
@@ -104,6 +104,8 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     app.get('/api/settings', async (c) => c.json(await settings.get()));
     app.get('/api/settings/followed', (c) => c.json(settings.followed()));
+    // Under /settings/ like the followed list: a read of /home would retitle the VS Code panel while on the Settings page.
+    app.get('/api/settings/contributors', async (c) => c.json<ContributorList>({ contributors: await home.contributors() }));
     app.put('/api/settings', async (c) => c.json(await settings.update(parse(settingsUpdateSchema, await jsonBody(c)))));
     app.post('/api/settings/test', async (c) => c.json(await settings.test()));
 
