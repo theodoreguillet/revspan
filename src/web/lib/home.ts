@@ -12,14 +12,13 @@ export interface Badge {
 
 /** Title of each home group, translated from its key (the server sends no title). */
 export const GROUP_TITLES = {
-    'to-review': 'home.group.toReview',
-    'rebase-only': 'home.group.rebaseOnly',
-    'up-to-date': 'home.group.upToDate',
+    'to-do': 'home.group.toDo',
     mine: 'home.group.mine',
+    waiting: 'home.group.waiting',
     others: 'home.group.others',
 } as const satisfies Record<HomeGroupKey, MessageKey>;
 
-export function cardBadges(tr: Translator, card: PrCard, groupKey: HomeGroupKey, me: User | null): Badge[] {
+export function cardBadges(tr: Translator, card: PrCard, me: User | null): Badge[] {
     const mine = !!me && card.author?.uuid === me.uuid;
     const badges: Badge[] = [];
     if (card.lastReviewed == null && !mine) {
@@ -32,7 +31,7 @@ export function cardBadges(tr: Translator, card: PrCard, groupKey: HomeGroupKey,
         badges.push({ text: tr.t('home.badge.newVersions', { count: card.newVersions }), tone: '' });
         if (card.newCodeVersions != null && card.newCodeVersions > 0) {
             badges.push({ text: tr.t('home.badge.withCode', { count: card.newCodeVersions }), tone: '' });
-        } else if (card.newCodeVersions === 0 || groupKey === 'rebase-only') {
+        } else if (card.newCodeVersions === 0) {
             badges.push({ text: tr.t('kind.rebaseOnly'), tone: 'orange' });
         }
     }

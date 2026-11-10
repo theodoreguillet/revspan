@@ -261,7 +261,7 @@ def run_checks(page):
         card = page.locator(f'.rv-row[data-pr="{MAIN_PR}"]')
         expect(card).to_contain_text(data['pr']['title'])
         if FAKE_PRS:
-            expect(page.locator('section[data-group="to-review"]')).to_contain_text(data['pr']['title'])
+            expect(page.locator('section[data-group="to-do"]')).to_contain_text(data['pr']['title'])
             expect(card).to_contain_text(f'+{n - lr} versions')
             expect(card).to_contain_text('💬 2 nouveaux')
             expect(page.locator(f'section[data-group="mine"] .rv-row[data-pr="{fake_ref("mine")}"]')).to_contain_text('toi')
@@ -625,12 +625,13 @@ def run_checks(page):
         @check('only rebases since my review: home group and quick re-approval')
         def fast_path(page):
             ref = fake_ref('rebaseOnly')
-            open_pr(page, ref)  # computes the summary: the PR moves to "Quick re-approval"
+            open_pr(page, ref)  # computes the summary: the card shows "rebase only"
             banner = page.locator('.rv-banner[data-banner="fast"]')
             expect(banner).to_contain_text('Depuis ta relecture de v1 : seulement des rebases, aucun changement de l\'auteur')
             expect(page.locator('.rv-empty')).to_contain_text('Aucun changement de l\'auteur entre v1 et v2')
             page.goto(url(''))
-            card = page.locator(f'section[data-group="rebase-only"] .rv-row[data-pr="{ref}"]')
+            # Designated reviewer whose approval Bitbucket removed: still "To do"
+            card = page.locator(f'section[data-group="to-do"] .rv-row[data-pr="{ref}"]')
             expect(card).to_contain_text('rebase seul', timeout=20000)
             card.click()
             wait_pr_ready(page)
@@ -760,7 +761,7 @@ def run_language_checks(page, fr_page):
         expect(page.locator('.rv-home h1')).to_have_text('My PRs')
         expect(page.locator('.rv-home-top .rv-btn')).to_have_text('↻ Refresh', timeout=20000)
         expect(page.locator(f'.rv-row[data-pr="{MAIN_PR}"]')).to_be_visible(timeout=20000)
-        titles = {'To review', 'Quick re-approval · rebases only', 'Up to date', 'My PRs', 'Other open PRs'}
+        titles = {'To do', 'My PRs', 'Waiting on the author', 'Other open PRs'}
         for title in page.locator('.rv-lgrp').evaluate_all('els => els.map((el) => el.textContent.trim())'):
             assert title.split(' · ')[0] in titles or title.rsplit(' · ', 1)[0] in titles, f'untranslated group title: {title}'
         expect(page.locator('.rv-nav .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')

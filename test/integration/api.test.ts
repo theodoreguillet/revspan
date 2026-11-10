@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ApiErrorBody, Comparison, Home, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comparison, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import {
     FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall,
@@ -52,6 +52,8 @@ afterEach(async () => {
 });
 
 const prPath = (id: number = FAKE_PRS.main): string => `/api/pr/${WS}/${REPO}/${id}`;
+const groupsOf = (home: Home): Record<number, HomeGroupKey> => Object.fromEntries(home.groups.flatMap((g) => g.prs.map((p) => [p.id, g.key])));
+const cardOf = (home: Home, id: number): PrCard | undefined => home.groups.flatMap((g) => g.prs).find((p) => p.id === id);
 
 async function api<T = unknown>(method: string, route: string, body?: unknown, { header = true } = {}): Promise<{ status: number; body: T }> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -146,8 +148,8 @@ describe('settings and security', () => {
         const { body: home } = await api<Home>('GET', '/api/home');
         expect(home.errors).toEqual([expect.objectContaining({ repo: `${WS}/no-such-repo`, code: 'BB_NOT_FOUND', params: { path: expect.stringContaining('no-such-repo') } })]);
         // Language-neutral groups: the page and the VS Code tree translate the key.
-        expect(home.groups.map((g) => Object.keys(g).sort())).toEqual(Array(5).fill(['key', 'prs']));
-        expect(home.groups.map((g) => g.key)).toEqual(['to-review', 'rebase-only', 'up-to-date', 'mine', 'others']);
+        expect(home.groups.map((g) => Object.keys(g).sort())).toEqual(Array(4).fill(['key', 'prs']));
+        expect(home.groups.map((g) => g.key)).toEqual(['to-do', 'mine', 'waiting', 'others']);
 
         const email = await api<ApiErrorBody>('PUT', '/api/settings', { email: 'not-an-email' });
         expect(email.body.error).toEqual({ code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } });
@@ -377,7 +379,7 @@ describe('home', () => {
         expect(body.groups.flatMap((g) => g.prs)).toEqual([]);
     });
 
-    it('groups each PR by what moved since my review', async () => {
+    it('groups each PR by the review queue', async () => {
         await setup();
         // The type of #44's versions is only known once its summary is computed (PR opening).
         await api('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
@@ -385,22 +387,51 @@ describe('home', () => {
         expect(body.me?.displayName).toBe('Thomas Girard');
         expect(body.repos).toEqual([`${WS}/${REPO}`]);
         expect(body.errors).toEqual([]);
-        const groupOf = Object.fromEntries(body.groups.flatMap((g) => g.prs.map((p) => [p.id, g.key])));
-        expect(groupOf).toEqual({
-            [FAKE_PRS.main]: 'to-review',
-            [FAKE_PRS.long]: 'to-review',
-            [FAKE_PRS.rebaseOnly]: 'rebase-only',
+        expect(groupsOf(body)).toEqual({
+            // Designated reviewer without a current approval.
+            [FAKE_PRS.main]: 'to-do',
+            [FAKE_PRS.long]: 'to-do',
+            [FAKE_PRS.rebaseOnly]: 'to-do',
             [FAKE_PRS.mine]: 'mine',
-            [FAKE_PRS.neverReviewed]: 'to-review',
+            [FAKE_PRS.neverReviewed]: 'to-do',
+            // Not about me, minimum of 2 approvals reached.
             [FAKE_PRS.others]: 'others',
-            [FAKE_PRS.purged]: 'to-review',
+            [FAKE_PRS.purged]: 'to-do',
         });
-        const card = (id: number): PrCard | undefined => body.groups.flatMap((g) => g.prs).find((p) => p.id === id);
-        expect(card(FAKE_PRS.main)).toMatchObject({ versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, newComments: 2 });
-        expect(card(FAKE_PRS.long)).toMatchObject({ lastReviewed: 30, newVersions: 4, myApproval: true });
-        expect(card(FAKE_PRS.rebaseOnly)).toMatchObject({ lastReviewed: 1, newVersions: 1, newCodeVersions: 0 });
-        expect(card(FAKE_PRS.neverReviewed)).toMatchObject({ lastReviewed: null, newVersions: 2 });
-        expect(card(FAKE_PRS.others)).toMatchObject({ versionsCount: null, lastReviewed: null });
+        expect(cardOf(body, FAKE_PRS.main)).toMatchObject({
+            versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, requiredApprovals: 2, newComments: 2,
+            needsReview: true, designatedReviewer: true, followed: false, approvalHolds: false, build: null, needsRebase: null,
+        });
+        // My approval counts towards the minimum, the author's could not.
+        expect(cardOf(body, FAKE_PRS.long)).toMatchObject({ lastReviewed: 30, newVersions: 4, myApproval: true, approvals: 1, approvalHolds: false });
+        expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ lastReviewed: 1, newVersions: 1, newCodeVersions: 0 });
+        expect(cardOf(body, FAKE_PRS.mine)).toMatchObject({ approvals: 1, needsReview: true, designatedReviewer: false, needsRebase: null });
+        expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ lastReviewed: null, newVersions: 2 });
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ versionsCount: null, lastReviewed: null, approvals: 2, needsReview: false, designatedReviewer: false });
+    });
+
+    it('needs approvals: 2 out of 2 is "others", 1 is "to-do", even for a PR that does not concern me', async () => {
+        const { fake } = await setup();
+        let { body } = await api<Home>('GET', '/api/home');
+        expect(groupsOf(body)[FAKE_PRS.others]).toBe('others');
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ approvals: 2, requiredApprovals: 2, needsReview: false, versionsCount: null });
+
+        const bot = fake.data.prs.get(FAKE_PRS.others)?.pr.participants.find((p) => p.user?.uuid === '{ai}');
+        Object.assign(bot!, { approved: false, state: null });
+        ({ body } = await api<Home>('GET', '/api/home?fresh=1'));
+        expect(groupsOf(body)[FAKE_PRS.others]).toBe('to-do');
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ approvals: 1, needsReview: true, versionsCount: null });
+    });
+
+    it('designated reviewer: "to-do" until I approve, even once the minimum is reached', async () => {
+        const { fake } = await setup();
+        fake.data.prs.get(FAKE_PRS.neverReviewed)!.pr.participants.push(
+            { user: { uuid: '{cam}', display_name: 'Camille Durand' }, role: 'PARTICIPANT', approved: true, state: 'approved' },
+            { user: { uuid: '{ai}', display_name: 'review-bot' }, role: 'PARTICIPANT', approved: true, state: 'approved' },
+        );
+        const { body } = await api<Home>('GET', '/api/home');
+        expect(groupsOf(body)[FAKE_PRS.neverReviewed]).toBe('to-do');
+        expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ approvals: 2, needsReview: false, designatedReviewer: true });
     });
 
     it('opening a PR that does not concern me does not change its group', async () => {
@@ -410,22 +441,37 @@ describe('home', () => {
         expect(body.groups.find((g) => g.key === 'others')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.others]);
     });
 
-    it('a PR reviewed up to the latest version is "up to date"', async () => {
+    it('reviewed up to the latest version: "waiting", unless I am a designated reviewer who has not approved', async () => {
         await setup();
+        await api('POST', `${prPath(FAKE_PRS.others)}/reviewed`, { version: 1 });
         await api('POST', `${prPath()}/reviewed`, { version: 6 });
         const { body } = await api<Home>('GET', '/api/home');
-        expect(body.groups.find((g) => g.key === 'up-to-date')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.main]);
+        expect(groupsOf(body)[FAKE_PRS.others]).toBe('waiting');
+        expect(cardOf(body, FAKE_PRS.others)).toMatchObject({ lastReviewed: 1, newVersions: 0, newCodeVersions: 0 });
+        expect(groupsOf(body)[FAKE_PRS.main]).toBe('to-do');
     });
 
-    it('only rebases since my approval, which Bitbucket kept: "up to date", no re-approval', async () => {
+    it('only rebases since my approval, which Bitbucket kept: "waiting", no re-approval', async () => {
         const { fake } = await setup();
         const me = fake.data.prs.get(FAKE_PRS.rebaseOnly)?.pr.participants.find((p) => p.user?.uuid === '{me}');
         expect(me).toBeTruthy();
         Object.assign(me!, { approved: true, state: 'approved' });
         await api('GET', `${prPath(FAKE_PRS.rebaseOnly)}/summary`);
         const { body } = await api<Home>('GET', '/api/home');
-        const groupOf = (id: number): string | undefined => body.groups.find((g) => g.prs.some((p) => p.id === id))?.key;
-        expect(groupOf(FAKE_PRS.rebaseOnly)).toBe('up-to-date');
-        expect(body.groups.flatMap((g) => g.prs).find((p) => p.id === FAKE_PRS.rebaseOnly)).toMatchObject({ myApproval: true, newVersions: 1, newCodeVersions: 0 });
+        expect(groupsOf(body)[FAKE_PRS.rebaseOnly]).toBe('waiting');
+        expect(cardOf(body, FAKE_PRS.rebaseOnly)).toMatchObject({ myApproval: true, approvalHolds: true, designatedReviewer: true, newVersions: 1, newCodeVersions: 0 });
+    });
+
+    it('me unknown (token without read:user): every PR in "others", no history loaded, no error', async () => {
+        const current = await setup();
+        await restart(current);
+        await fetch(`http://127.0.0.1:${current.fake.port}/__fail-next?status=403`);
+        const { status, body } = await api<Home>('GET', '/api/home');
+        expect(status).toBe(200);
+        expect(body.me).toBeNull();
+        expect(body.errors).toEqual([]);
+        expect(new Set(Object.values(groupsOf(body)))).toEqual(new Set(['others']));
+        expect(Object.keys(groupsOf(body))).toHaveLength(Object.keys(FAKE_PRS).length);
+        expect(body.groups.flatMap((g) => g.prs).every((p) => p.versionsCount === null && !p.myApproval && !p.designatedReviewer)).toBe(true);
     });
 });

@@ -82,11 +82,11 @@ onMounted(load);
             <template v-for="group in visibleGroups" :key="group.key">
                 <details v-if="group.key === 'others'" class="rv-list" :data-group="group.key" :open="!home.me">
                     <summary class="rv-lgrp">{{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span></summary>
-                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :group-key="group.key" :me="home.me" />
+                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :me="home.me" />
                 </details>
                 <section v-else class="rv-list" :data-group="group.key">
                     <div class="rv-lgrp">{{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span></div>
-                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :group-key="group.key" :me="home.me" />
+                    <PrCardRow v-for="card in group.prs" :key="`${card.workspace}/${card.repo}/${card.id}`" :card="card" :me="home.me" />
                 </section>
             </template>
             <div v-if="!home.repos.length" class="rv-panel-msg" data-testid="no-repos">

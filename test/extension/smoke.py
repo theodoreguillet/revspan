@@ -89,7 +89,7 @@ def run() -> None:
         page.screenshot(path=f'{SHOTS}/02-mes-pr.png')
         tree_text = ' | '.join(page.locator('.pane-body .monaco-list-row').all_inner_texts())
         check('"My PRs" tree: main PR listed', row.count() > 0, tree_text[:400])
-        check('"My PRs" tree: groups', 'To review' in tree_text and 'My PRs' in tree_text, tree_text[:400])
+        check('"My PRs" tree: groups', 'To do' in tree_text and 'My PRs' in tree_text, tree_text[:400])
         view_title = ' '.join(page.locator('.pane-header .title').all_text_contents())
         check('view title localized from package.nls.json', 'my prs' in view_title.lower(), view_title)
 

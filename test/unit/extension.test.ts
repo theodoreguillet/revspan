@@ -370,22 +370,23 @@ describe('"My PRs" tree', () => {
     const card = (id: number, extra: Partial<PrCard> = {}): PrCard => ({
         workspace: 'acme', repo: 'records-api', id, title: `PR ${id}`, author: { uuid: '{a}', displayName: 'Camille' }, url: '',
         createdOn: '', updatedOn: '', versionsCount: 3, lastPushAt: '', lastReviewed: 1, newVersions: 2, newCodeVersions: 1,
-        approvals: 1, myApproval: false, newComments: 2, ...extra,
+        approvals: 1, requiredApprovals: 2, myApproval: false, newComments: 2, needsReview: true, designatedReviewer: false,
+        followed: false, approvalHolds: false, build: null, needsRebase: null, ...extra,
     });
     const home: Home = {
         me: { uuid: '{me}', displayName: 'Moi' },
         repos: ['acme/records-api'],
         errors: [],
         groups: [
-            { key: 'to-review', prs: [card(1)] },
-            { key: 'up-to-date', prs: [] },
+            { key: 'to-do', prs: [card(1)] },
+            { key: 'waiting', prs: [] },
             { key: 'others', prs: [card(2, { lastReviewed: null, versionsCount: null })] },
         ],
     };
 
     it('non-empty groups, badges, "Other" collapsed when I am known', () => {
         const tree = buildHomeTree(home, fr);
-        expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À relire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
+        expect(tree.map((g) => [g.label, g.icon, g.collapsed])).toEqual([['À faire (1)', 'eye', false], ['Autres PR ouvertes (1)', 'git-pull-request', true]]);
         expect(tree[0]?.prs[0]).toMatchObject({ ref: { workspace: 'acme', repo: 'records-api', id: 1 }, label: 'records-api #1 · PR 1', description: '+2 versions · dont 1 avec du code · 💬 2' });
         expect(tree[1]?.prs[0]).toMatchObject({ label: 'records-api #2 · PR 2', description: 'pas encore relue · 💬 2' });
         expect(buildHomeTree({ ...home, me: null }, fr).find((g) => g.key === 'others')?.collapsed).toBe(false);
@@ -393,7 +394,7 @@ describe('"My PRs" tree', () => {
 
     it('in English: group titles from the key, badges and tooltip', () => {
         const tree = buildHomeTree(home, en);
-        expect(tree.map((g) => g.label)).toEqual(['To review (1)', 'Other open PRs (1)']);
+        expect(tree.map((g) => g.label)).toEqual(['To do (1)', 'Other open PRs (1)']);
         expect(tree[0]?.prs[0]).toMatchObject({ description: '+2 versions · 1 with code · 💬 2' });
         expect(tree[0]?.prs[0]?.tooltip).toBe('PR 1\nacme/records-api #1 · Camille\n3 versions\n1 approval\n+2 versions\n1 with code\n💬 2');
         expect(tree[1]?.prs[0]).toMatchObject({ description: 'not reviewed yet · 💬 2' });
@@ -407,7 +408,7 @@ describe('"My PRs" tree', () => {
         const zero = { ...home, groups: [{ key: 'others' as const, prs: [card(4, { versionsCount: 0, approvals: 0 })] }] };
         expect(buildHomeTree(zero, fr)[0]?.prs[0]?.tooltip).toContain('\n0 version\n');
         expect(buildHomeTree(zero, en)[0]?.prs[0]?.tooltip).toContain('\n0 versions\n');
-        const one = { ...home, groups: [{ key: 'to-review' as const, prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
+        const one = { ...home, groups: [{ key: 'to-do' as const, prs: [card(5, { newVersions: 1, versionsCount: 1 })] }] };
         expect(buildHomeTree(one, en)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
         expect(buildHomeTree(one, fr)[0]?.prs[0]?.description).toMatch(/^\+1 version · /);
     });

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
-import type { HomeGroupKey, PrCard, User } from '../../shared/api.ts';
+import type { PrCard, User } from '../../shared/api.ts';
 import { tr } from '../i18n/index.ts';
 import { cardBadges, cardSubtitle } from '../lib/home.ts';
 import { prRoute } from '../lib/prUrl.ts';
 
-const props = defineProps<{ card: PrCard; groupKey: HomeGroupKey; me: User | null }>();
+const props = defineProps<{ card: PrCard; me: User | null }>();
 
-const badges = computed(() => cardBadges(tr(), props.card, props.groupKey, props.me));
+const badges = computed(() => cardBadges(tr(), props.card, props.me));
 const subtitle = computed(() => cardSubtitle(tr(), props.card, props.me));
 </script>
 

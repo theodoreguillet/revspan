@@ -24,7 +24,7 @@ export const FAKE_PRS = {
     mine: 45,
     /** I am a reviewer but did nothing (2 versions). */
     neverReviewed: 46,
-    /** Does not concern me (author Yann, 1 version). */
+    /** Does not concern me (author Yann, 1 version), already approved by Camille and the bot: minimum reached. */
     others: 47,
     /** v1 erased by Bitbucket (commit not found), v2 and v3 readable; my comment dates from v1. */
     purged: 48,
@@ -137,6 +137,8 @@ class FakeBuilder {
                 created_on: first.date,
                 updated_on: last.date,
                 participants,
+                // Like Bitbucket, the designated reviewers are the participants with the REVIEWER role.
+                reviewers: participants.flatMap((p) => (p.role === 'REVIEWER' && p.user ? [p.user] : [])),
                 links: { html: { href: `https://bitbucket.org/${WS}/${REPO}/pull-requests/${id}` } },
             },
             activity: [
@@ -313,7 +315,7 @@ export function buildFakeData(): FakeData {
     simplePr(b, FAKE_PRS.neverReviewed, 'never', 'DEMO-46 - feat(never): not reviewed yet', YAN,
         [{ user: ME, role: 'REVIEWER', approved: false, state: null }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 2);
     simplePr(b, FAKE_PRS.others, 'others', 'DEMO-47 - chore(others): not about me', YAN,
-        [{ user: CAM, role: 'REVIEWER', approved: false, state: null }], 1);
+        [{ user: CAM, role: 'REVIEWER', approved: true, state: 'approved' }, { user: AI, role: 'PARTICIPANT', approved: true, state: 'approved' }], 1);
     purgedPr(b);
     return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, nextId: b.nextId };
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
+import type { PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
 import { cardBadges, cardSubtitle } from '../../src/web/lib/home.ts';
@@ -71,19 +71,20 @@ describe('home cards', () => {
     const card = (over: Partial<PrCard>): PrCard => ({
         workspace: 'acme', repo: 'records-api', id: 1, title: 't', author: { uuid: '{a}', displayName: 'Auteur' }, url: 'u',
         createdOn: '2026-10-14T09:10:00Z', updatedOn: '2026-11-05T12:00:00Z', versionsCount: 10, lastPushAt: '2026-11-05T12:00:00Z',
-        lastReviewed: 7, newVersions: 3, newCodeVersions: 1, approvals: 2, myApproval: false, newComments: 2, ...over,
+        lastReviewed: 7, newVersions: 3, newCodeVersions: 1, approvals: 2, requiredApprovals: 2, myApproval: false, newComments: 2,
+        needsReview: false, designatedReviewer: false, followed: false, approvalHolds: false, build: null, needsRebase: null, ...over,
     });
-    const badges = (c: PrCard, key: HomeGroupKey = 'to-review'): string[] => cardBadges(fr, c, key, me).map((b) => b.text);
+    const badges = (c: PrCard): string[] => cardBadges(fr, c, me).map((b) => b.text);
 
     it('new versions, code, comments, approval', () => {
         expect(badges(card({}))).toEqual(['+3 versions', 'dont 1 avec du code', '💬 2 nouveaux']);
         expect(badges(card({ newCodeVersions: 0, newComments: 0, myApproval: true }))).toEqual(['+3 versions', 'rebase seul', '✓ approuvée']);
-        expect(badges(card({ newCodeVersions: null, newComments: 0 }), 'rebase-only')).toEqual(['+3 versions', 'rebase seul']);
+        expect(badges(card({ newCodeVersions: null, newComments: 0 }))).toEqual(['+3 versions']);
     });
 
     it('never reviewed: with the version count, or without it if unknown (light card)', () => {
         expect(badges(card({ lastReviewed: null, newComments: 0 }))).toEqual(['pas encore relue · 10 versions']);
-        expect(badges(card({ lastReviewed: null, versionsCount: null, newComments: 0 }), 'others')).toEqual(['pas encore relue']);
+        expect(badges(card({ lastReviewed: null, versionsCount: null, newComments: 0 }))).toEqual(['pas encore relue']);
     });
 
     it('subtitle; my PR: "you", no versions badge', () => {
@@ -91,7 +92,7 @@ describe('home cards', () => {
         expect(cardSubtitle(en, card({}), me)).toBe('Auteur · open for 22 days · pushed 2 hours ago · 2 approvals');
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
         expect(cardSubtitle(fr, mine, me)).toMatch(/^toi · /);
-        expect(badges(mine, 'mine')).toEqual(['💬 1 nouveau']);
+        expect(badges(mine)).toEqual(['💬 1 nouveau']);
     });
 });
 

@@ -79,7 +79,21 @@ export type ConnectionTest = { ok: true; me: User } | { ok: false; error: ApiErr
 
 // ---------- Home ----------
 
-export type HomeGroupKey = 'to-review' | 'rebase-only' | 'up-to-date' | 'mine' | 'others';
+/**
+ * to-do: waits for an action from me; mine: my PRs; waiting: I reviewed or approved it and nothing new needs me;
+ * others: has its minimum of approvals or asks nothing of me (every PR when the token cannot tell who I am).
+ */
+export type HomeGroupKey = 'to-do' | 'mine' | 'waiting' | 'others';
+
+/** Aggregate of the build statuses Bitbucket attaches to a PR's latest commit. */
+export type BuildState = 'failed' | 'running' | 'success' | 'none';
+
+export interface BuildSummary {
+    state: BuildState;
+    failed: number;
+    running: number;
+    total: number;
+}
 
 export interface PrCard extends PrRef {
     title: string;
@@ -94,9 +108,24 @@ export interface PrCard extends PrRef {
     newVersions: number;
     /** null: types of the new versions not yet computed. */
     newCodeVersions: number | null;
+    /** Approvals of participants other than the author (mine included), as Bitbucket's merge rule counts them. */
     approvals: number;
+    /** Minimum of approvals required for this PR's repository. */
+    requiredApprovals: number;
     myApproval: boolean;
     newComments: number;
+    /** approvals < requiredApprovals. */
+    needsReview: boolean;
+    /** I am among the reviewers designated on Bitbucket. */
+    designatedReviewer: boolean;
+    /** The author is one of my followed contributors. */
+    followed: boolean;
+    /** My approval is still active and only neutral versions arrived since. */
+    approvalHolds: boolean;
+    /** null: build statuses not loaded. */
+    build: BuildSummary | null;
+    /** Destination branch moved since the PR's base; null: not computed (always for others' PRs). */
+    needsRebase: boolean | null;
 }
 
 /** A home group: the page and the VS Code tree each show their own translation of the key. */

@@ -20,24 +20,21 @@ export interface GroupNode {
 }
 
 const ICONS: Record<HomeGroupKey, string> = {
-    'to-review': 'eye',
-    'rebase-only': 'sync',
-    'up-to-date': 'check',
+    'to-do': 'eye',
     'mine': 'account',
+    'waiting': 'clock',
     'others': 'git-pull-request',
 };
 
 /** Group title, translated from its key (the server sends no title). */
 function groupTitle(t: Translate, key: HomeGroupKey): string {
     switch (key) {
-        case 'to-review':
-            return t('To review');
-        case 'rebase-only':
-            return t('Quick re-approval · rebases only');
-        case 'up-to-date':
-            return t('Up to date');
+        case 'to-do':
+            return t('To do');
         case 'mine':
             return t('My PRs');
+        case 'waiting':
+            return t('Waiting on the author');
         case 'others':
             return t('Other open PRs');
     }
