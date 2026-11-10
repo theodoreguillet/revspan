@@ -11,9 +11,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Review queue: the home page and the VS Code view now show what waits for you. A PR needs review while it has fewer
   approvals than the minimum (2 by default, `revspan.review.requiredApprovals`, with an override per repository in
   `revspan.review.requiredApprovalsByRepository`). Approvals are counted the way Bitbucket counts them for the merge
-  rule: every participant except the author, you included.
+  rule: every participant except the author, you included. An invalid minimum (0, negative, not a whole number) falls
+  back to the default instead of hiding or flooding the queue. With a token that cannot read your profile (no
+  `read:user:bitbucket`), every PR lands in "Other open PRs", no notification is sent, and the page says why.
 - Four home groups: "To do", "My PRs", "Waiting on the author" and "Other open PRs". A PR where you are a designated
-  reviewer stays in "To do" until you approve it.
+  reviewer stays in "To do" until you approve it, or until you request changes and only neutral pushes follow (it then
+  waits on the author).
+- Draft PRs: they go to "Other open PRs" with a "draft" badge, never to "To do", and never notify (your own drafts stay
+  in "My PRs"). Once ready for review, a draft is treated like a new PR.
 - Followed contributors (`revspan.review.followedContributors`): follow an author from a PR row; their PRs are listed
   first and can raise a notification.
 - Grouping of "To do" and "Other open PRs" by repository, by contributor or not at all, chosen separately on the page
@@ -24,12 +29,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   windows; none on first run or when you switch an option on; rebase-only pushes never notify; at most 3 notifications
   at a time, then a summary.
 - Background refresh in VS Code, every `revspan.refreshIntervalMinutes` minutes (5 by default), started when VS Code
-  starts. It does nothing while all notifications are off and neither the view nor the panel is visible.
+  starts. It does nothing while all notifications are off and neither the view nor the panel is visible. Like the
+  repositories, the refresh interval and the notification options are ignored when set by an untrusted workspace.
 - Build status from any CI that publishes statuses to Bitbucket: a badge on the home cards and in the PR header, and a
-  "Builds" tab on the PR page with each check and its link.
-- "Needs rebase" flag on your own PRs when the destination branch moved since the PR's base.
-- Draft PRs: they go to "Other open PRs" with a "draft" badge, never to "To do", and never notify (your own drafts stay
-  in "My PRs"). Once ready for review, a draft is treated like a new PR.
+  "Builds" tab on the PR page with each check and its link. The checks are read again during the hour after a push, so
+  a CI that starts after another one finished (lint first, then the tests) is not missed. A re-run on the same commit
+  later than that shows on the PR page, or with Refresh for your own PRs.
+- "Needs rebase" flag on your own open PRs when the destination branch moved since the PR's base.
 - A notice on the home page and in the VS Code view when a repository has more open PRs than Revspan reads (the first
   200 are listed).
 
@@ -38,26 +44,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - The home groups "To review", "Quick re-approval" and "Up to date" are replaced by the four groups above. A PR whose
   approval Bitbucket kept after rebase-only pushes goes to "Waiting on the author".
 - The approval count of a card now includes your own approval, as Bitbucket's merge rule does.
-- Several windows share one computed home (`home.json` and `home.lock` in the configuration folder, file mode `0600`),
-  and the refresh is much lighter on Bitbucket: a steady state costs about 3 requests per cycle instead of 30. With
-  several windows, a new push can show up after up to about 1.5 intervals.
+- Several windows share one computed home (`home.json`, `home.lock` and `home.drop` in the configuration folder, file
+  mode `0600`), and the refresh is much lighter on Bitbucket: a steady state costs about 3 requests per cycle instead
+  of 30. With several windows, a new push can show up after up to about 1.5 intervals. A write from Revspan (approve,
+  comment) drops the shared home, so it shows at once, and Refresh (the VS Code command or the page's "↻ Refresh"
+  button) reads Bitbucket again instead of the shared home.
 - Saving the settings no longer resets the session unless the e-mail or the token changed.
 - Marketplace README and privacy section updated (background refresh, local notifications, local data).
-- A designated reviewer who requested changes, with only neutral pushes since, now sees the PR in "Waiting on the
-  author" instead of "To do".
-- The notification and refresh settings are ignored when set by an untrusted workspace, like the repositories.
-
-### Fixed
-
-- A write from Revspan (approve, comment) is visible on the home page right away instead of after the next cycle.
-- With a token that cannot read your profile (no `read:user:bitbucket`), every PR lands in "Other open PRs", nothing
-  crashes, no notification is sent, and the page says why.
-- An invalid minimum of approvals (0, negative, not a whole number) falls back to the default instead of hiding or
-  flooding the queue.
-- The page's "↻ Refresh" button now reads Bitbucket again instead of the home shared by the windows, and Refresh also
-  re-reads the build checks of your own PRs (a re-run on the same commit).
-- A build that fails after an earlier check passed on the same commit (lint first, then the CI) is no longer shown as
-  passed: checks are read again during the hour after a push.
 
 ## [3.0.0] - 2026-11-09
 
