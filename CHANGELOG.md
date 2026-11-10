@@ -4,6 +4,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-10
+
+### Added
+
+- "To rebase" group (« À rebaser »): your open PRs whose destination branch moved since their base leave "My PRs" and
+  are listed right after "To review", on the home page and in the VS Code view. Build checks, the Refresh recheck and
+  the failed-build notification cover them like any of your PRs.
+- Hide the PRs of contributors you do not follow (`revspan.review.hideUnfollowed`, on by default; `review.hideUnfollowed`
+  in the browser version). Your own PRs, the PRs where you are a designated reviewer and the ones you reviewed or
+  approved always stay, and nothing is hidden while you follow nobody. The home page shows how many PRs are hidden,
+  with a link to the settings. Notifications are unchanged, and switching the setting costs no Bitbucket request.
+- Follow a contributor from Settings: under "Followed contributors", pick one of the authors of the open PRs in your
+  repositories and click **Add**.
+
+### Changed
+
+- "To do" is now "To review" (« À relire »). Once you follow at least one contributor, it lists only the PRs of
+  followed authors, the ones where you are a designated reviewer and the ones you reviewed or approved whose code
+  changed since; other PRs needing review go to "Other open PRs". While you follow nobody, every PR needing review is
+  still listed.
+- Saving a setting VS Code does not know yet (the extension was updated but the window was not reloaded) now asks you
+  to reload the window instead of showing an internal error.
+- French texts of the review, notification and settings strings now say « tu » everywhere.
+
 ## [3.1.0] - 2026-11-10
 
 ### Added
