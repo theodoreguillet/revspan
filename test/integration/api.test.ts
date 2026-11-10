@@ -696,7 +696,7 @@ describe('request budget', () => {
         expect(cardOf(after!, FAKE_PRS.purged)).toMatchObject({ versionsCount: 4, head: fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash });
     });
 
-    it('(c) builds: a running or missing build is re-read once per interval, a failed or successful one never again', async () => {
+    it('(c) builds: a running build (or none yet on a recent push) is re-read once per interval; failed, successful or none on an old push never again', async () => {
         fakeTime();
         const { fake } = await setup();
         const neverHead = [...fake.data.repo.commits.keys()].find((k) => k.startsWith(fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.source?.commit?.hash ?? '-')) ?? '';
@@ -817,14 +817,46 @@ describe('request budget', () => {
         Object.assign(me!, { approved: true, state: 'approved' });
         elapse(3 * MINUTE_MS);
         expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
-        elapse(3 * MINUTE_MS);
-        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
-        // Once the activity has the approval, it is kept.
+        // The replica caught up: the activity has the approval, it is kept.
         fake.data.prs.get(FAKE_PRS.neverReviewed)!.activity.push({ approval: { date: '2026-11-01T09:00:00Z', user: { uuid: '{me}' } } });
         elapse(3 * MINUTE_MS);
         expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
         elapse(3 * MINUTE_MS);
         expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.neverReviewed}`);
+    });
+
+    it('an activity that never matches the list is kept on its second read under the same list: one extra read at most', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        await home();
+        const me = fake.data.prs.get(FAKE_PRS.neverReviewed)!.pr.participants.find((p) => p.user?.uuid === '{me}');
+        Object.assign(me!, { approved: true, state: 'approved' });
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).toContain(`activity #${FAKE_PRS.neverReviewed}`);
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.neverReviewed}`);
+    });
+
+    it('deleted comments count towards comment_count: such an activity is kept at once', async () => {
+        fakeTime();
+        const { fake } = await setup();
+        const main = fake.data.prs.get(FAKE_PRS.main)!;
+        const deleted = main.comments[0]!;
+        deleted.deleted = true;
+        main.pr.comment_count = main.comments.length;
+        await home();
+        elapse(3 * MINUTE_MS);
+        expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.main}`);
+    });
+
+    it('a home with an unreadable repository is computed once per poll: the tree refresh right after reuses it', async () => {
+        fakeTime();
+        await setup();
+        await api('PUT', '/api/settings', { repos: [`${WS}/${REPO}`, `${WS}/missing-repo`] });
+        expect((await home()).errors).toHaveLength(1);
+        expect(await requestsOf(home)).toEqual([]);
     });
 
     it('one kept activity per PR: a new push replaces it', async () => {

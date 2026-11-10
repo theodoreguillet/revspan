@@ -92,7 +92,7 @@ const sameCommit = (a: string, b: string): boolean => a.startsWith(b) || b.start
 /**
  * Whether an activity is at least as recent as the list that led to reading it: its last push is the list's head, every
  * approval or change request of the list has its event, and it has all the comments the list counts. A read lagging behind
- * (replica) is used once, never kept.
+ * (replica) is used once, not kept.
  */
 function consistentWithList(activity: readonly BbActivity[], raw: BbPullRequest): boolean {
     const pushes = activity.flatMap((e) => (e.update?.source?.commit?.hash ? [{ date: e.update.date, hash: e.update.source.commit.hash }] : []));
@@ -108,8 +108,8 @@ function consistentWithList(activity: readonly BbActivity[], raw: BbPullRequest)
             return false;
         }
     }
-    const comments = activity.filter((e) => e.comment && !e.comment.deleted).length;
-    return comments >= (raw.comment_count ?? 0);
+    // Deleted comments included: whether Bitbucket counts them or not, a complete activity has at least that many.
+    return activity.filter((e) => e.comment).length >= (raw.comment_count ?? 0);
 }
 
 export class HomeService {
@@ -118,6 +118,13 @@ export class HomeService {
     private readonly cache: Cache;
     /** Computations in progress in this window, per home key (the tree and the poll share one). */
     private readonly pending = new Map<string, Promise<Home>>();
+    /**
+     * Last home this window computed, reused like the shared one, including a home that is not shared (repository error,
+     * profile unknown): the tree refresh after a poll must not compute it again.
+     */
+    private last: { key: string; at: number; home: Home } | null = null;
+    /** Per PR, the list key under which the activity read did not match the list (kept if the next read still does not). */
+    private readonly mismatched = new Map<string, string>();
 
     constructor({ session, store, cache }: { session: BitbucketSession; store: Store; cache: Cache }) {
         this.session = session;
@@ -147,11 +154,14 @@ export class HomeService {
         return pending;
     }
 
-    /** The home another window computed less than reuseMs ago for the same key, if any. */
+    /** The home this window or another one computed less than reuseMs ago for the same key, if any. */
     private shared(key: string, reuseMs: number): Home | null {
-        const snapshot = this.store.homeSnapshot();
-        const age = snapshot ? Date.now() - snapshot.at : -1;
-        return snapshot && snapshot.key === key && age >= 0 && age < reuseMs ? snapshot.home : null;
+        // The more recent of this window's own home and the shared one.
+        const latest = [this.last, this.store.homeSnapshot()]
+            .filter((candidate) => candidate?.key === key)
+            .reduce<{ at: number; home: Home } | null>((best, candidate) => (candidate && (!best || candidate.at > best.at) ? candidate : best), null);
+        const age = latest ? Date.now() - latest.at : -1;
+        return latest && age >= 0 && age < reuseMs ? latest.home : null;
     }
 
     /**
@@ -219,6 +229,7 @@ export class HomeService {
         }));
         errors.sort((a, b) => a.repo.localeCompare(b.repo));
         const home: Home = { me, repos: [...repos], groups, errors };
+        this.last = { key, at: startedAt, home };
         // An incomplete home (unreadable repository, unknown profile) is not shared: the other windows try for themselves.
         if (errors.length === 0 && me !== null) {
             this.store.saveHomeSnapshot({ at: startedAt, key, home }, generation);
@@ -260,8 +271,14 @@ export class HomeService {
             return kept.activity;
         }
         const activity = await read();
-        if (consistentWithList(activity, raw)) {
+        // A second mismatch under the same list key is no replica lag (it would have caught up): kept, so a lasting
+        // difference costs one extra read per change, not one per poll.
+        const prKey = prKeyOf(ref);
+        if (consistentWithList(activity, raw) || this.mismatched.get(prKey) === key) {
             this.cache.set(entry, { key, activity });
+            this.mismatched.delete(prKey);
+        } else {
+            this.mismatched.set(prKey, key);
         }
         return activity;
     }
