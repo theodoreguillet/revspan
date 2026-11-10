@@ -248,36 +248,48 @@ describe('notified state (Store)', () => {
             expect(claim(a, 'acme/records-api#1', 'bbbbbbbbbbbb')).toBe(false);
         });
 
+        const prefs = { newPullRequest: true, newVersion: true, buildFailed: true };
+        const card = (head: string): PrCard => ({
+            workspace: 'acme', repo: 'records-api', id: 7, title: 'PR 7', author: { uuid: '{cam}', displayName: 'Camille' }, url: '',
+            createdOn: '', updatedOn: '', versionsCount: 2, lastPushAt: '', lastReviewed: 1, newVersions: 1, newCodeVersions: 1,
+            approvals: 0, requiredApprovals: 2, myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false,
+            followed: true, approvalHolds: false, build: null, needsRebase: null, head,
+        });
+        const home = (prs: PrCard[]): Home => ({
+            me: { uuid: '{me}', displayName: 'Robin' }, repos: ['acme/records-api'], errors: [],
+            groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }],
+        });
+        /** One poll of a window: plan on the state re-read inside the update, as the notifier does. */
+        const poll = (store: Store, polled: Home): PendingNotification[] => {
+            let sent: PendingNotification[] = [];
+            store.updateNotified((state: NotifiedState) => {
+                const plan = planNotifications(polled, prefs, state);
+                Object.assign(state, plan.next);
+                sent = plan.notifications;
+            });
+            return sent;
+        };
+
         it('the planner run in each window gives one notification for a PR and head, never two', () => {
             const dir = tempDir();
             const windows = [new Store(dir), new Store(dir)];
-            const prefs = { newPullRequest: true, newVersion: true, buildFailed: true };
-            const card = (head: string): PrCard => ({
-                workspace: 'acme', repo: 'records-api', id: 7, title: 'PR 7', author: { uuid: '{cam}', displayName: 'Camille' }, url: '',
-                createdOn: '', updatedOn: '', versionsCount: 2, lastPushAt: '', lastReviewed: 1, newVersions: 1, newCodeVersions: 1,
-                approvals: 0, requiredApprovals: 2, myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false,
-                followed: true, approvalHolds: false, build: null, needsRebase: null, head,
-            });
-            const home = (prs: PrCard[]): Home => ({
-                me: { uuid: '{me}', displayName: 'Robin' }, repos: ['acme/records-api'], errors: [],
-                groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }],
-            });
-            /** One poll of a window: plan on the state re-read inside the update, as the notifier does. */
-            const poll = (store: Store, polled: Home): PendingNotification[] => {
-                let sent: PendingNotification[] = [];
-                store.updateNotified((state: NotifiedState) => {
-                    const plan = planNotifications(polled, prefs, state);
-                    Object.assign(state, plan.next);
-                    sent = plan.notifications;
-                });
-                return sent;
-            };
             const sent = (polled: Home): string[] => windows.flatMap((store) => poll(store, polled).map((n) => `${n.kind} #${n.ref.id}`));
 
             expect(sent(home([]))).toEqual([]);
             expect(sent(home([card('aaaaaaaaaaaa')]))).toEqual(['newPullRequest #7']);
             expect(sent(home([card('bbbbbbbbbbbb')]))).toEqual(['newVersion #7']);
             expect(sent(home([card('bbbbbbbbbbbb')]))).toEqual([]);
+        });
+
+        it('window B polling with an older home after window A: no duplicate, in either window', () => {
+            const dir = tempDir();
+            const [a, b] = [new Store(dir), new Store(dir)];
+            poll(a, home([card('aaaaaaaaaaaa')]));
+            expect(poll(a, home([card('bbbbbbbbbbbb')])).map((n) => n.kind)).toEqual(['newVersion']);
+            // B's request was answered by a lagging replica: it still sees the previous head.
+            expect(poll(b, home([card('aaaaaaaaaaaa')]))).toEqual([]);
+            expect(poll(a, home([card('bbbbbbbbbbbb')]))).toEqual([]);
+            expect(poll(b, home([card('bbbbbbbbbbbb')]))).toEqual([]);
         });
     });
 });

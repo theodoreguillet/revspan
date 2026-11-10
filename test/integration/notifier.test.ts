@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Home } from '../../src/shared/api.ts';
+import type { Home, PrCard, User, VersionKind } from '../../src/shared/api.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import { Store } from '../../src/server/infra/config.ts';
 import { createSecretStore } from '../../src/server/infra/secrets.ts';
 import type { HomeService } from '../../src/server/services/home-service.ts';
 import { createServices, type Services } from '../../src/server/services/index.ts';
 import type { BitbucketSession } from '../../src/server/services/session.ts';
+import type { PrService } from '../../src/server/services/pr-service.ts';
 import { Notifier } from '../../src/extension/notifier.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
 import { env, recorded, resetFakeVscode, window } from '../support/fake-vscode.ts';
@@ -38,7 +39,7 @@ async function openWindow(onPolled = vi.fn()): Promise<{ store: Store; services:
     const cache = new Cache(path.join(dir, `cache-${notifiers.length}`));
     caches.push(cache);
     const services = createServices({ store, secrets, cache, baseUrl: fake.url, fetchImpl: countingFetch });
-    const notifier = new Notifier({ store, session: services.session, home: services.home, onPolled });
+    const notifier = new Notifier({ store, session: services.session, home: services.home, prs: services.prs, onPolled });
     notifiers.push(notifier);
     return { store, services, notifier, onPolled };
 }
@@ -118,6 +119,17 @@ describe('background refresh and notifications', () => {
         expect(recorded.infos).toEqual([]);
     });
 
+    it('a push with no change since the previous head (neutral version) on a PR I reviewed: nothing shown, head recorded', async () => {
+        const { store, notifier } = await openWindow();
+        await notifier.poll();
+        pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
+        expireLiveCaches();
+        await notifier.poll();
+        expect(recorded.infos).toEqual([]);
+        const head = fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash ?? '';
+        expect(store.notified().seen[`${WS}/${REPO}#${FAKE_PRS.purged}`]?.split(' ')[0]).toBe(head.slice(0, 12));
+    });
+
     it('within the cache TTL a poll reads the cached home: a push is only seen once the TTL elapsed', async () => {
         const { notifier } = await openWindow();
         await notifier.poll();
@@ -155,59 +167,142 @@ describe('background refresh and notifications', () => {
     });
 });
 
-describe('skipped cycles', () => {
-    /** Notifier on stubbed session and home service (no Bitbucket). */
-    const stubbed = async (hasToken: boolean, get: () => Promise<Home>, repos = [`${WS}/${REPO}`]): Promise<{ notifier: Notifier; store: Store; onPolled: ReturnType<typeof vi.fn>; get: ReturnType<typeof vi.fn> }> => {
+describe('cycles on stubbed services', () => {
+    const ME: User = { uuid: '{me}', displayName: 'Me' };
+    const home = (over: Partial<Home>): Home => ({ me: ME, repos: [`${WS}/${REPO}`], groups: [], errors: [], ...over });
+    const card = (id: number, over: Partial<PrCard> = {}): PrCard => ({
+        workspace: WS, repo: REPO, id, title: `PR ${id}`, author: { uuid: '{cam}', displayName: 'Camille' }, url: '', createdOn: '', updatedOn: '',
+        versionsCount: 2, lastPushAt: '', lastReviewed: null, newVersions: 0, newCodeVersions: null, approvals: 0, requiredApprovals: 2,
+        myApproval: false, newComments: 0, needsReview: true, designatedReviewer: false, followed: false, approvalHolds: false, build: null,
+        needsRebase: null, head: `${id}`.padEnd(12, 'a'), ...over,
+    });
+    const todo = (...prs: PrCard[]): Home => home({ groups: [{ key: 'to-do', prs }, { key: 'mine', prs: [] }, { key: 'waiting', prs: [] }, { key: 'others', prs: [] }] });
+
+    /** Notifier on stubbed session, home and PR services (no Bitbucket). */
+    async function stubbed({ hasToken = true, me = ME, get = async () => home({}), repos = [`${WS}/${REPO}`], kinds = async () => [] as { hash: string; kind: VersionKind }[] }: {
+        hasToken?: boolean;
+        me?: User | null;
+        get?: () => Promise<Home>;
+        repos?: string[];
+        kinds?: (ref: unknown) => Promise<{ hash: string; kind: VersionKind }[]>;
+    } = {}) {
         const store = new Store(fs.mkdtempSync(path.join(dir, 'stub-')));
         await store.saveConfig({ repos });
         const onPolled = vi.fn();
-        const home = { get: vi.fn(get) };
+        const session = { hasToken: vi.fn(async () => hasToken), me: vi.fn(async () => me) };
+        const homeService = { get: vi.fn(get) };
+        const prs = { versionKinds: vi.fn(kinds) };
         const notifier = new Notifier({
             store,
-            session: { hasToken: async () => hasToken } as unknown as BitbucketSession,
-            home: home as unknown as HomeService,
+            session: session as unknown as BitbucketSession,
+            home: homeService as unknown as HomeService,
+            prs: prs as unknown as PrService,
             onPolled,
         });
         notifiers.push(notifier);
-        return { notifier, store, onPolled, get: home.get };
-    };
-    const home = (over: Partial<Home>): Home => ({ me: { uuid: '{me}', displayName: 'Me' }, repos: [`${WS}/${REPO}`], groups: [], errors: [], ...over });
+        return { notifier, store, onPolled, get: homeService.get, me: session.me, versionKinds: prs.versionKinds };
+    }
 
-    it('no token, no repositories, or me unknown: nothing recorded, nothing refreshed', async () => {
-        const cases = [
-            await stubbed(false, async () => home({})),
-            await stubbed(true, async () => home({}), []),
-            await stubbed(true, async () => home({ me: null })),
-        ];
-        for (const { notifier, store, onPolled } of cases) {
+    it('no token, no repositories, or me unknown: no PR list fetched, nothing recorded, nothing refreshed', async () => {
+        const cases = [await stubbed({ hasToken: false }), await stubbed({ repos: [] }), await stubbed({ me: null })];
+        for (const { notifier, store, onPolled, get } of cases) {
             await notifier.poll();
             expect(store.notified().initialized).toBe(false);
             expect(onPolled).not.toHaveBeenCalled();
+            expect(get).not.toHaveBeenCalled();
         }
-        expect(cases[0]?.get).not.toHaveBeenCalled();
-        expect(cases[1]?.get).not.toHaveBeenCalled();
+        expect(cases[0]?.me).not.toHaveBeenCalled();
+        expect(cases[2]?.me).toHaveBeenCalledTimes(1);
     });
 
     it('reads the home through its caches, never fresh (fresh is for the "Refresh" command only)', async () => {
-        const { notifier, get } = await stubbed(true, async () => home({}));
+        const { notifier, get } = await stubbed();
         await notifier.poll();
         expect(get).toHaveBeenCalledTimes(1);
-        expect(get.mock.calls[0]?.[0]?.fresh).not.toBe(true);
+        expect(get).not.toHaveBeenCalledWith(expect.objectContaining({ fresh: true }));
     });
 
     it('a failing refresh never throws from the timer', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const { notifier, onPolled } = await stubbed(true, async () => {
+        const { notifier, onPolled } = await stubbed({ get: async () => {
             throw new Error('network down');
-        });
+        } });
         await expect(notifier.poll()).resolves.toBeUndefined();
         expect(onPolled).not.toHaveBeenCalled();
         expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('network down'));
     });
 
+    describe('code check of new versions', () => {
+        const prKey = (id: number): string => `${WS}/${REPO}#${id}`;
+        const hash = (id: number, version: number): string => `${id}v${version}`.padEnd(40, '0');
+        /** Before: #1 reviewed, #2 approved, #3 untouched; after: a new head on each. */
+        const before = todo(card(1, { lastReviewed: 1, head: hash(1, 1).slice(0, 12) }), card(2, { myApproval: true, head: hash(2, 1).slice(0, 12) }), card(3, { head: hash(3, 1).slice(0, 12) }));
+        const after = todo(card(1, { lastReviewed: 1, head: hash(1, 2).slice(0, 12) }), card(2, { myApproval: true, head: hash(2, 2).slice(0, 12) }), card(3, { head: hash(3, 2).slice(0, 12) }));
+
+        it('only the candidates are checked; rebase-only gives nothing, code notifies, a failed check counts as code', async () => {
+            vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            let current = before;
+            const kinds = async (ref: unknown): Promise<{ hash: string; kind: VersionKind }[]> => {
+                const id = (ref as { id: number }).id;
+                if (id === 2) {
+                    throw new Error('summary failed');
+                }
+                return [{ hash: hash(id, 1), kind: 'creation' }, { hash: hash(id, 2), kind: 'rebase-only' }];
+            };
+            const { notifier, versionKinds, store } = await stubbed({ get: async () => current, kinds });
+            await notifier.poll();
+            expect(versionKinds).not.toHaveBeenCalled();
+            current = after;
+            await notifier.poll();
+            expect(versionKinds.mock.calls.map(([ref]) => (ref as { id: number }).id).sort()).toEqual([1, 2]);
+            expect(recorded.infos).toEqual(['New version to review: PR 2']);
+            expect(store.notified().seen[prKey(1)]?.split(' ')[0]).toBe(hash(1, 2).slice(0, 12));
+        });
+
+        it('never checked when the newVersion notification is off', async () => {
+            let current = before;
+            const { notifier, versionKinds, store } = await stubbed({ get: async () => current });
+            await store.saveConfig({ review: { ...store.config.review, notifications: { newPullRequest: true, newVersion: false, buildFailed: true } } });
+            await notifier.poll();
+            current = after;
+            await notifier.poll();
+            expect(versionKinds).not.toHaveBeenCalled();
+            expect(recorded.infos).toEqual([]);
+        });
+    });
+
+    it('burst: at most 3 toasts, then one summary whose "Show" focuses the Revspan view; everything recorded', async () => {
+        let current = todo();
+        const { notifier, store } = await stubbed({ get: async () => current });
+        await notifier.poll();
+        current = todo(...[1, 2, 3, 4, 5].map((id) => card(id, { followed: true })));
+        const shown = vi.spyOn(window, 'showInformationMessage').mockImplementation(async (message: string) => {
+            recorded.infos.push(message);
+            return (message.includes('more') ? 'Show' : undefined) as never;
+        });
+        await notifier.poll();
+        await vi.waitFor(() => expect(recorded.commands).toEqual([{ command: 'revspan.home.focus', args: [] }]));
+        expect(shown).toHaveBeenCalledTimes(4);
+        expect(recorded.infos).toEqual([
+            'New PR to review from Camille: PR 1', 'New PR to review from Camille: PR 2', 'New PR to review from Camille: PR 3',
+            '2 more pull requests need your attention',
+        ]);
+        expect(Object.keys(store.notified().seen).filter((k) => k.includes('#'))).toHaveLength(5);
+    });
+
+    it('one more: singular summary, in French too', async () => {
+        let current = todo();
+        const { notifier } = await stubbed({ get: async () => current });
+        await notifier.poll();
+        current = todo(...[1, 2, 3, 4].map((id) => card(id, { followed: true })));
+        env.language = 'fr';
+        await notifier.poll();
+        expect(recorded.infos.at(-1)).toBe('1 autre PR demande ton attention');
+    });
+
     it('polls after the startup delay, then every refresh interval; re-armed on a change; stopped when disposed', async () => {
         vi.useFakeTimers();
-        const { notifier, store } = await stubbed(true, async () => home({}));
+        const { notifier, store } = await stubbed();
         const poll = vi.spyOn(notifier, 'poll').mockResolvedValue();
         notifier.start(10_000);
         await vi.advanceTimersByTimeAsync(9_999);
@@ -231,7 +326,7 @@ describe('skipped cycles', () => {
 
     it('disposed before the startup poll: no poll at all', async () => {
         vi.useFakeTimers();
-        const { notifier } = await stubbed(true, async () => home({}));
+        const { notifier } = await stubbed();
         const poll = vi.spyOn(notifier, 'poll');
         notifier.start(10_000);
         notifier.dispose();

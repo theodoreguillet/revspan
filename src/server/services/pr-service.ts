@@ -1,6 +1,6 @@
 // One PR: versions, comparisons, summaries, and actions (comments, resolution, approval).
 import type {
-    Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, ViewedRequest,
+    Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, VersionKind, VersionSummary, ViewedRequest,
 } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import { compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource } from '../core/compare.ts';
@@ -42,6 +42,16 @@ export class PrService {
     }
 
     async summary(ref: PrRef): Promise<Summary> {
+        return { versions: (await this.summarize(ref)).results };
+    }
+
+    /** Type of each version, oldest first, with its commit (the notifier tells code from rebases since a given head). */
+    async versionKinds(ref: PrRef): Promise<{ hash: string; kind: VersionKind }[]> {
+        const { versions, results } = await this.summarize(ref);
+        return versions.map((version, i) => ({ hash: version.hash, kind: results[i]?.kind ?? 'unavailable' }));
+    }
+
+    private async summarize(ref: PrRef): Promise<{ versions: Version[]; results: VersionSummary[] }> {
         const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => ({
             versions,
             // Unavailable version: immediate summary, never cached.
@@ -58,7 +68,7 @@ export class PrService {
                 }
             });
         });
-        return { versions: results };
+        return { versions, results };
     }
 
     async compare(ref: PrRef, from: number, to: number, context: number): Promise<Comparison> {

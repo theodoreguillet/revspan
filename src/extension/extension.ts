@@ -75,7 +75,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         tree.refresh({ fresh: true });
     }
 
-    const notifier = new Notifier({ store: app.store, session: app.services.session, home: app.services.home, onPolled: () => tree.refresh() });
+    const notifier = new Notifier({
+        store: app.store, session: app.services.session, home: app.services.home, prs: app.services.prs, onPolled: () => tree.refresh(),
+    });
     const refreshSetting = `${REPOS_SETTING.section}.${REVIEW_SETTING_KEYS.refreshMinutes}`;
 
     const diffs = new DiffDocuments(app.services.prs);

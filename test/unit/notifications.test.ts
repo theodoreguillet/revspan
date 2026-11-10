@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Home, HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
 import type { NotificationPrefs } from '../../src/shared/review-settings.ts';
 import type { NotifiedState } from '../../src/server/infra/config.ts';
-import { planNotifications } from '../../src/extension/lib/notifications.ts';
+import { capNotifications, codeChangedSince, planNotifications, versionCandidates, type PendingNotification } from '../../src/extension/lib/notifications.ts';
 
 const ME: User = { uuid: '{me}', displayName: 'Robin Martin' };
 const CAM: User = { uuid: '{cam}', displayName: 'Camille Durand' };
@@ -31,10 +31,13 @@ const homeOf = (groups: Partial<Record<HomeGroupKey, PrCard[]>>, over: Partial<H
 const failedBuild = { state: 'failed', failed: 1, running: 0, total: 1 } as const;
 
 /** Runs the planner and returns its notifications as "kind #id", with the next state. */
-function run(home: Home, state: NotifiedState, prefs: NotificationPrefs = ALL_ON): { sent: string[]; next: NotifiedState } {
-    const plan = planNotifications(home, prefs, state);
+function run(home: Home, state: NotifiedState, prefs: NotificationPrefs = ALL_ON, codeChanged: Record<string, boolean | null> = {}): { sent: string[]; next: NotifiedState } {
+    const plan = planNotifications(home, prefs, state, codeChanged);
     return { sent: plan.notifications.map((n) => `${n.kind} #${n.ref.id}`), next: plan.next };
 }
+
+/** Heads recorded for a key, most recent first. */
+const headsIn = (state: NotifiedState, key: string): string[] => (state.seen[key] ?? '').split(' ').filter(Boolean);
 
 /** State after a first (silent) run on `home`. */
 const baselineOf = (home: Home): NotifiedState => run(home, EMPTY).next;
@@ -117,11 +120,21 @@ describe('notification planner', () => {
             expect(run(home, baseline).sent).toEqual(['newVersion #20', 'newVersion #21']);
         });
 
-        it('a new head with only a rebase (newCodeVersions === 0): none, the head is recorded', () => {
-            const home = homeOf({ waiting: [card(23, { lastReviewed: 1, newCodeVersions: 0, head: headOf(23, 2) })] });
-            const { sent, next } = run(home, baseline);
+        it('only neutral versions since the previous head (codeChanged false): none, the head is recorded', () => {
+            const home = homeOf({ waiting: [card(23, { lastReviewed: 1, newCodeVersions: 1, head: headOf(23, 2) })] });
+            const { sent, next } = run(home, baseline, ALL_ON, { [`${REPO}#23`]: false });
             expect(sent).toEqual([]);
-            expect(next.seen[`${REPO}#23`]).toBe(headOf(23, 2));
+            expect(headsIn(next, `${REPO}#23`)).toEqual([headOf(23, 2), headOf(23, 1)]);
+        });
+
+        it('code since the previous head notifies, whatever newCodeVersions says; a failed check (null) counts as code', () => {
+            const home = homeOf({ 'to-do': [card(20, { lastReviewed: 1, newCodeVersions: 0, head: headOf(20, 2) }), card(23, { lastReviewed: 1, head: headOf(23, 2) })] });
+            expect(run(home, baseline, ALL_ON, { [`${REPO}#20`]: true, [`${REPO}#23`]: null }).sent).toEqual(['newVersion #20', 'newVersion #23']);
+        });
+
+        it('approval only, then a rebase: none', () => {
+            const home = homeOf({ waiting: [card(21, { myApproval: true, head: headOf(21, 2) })] });
+            expect(run(home, baseline, ALL_ON, { [`${REPO}#21`]: false }).sent).toEqual([]);
         });
 
         it('a new head on a PR I never reviewed nor approved: none', () => {
@@ -168,10 +181,16 @@ describe('notification planner', () => {
             });
             const off = run(changed, baseline, ALL_OFF);
             expect(off.sent).toEqual([]);
-            expect(off.next.seen[`${REPO}#40`]).toBe(headOf(40, 2));
+            expect(headsIn(off.next, `${REPO}#40`)[0]).toBe(headOf(40, 2));
             expect(off.next.seen[`${REPO}#42`]).toBe(headOf(42));
             expect(off.next.seen[`${REPO}#41#build`]).toBe(headOf(41));
             expect(run(changed, off.next, ALL_ON).sent).toEqual([]);
+        });
+
+        it('a preference off does not hide another kind due for the same PR', () => {
+            const baseline = baselineOf(homeOf({ 'to-do': [card(46, { lastReviewed: 1 })] }));
+            const home = homeOf({ 'to-do': [card(46, { lastReviewed: 1, designatedReviewer: true, head: headOf(46, 2) })] });
+            expect(run(home, baseline, { ...ALL_ON, newVersion: false }).sent).toEqual(['newPullRequest #46']);
         });
 
         it('each preference only gates its own kind', () => {
@@ -245,5 +264,127 @@ describe('notification planner', () => {
             const { next } = run(homeOf({ 'to-do': [card(58)] }), baseline);
             expect(Object.keys(next.seen).filter((key) => key.includes('#')).sort()).toEqual([`${REPO}#58`]);
         });
+    });
+
+    describe('Review Focus 5: a stale home in another window', () => {
+        it('a head among the last three recorded is not new: no notification, the list is unchanged', () => {
+            let state = baselineOf(homeOf({ 'to-do': [card(70, { lastReviewed: 1 })] }));
+            const at = (version: number): Home => homeOf({ 'to-do': [card(70, { lastReviewed: 1, head: headOf(70, version) })] });
+            const second = run(at(2), state);
+            expect(second.sent).toEqual(['newVersion #70']);
+            state = second.next;
+            const stale = run(at(1), state);
+            expect(stale.sent).toEqual([]);
+            expect(headsIn(stale.next, `${REPO}#70`)).toEqual([headOf(70, 2), headOf(70, 1)]);
+            expect(run(at(2), stale.next).sent).toEqual([]);
+        });
+
+        it('keeps at most three heads, most recent first', () => {
+            let state = baselineOf(homeOf({ 'to-do': [card(71, { lastReviewed: 1 })] }));
+            for (const version of [2, 3, 4]) {
+                state = run(homeOf({ 'to-do': [card(71, { lastReviewed: 1, head: headOf(71, version) })] }), state).next;
+            }
+            expect(headsIn(state, `${REPO}#71`)).toEqual([headOf(71, 4), headOf(71, 3), headOf(71, 2)]);
+        });
+
+        it('a failed build head among the recorded ones is not notified again', () => {
+            const mine = (version: number): Home => homeOf({ mine: [card(72, { author: ME, build: failedBuild, head: headOf(72, version) })] });
+            const first = run(mine(2), baselineOf(mine(1)));
+            expect(first.sent).toEqual(['buildFailed #72']);
+            expect(run(mine(1), first.next).sent).toEqual([]);
+        });
+    });
+
+    describe('designated reviewer later', () => {
+        const before = homeOf({ 'to-do': [card(80)], waiting: [card(81, { myApproval: true })] });
+        const baseline = baselineOf(before);
+
+        it('designated on a PR already seen: one newPullRequest, once', () => {
+            const home = homeOf({ 'to-do': [card(80, { designatedReviewer: true })], waiting: [card(81, { myApproval: true })] });
+            const first = run(home, baseline);
+            expect(first.sent).toEqual(['newPullRequest #80']);
+            expect(first.next.seen[`${REPO}#80#reviewer`]).toBeDefined();
+            expect(run(home, first.next).sent).toEqual([]);
+        });
+
+        it('designated while nothing is to do (already approved): recorded, no notification, nor later', () => {
+            const waiting = homeOf({ 'to-do': [card(80)], waiting: [card(81, { myApproval: true, designatedReviewer: true })] });
+            const first = run(waiting, baseline);
+            expect(first.sent).toEqual([]);
+            const later = homeOf({ 'to-do': [card(80), card(81, { designatedReviewer: true })] });
+            expect(run(later, first.next).sent).toEqual([]);
+        });
+
+        it('designated from the start (new PR, or at baseline): no second notification', () => {
+            const fresh = run(homeOf({ 'to-do': [card(80), card(82, { designatedReviewer: true })] }), baseline);
+            expect(fresh.sent).toEqual(['newPullRequest #82']);
+            expect(run(homeOf({ 'to-do': [card(80), card(82, { designatedReviewer: true })] }), fresh.next).sent).toEqual([]);
+            const atBaseline = baselineOf(homeOf({ 'to-do': [card(83, { designatedReviewer: true })] }));
+            expect(run(homeOf({ 'to-do': [card(83, { designatedReviewer: true })] }), atBaseline).sent).toEqual([]);
+        });
+    });
+
+    it('a card without a head keeps what was recorded for it', () => {
+        const home = homeOf({ 'to-do': [card(90, { designatedReviewer: true })], mine: [card(91, { author: ME, build: failedBuild })] });
+        const baseline = baselineOf(home);
+        const { next } = run(homeOf({ 'to-do': [card(90, { designatedReviewer: true, head: '' })], mine: [card(91, { author: ME, build: failedBuild, head: '' })] }), baseline);
+        for (const key of [`${REPO}#90`, `${REPO}#90#reviewer`, `${REPO}#91`, `${REPO}#91#build`]) {
+            expect(next.seen[key], key).toBe(baseline.seen[key]);
+        }
+    });
+});
+
+describe('new version candidates and code check', () => {
+    const before = homeOf({
+        'to-do': [card(1, { lastReviewed: 1 }), card(2, { myApproval: true }), card(3), card(4, { lastReviewed: 1 })],
+        mine: [card(5, { author: ME, lastReviewed: 1 })],
+    });
+    const state = baselineOf(before);
+
+    it('candidates: someone else\'s PR I reviewed or approved, with a head not recorded yet, in a baselined repository', () => {
+        const home = homeOf({
+            'to-do': [
+                card(1, { lastReviewed: 1, head: headOf(1, 2) }), card(2, { myApproval: true, head: headOf(2, 2) }),
+                card(3, { head: headOf(3, 2) }), card(4, { lastReviewed: 1 }), card(6, { lastReviewed: 1 }),
+                card(7, { repo: 'records-web', lastReviewed: 1, head: headOf(7, 2) }),
+            ],
+            mine: [card(5, { author: ME, lastReviewed: 1, head: headOf(5, 2) })],
+        }, { repos: [REPO, 'acme/records-web'] });
+        expect(versionCandidates(home, state)).toEqual([
+            { ref: { workspace: 'acme', repo: 'records-api', id: 1 }, previousHead: headOf(1, 1) },
+            { ref: { workspace: 'acme', repo: 'records-api', id: 2 }, previousHead: headOf(2, 1) },
+        ]);
+        expect(versionCandidates(home, EMPTY)).toEqual([]);
+    });
+
+    const v = (name: string, kind: Parameters<typeof codeChangedSince>[0][number]['kind']): { hash: string; kind: typeof kind } => ({ hash: `${name}`.padEnd(40, '0'), kind });
+
+    it('code check since the previous head', () => {
+        // Rebase only after the previous head.
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only')], 'aaa'.padEnd(12, '0'))).toBe(false);
+        // Code after the previous head.
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only'), v('ccc', 'code')], 'aaa'.padEnd(12, '0'))).toBe(true);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'deps')], 'aaa'.padEnd(12, '0'))).toBe(true);
+        // An earlier code version (seen, never reviewed) then a rebase-only push: only what follows the previous head counts.
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'code'), v('ccc', 'rebase-only')], 'bbb'.padEnd(12, '0'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'message-only'), v('ccc', 'none')], 'aaa'.padEnd(12, '0'))).toBe(false);
+        // Previous head no longer among the versions (force-push): only the last version is judged.
+        expect(codeChangedSince([v('aaa', 'code'), v('ddd', 'rebase-only')], 'zzz'.padEnd(12, '0'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'rebase-only'), v('ddd', 'code')], 'zzz'.padEnd(12, '0'))).toBe(true);
+    });
+});
+
+describe('burst cap', () => {
+    const pending = (kind: PendingNotification['kind'], id: number): PendingNotification => ({ kind, ref: { workspace: 'acme', repo: 'records-api', id }, title: `PR ${id}`, author: null });
+
+    it('5 pending: 3 shown (failed builds, then new PRs, then new versions), 2 in the summary', () => {
+        const list = [pending('newVersion', 1), pending('newPullRequest', 2), pending('newVersion', 3), pending('buildFailed', 4), pending('newPullRequest', 5)];
+        const { shown, overflow } = capNotifications(list);
+        expect(shown.map((n) => `${n.kind} #${n.ref.id}`)).toEqual(['buildFailed #4', 'newPullRequest #2', 'newPullRequest #5']);
+        expect(overflow.map((n) => n.ref.id)).toEqual([1, 3]);
+    });
+
+    it('3 or fewer: all shown, nothing in the summary', () => {
+        expect(capNotifications([pending('newVersion', 1)])).toEqual({ shown: [pending('newVersion', 1)], overflow: [] });
     });
 });

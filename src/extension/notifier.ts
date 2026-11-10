@@ -1,13 +1,35 @@
 // Background refresh of "My PRs" and the VS Code notifications it raises (rules in lib/notifications.ts).
 import * as vscode from 'vscode';
-import type { Store } from '../server/infra/config.ts';
+import type { Home } from '../shared/api.ts';
+import { prKeyOf, type Store } from '../server/infra/config.ts';
 import type { HomeService } from '../server/services/home-service.ts';
+import type { PrService } from '../server/services/pr-service.ts';
 import type { BitbucketSession } from '../server/services/session.ts';
-import { planNotifications, type PendingNotification } from './lib/notifications.ts';
+import { hostL10n } from './host-l10n.ts';
+import {
+    capNotifications, codeChangedSince, planNotifications, versionCandidates, type CodeChanges, type PendingNotification, type VersionCandidate,
+} from './lib/notifications.ts';
 
 /** First poll after activation: late enough not to slow VS Code's startup. */
 const STARTUP_DELAY_MS = 10_000;
 const MINUTE_MS = 60_000;
+/** Toasts shown one by one per poll; the rest are gathered in one summary toast. */
+const MAX_TOASTS = 3;
+/** Version summaries computed at the same time to tell code from rebases. */
+const SUMMARY_CONCURRENCY = 2;
+/** Command VS Code generates to focus the "My PRs" view. */
+const FOCUS_VIEW_COMMAND = 'revspan.home.focus';
+
+/** Runs `task` on every item, at most `limit` at a time. */
+async function eachLimited<T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+    const queue = [...items];
+    const worker = async (): Promise<void> => {
+        for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
+            await task(item);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
+}
 
 function messageOf(notification: PendingNotification): string {
     const { title, author } = notification;
@@ -27,6 +49,7 @@ export class Notifier implements vscode.Disposable {
     private readonly store: Store;
     private readonly session: BitbucketSession;
     private readonly home: HomeService;
+    private readonly prs: Pick<PrService, 'versionKinds'>;
     private readonly onPolled: () => void;
     private startup: NodeJS.Timeout | undefined;
     private interval: NodeJS.Timeout | undefined;
@@ -34,10 +57,17 @@ export class Notifier implements vscode.Disposable {
     private disposed = false;
 
     /** onPolled: called after each completed poll (the home was just read, the tree can show it). */
-    constructor({ store, session, home, onPolled }: { store: Store; session: BitbucketSession; home: HomeService; onPolled: () => void }) {
+    constructor({ store, session, home, prs, onPolled }: {
+        store: Store;
+        session: BitbucketSession;
+        home: HomeService;
+        prs: Pick<PrService, 'versionKinds'>;
+        onPolled: () => void;
+    }) {
         this.store = store;
         this.session = session;
         this.home = home;
+        this.prs = prs;
         this.onPolled = onPolled;
     }
 
@@ -70,8 +100,13 @@ export class Notifier implements vscode.Disposable {
                 return;
             }
             this.onPolled();
-            for (const notification of pending) {
-                this.show(notification).catch((error: unknown) => console.warn(`revspan: notification failed (${(error as Error).message})`));
+            const { shown, overflow } = capNotifications(pending, MAX_TOASTS);
+            const failed = (error: unknown): void => console.warn(`revspan: notification failed (${(error as Error).message})`);
+            for (const notification of shown) {
+                this.show(notification).catch(failed);
+            }
+            if (overflow.length > 0) {
+                this.showSummary(overflow.length).catch(failed);
             }
         } catch (error) {
             console.warn(`revspan: background refresh failed (${(error as Error).message})`);
@@ -91,6 +126,10 @@ export class Notifier implements vscode.Disposable {
         if (this.store.config.repos.length === 0 || !await this.session.hasToken()) {
             return null;
         }
+        // The profile first (read once per session): without it nothing is mine, so no PR list is fetched.
+        if (!await this.session.me()) {
+            return null;
+        }
         // Not fresh: the TTL caches of the home, PR lists, activities and statuses keep each poll cheap on the
         // Bitbucket API; only the explicit "Refresh" command bypasses them.
         const home = await this.home.get();
@@ -98,16 +137,47 @@ export class Notifier implements vscode.Disposable {
             return null;
         }
         const prefs = this.store.config.review.notifications;
+        const codeChanged = prefs.newVersion ? await this.codeChanges(home) : {};
         let pending: PendingNotification[] = [];
         // Planned on the state re-read from disk inside the update: a PR head another window already recorded (and
         // notified) is no longer new here, so each notification is shown by one window only.
         this.store.updateNotified((state) => {
-            const plan = planNotifications(home, prefs, state);
+            const plan = planNotifications(home, prefs, state, codeChanged);
             state.initialized = plan.next.initialized;
             state.seen = plan.next.seen;
             pending = plan.notifications;
         });
         return pending;
+    }
+
+    /**
+     * Code check of the PRs with a new head (a version summary each, cached per version once computed). Candidates are
+     * taken from the state on disk, so heads another window already recorded are not checked again.
+     */
+    private async codeChanges(home: Home): Promise<CodeChanges> {
+        const changes: Record<string, boolean | null> = {};
+        await eachLimited(versionCandidates(home, this.store.notified()), SUMMARY_CONCURRENCY, async ({ ref, previousHead }: VersionCandidate) => {
+            try {
+                changes[prKeyOf(ref)] = codeChangedSince(await this.prs.versionKinds(ref), previousHead);
+            } catch (error) {
+                // Unknown counts as code: better a notification too many than a missed new version.
+                console.warn(`revspan: versions of ${prKeyOf(ref)} unreadable (${(error as Error).message})`);
+                changes[prKeyOf(ref)] = null;
+            }
+        });
+        return changes;
+    }
+
+    /** One toast for the notifications beyond the cap; "Show" focuses the "My PRs" view. */
+    private async showSummary(count: number): Promise<void> {
+        const { t, isSingular } = hostL10n();
+        const show = t('Show');
+        const message = isSingular(count)
+            ? t('{count} more pull request needs your attention', { count })
+            : t('{count} more pull requests need your attention', { count });
+        if (await vscode.window.showInformationMessage(message, show) === show) {
+            await vscode.commands.executeCommand(FOCUS_VIEW_COMMAND);
+        }
     }
 
     private async show(notification: PendingNotification): Promise<void> {
