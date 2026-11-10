@@ -738,7 +738,7 @@ def run_checks(page):
             expect(banner).to_contain_text('Depuis ta relecture de v1 : seulement des rebases, aucun changement de l\'auteur')
             expect(page.locator('.rv-empty')).to_contain_text('Aucun changement de l\'auteur entre v1 et v2')
             page.goto(url(''))
-            # Designated reviewer whose approval Bitbucket removed: still "To do"
+            # Designated reviewer whose approval Bitbucket removed: still "To review"
             card = page.locator(f'section[data-group="to-do"] .rv-row[data-pr="{ref}"]')
             expect(card).to_contain_text('rebase seul', timeout=20000)
             card.click()

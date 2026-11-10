@@ -15,7 +15,7 @@
     "configuration.requiredApprovals": "Approbations dont une PR a besoin (de participants autres que son auteur) avant de quitter ta file de relecture. De 1 à 20, 2 par défaut.",
     "configuration.requiredApprovalsByRepository": "Approbations requises pour certains dépôts, qui remplacent `revspan.review.requiredApprovals` : `{ \"workspace/dépôt\": 3 }`.",
     "configuration.followedContributors": "Contributeurs dont tu veux relire les PR : une liste de `{ \"uuid\": \"…\", \"displayName\": \"…\" }`. Dès que quelqu'un est suivi, « À relire » liste ses PR, celles dont tu es relecteur désigné et celles que tu as relues qui ont changé depuis.",
-    "configuration.hideUnfollowed": "Masquer dans « Mes PR » les PR des contributeurs que tu ne suis pas. Tes propres PR, celles dont tu es relecteur désigné et celles que tu as relues ou approuvées restent toujours affichées. Sans effet tant que personne n'est suivi.",
+    "configuration.hideUnfollowed": "Masquer dans la vue Revspan les PR des contributeurs que tu ne suis pas. Tes propres PR, celles dont tu es relecteur désigné et celles que tu as relues ou approuvées restent toujours affichées. Sans effet tant que personne n'est suivi.",
     "configuration.notifications.newPullRequest": "Notifier quand un contributeur suivi, ou quelqu'un qui t'a désigné relecteur, ouvre une PR à relire.",
     "configuration.notifications.newVersion": "Notifier quand une PR que tu as relue ou approuvée reçoit une nouvelle version.",
     "configuration.notifications.buildFailed": "Notifier quand le build d'une de tes propres PR échoue.",

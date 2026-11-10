@@ -15,7 +15,7 @@
     "configuration.requiredApprovals": "Approvals a PR needs (from participants other than its author) before it leaves your review queue. From 1 to 20, default 2.",
     "configuration.requiredApprovalsByRepository": "Required approvals for specific repositories, which replace `revspan.review.requiredApprovals`: `{ \"workspace/repository\": 3 }`.",
     "configuration.followedContributors": "Contributors whose PRs you want to review: a list of `{ \"uuid\": \"…\", \"displayName\": \"…\" }`. Once someone is followed, “To review” lists their PRs, the ones you are a designated reviewer of and the ones you reviewed that changed since.",
-    "configuration.hideUnfollowed": "Hide the PRs of contributors you do not follow in “My PRs”. Your own PRs, the ones you are a designated reviewer of and the ones you reviewed or approved are always shown. Has no effect while nobody is followed.",
+    "configuration.hideUnfollowed": "Hide the PRs of contributors you do not follow in the Revspan view. Your own PRs, the ones you are a designated reviewer of and the ones you reviewed or approved are always shown. Has no effect while nobody is followed.",
     "configuration.notifications.newPullRequest": "Notify when a followed contributor, or someone who designated you as a reviewer, opens a PR that needs review.",
     "configuration.notifications.newVersion": "Notify when a PR you reviewed or approved receives a new version.",
     "configuration.notifications.buildFailed": "Notify when the build of one of your own PRs fails.",
