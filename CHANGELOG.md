@@ -4,6 +4,50 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-10
+
+### Added
+
+- Review queue: the home page and the VS Code view now show what waits for you. A PR needs review while it has fewer
+  approvals than the minimum (2 by default, `revspan.review.requiredApprovals`, with an override per repository in
+  `revspan.review.requiredApprovalsByRepository`). Approvals are counted the way Bitbucket counts them for the merge
+  rule: every participant except the author, you included.
+- Four home groups: "To do", "My PRs", "Waiting on the author" and "Other open PRs". A PR where you are a designated
+  reviewer stays in "To do" until you approve it.
+- Followed contributors (`revspan.review.followedContributors`): follow an author from a PR row; their PRs are listed
+  first and can raise a notification.
+- Grouping of "To do" and "Other open PRs" by repository, by contributor or not at all, chosen separately on the page
+  and in the VS Code view.
+- VS Code notifications, each behind its own setting: a PR needing review from a followed contributor or from someone
+  who designated you (on by default), a new version of code or dependencies on a PR you reviewed or approved (on by
+  default), a failed build on one of your PRs (off by default). One notification per PR and commit, even with several
+  windows; none on first run or when you switch an option on; rebase-only pushes never notify; at most 3 notifications
+  at a time, then a summary.
+- Background refresh in VS Code, every `revspan.refreshIntervalMinutes` minutes (5 by default), started when VS Code
+  starts. It does nothing while all notifications are off and neither the view nor the panel is visible.
+- Build status from any CI that publishes statuses to Bitbucket: a badge on the home cards and in the PR header, and a
+  "Builds" tab on the PR page with each check and its link.
+- "Needs rebase" flag on your own PRs when the destination branch moved since the PR's base.
+
+### Changed
+
+- The home groups "To review", "Quick re-approval" and "Up to date" are replaced by the four groups above. A PR whose
+  approval Bitbucket kept after rebase-only pushes goes to "Waiting on the author".
+- The approval count of a card now includes your own approval, as Bitbucket's merge rule does.
+- Several windows share one computed home (`home.json` and `home.lock` in the configuration folder, file mode `0600`),
+  and the refresh is much lighter on Bitbucket: a steady state costs about 3 requests per cycle instead of 30. With
+  several windows, a new push can show up after up to about 1.5 intervals.
+- Saving the settings no longer resets the session unless the e-mail or the token changed.
+- Marketplace README and privacy section updated (background refresh, local notifications, local data).
+
+### Fixed
+
+- A write from Revspan (approve, comment) is visible on the home page right away instead of after the next cycle.
+- With a token that cannot read your profile (no `read:user:bitbucket`), every PR lands in "Other open PRs", nothing
+  crashes, no notification is sent, and the page says why.
+- An invalid minimum of approvals (0, negative, not a whole number) falls back to the default instead of hiding or
+  flooding the queue.
+
 ## [3.0.0] - 2026-11-09
 
 ### Added

@@ -28,7 +28,7 @@ Common rules:
 | GET | `/api/settings/followed` | — | `FollowedList` (local; the pages read it before a follow, since a read of `/api/settings` retitles the VS Code panel) |
 | PUT | `/api/settings` | `SettingsUpdate` | `Settings` |
 | POST | `/api/settings/test` | — | `ConnectionTest` |
-| GET | `/api/home` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key) |
+| GET | `/api/home` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key; see "Review queue contract") |
 | GET | `/api/pr/:ws/:repo/:id` | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`; `build`: `[]` no build, `null` statuses unreadable) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |
@@ -39,6 +39,27 @@ Common rules:
 | POST / DELETE | `/api/pr/:ws/:repo/:id/request-changes` | — | `Ok` |
 | POST | `/api/pr/:ws/:repo/:id/reviewed` | `{ version }` | `Ok` (local "reviewed" mark) |
 | POST | `/api/pr/:ws/:repo/:id/viewed` | `ViewedRequest` | `Ok` |
+
+## Review queue contract
+
+- `PrCard` (in `Home`) gained: `approvals` (participants other than the author, the user included), `requiredApprovals`
+  (minimum for the PR's repository), `myApproval`, `newComments`, `needsReview` (`approvals < requiredApprovals`),
+  `designatedReviewer`, `followed`, `approvalHolds`, `build: BuildSummary | null` (`state` is `failed`, `running`,
+  `success` or `none`, with counts), `needsRebase: boolean | null` (own PRs only, `null` when not computed) and `head`
+  (source head commit, 12 characters, `''` if Bitbucket gave none; it is what lets a notification fire once per PR and
+  head).
+- `HomeGroupKey` is `'to-do' | 'mine' | 'waiting' | 'others'`, in that order in `Home.groups`. `HomeGroup` is
+  `{ key, prs }`, with no title: the page and the VS Code tree each translate the key. The old keys `to-review`,
+  `rebase-only` and `up-to-date` are gone.
+- `PrDetail.build: BuildCheck[] | null`: the checks of the head commit (`key`, `name`, `state` of `success`, `failed`,
+  `running` or `stopped`, `url`, `updatedOn`). `[]` means no build is attached, `null` means the statuses could not be
+  read. `PrDetail.needsRebase: boolean | null` follows the same rule as the card.
+- `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `notifications`,
+  `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
+  by key); an invalid value is replaced by its default.
+- `GET /api/settings/followed` returns `FollowedList` (`{ followed }`), read from the local configuration with no
+  Bitbucket call. It exists because the pages need the current list before a follow or an unfollow, and reading
+  `/api/settings` has a side effect in VS Code (it retitles the panel).
 
 Page: Vue SPA served from `dist/web`, hash routing (`#/`, `#/pr/:ws/:repo/:id?from=&to=`, `#/settings`).
 `GET /open?url=<Bitbucket PR URL>` redirects to `/#/pr/...`.
