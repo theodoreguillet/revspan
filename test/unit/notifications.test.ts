@@ -3,7 +3,7 @@ import type { Home, HomeGroupKey, PrCard, User } from '../../src/shared/api.ts';
 import type { NotificationPrefs } from '../../src/shared/review-settings.ts';
 import type { NotifiedState } from '../../src/server/infra/config.ts';
 import {
-    capNotifications, codeChangedSince, forgetRepositories, planNotifications, versionCandidates, type PendingNotification,
+    capNotifications, codeChangedSince, forgetRepositories, planNotifications, versionCandidates, type CodeChanges, type PendingNotification,
 } from '../../src/extension/lib/notifications.ts';
 
 const ME: User = { uuid: '{me}', displayName: 'Robin Martin' };
@@ -33,7 +33,7 @@ const homeOf = (groups: Partial<Record<HomeGroupKey, PrCard[]>>, over: Partial<H
 const failedBuild = { state: 'failed', failed: 1, running: 0, total: 1 } as const;
 
 /** Runs the planner and returns its notifications as "kind #id", with the next state. */
-function run(home: Home, state: NotifiedState, prefs: NotificationPrefs = ALL_ON, codeChanged: Record<string, boolean | null> = {}): { sent: string[]; next: NotifiedState } {
+function run(home: Home, state: NotifiedState, prefs: NotificationPrefs = ALL_ON, codeChanged: CodeChanges = {}): { sent: string[]; next: NotifiedState } {
     const plan = planNotifications(home, prefs, state, codeChanged);
     return { sent: plan.notifications.map((n) => `${n.kind} #${n.ref.id}`), next: plan.next };
 }
@@ -354,6 +354,19 @@ describe('notification planner', () => {
         });
     });
 
+    it('I4: a head whose versions are not readable yet (pending) is neither notified nor recorded, then notified once', () => {
+        const baseline = baselineOf(homeOf({ 'to-do': [card(92, { lastReviewed: 1 })], mine: [card(93, { author: ME })] }));
+        const pushed = homeOf({ 'to-do': [card(92, { lastReviewed: 1, designatedReviewer: true, head: headOf(92, 2) })], mine: [card(93, { author: ME })] });
+        const lagging = run(pushed, baseline, ALL_ON, { [`${REPO}#92`]: 'pending' });
+        expect(lagging.sent).toEqual([]);
+        expect(lagging.next.seen[`${REPO}#92`]).toBe(baseline.seen[`${REPO}#92`]);
+        expect(lagging.next.seen[`${REPO}#92#reviewer`]).toBeUndefined();
+        expect(versionCandidates(pushed, lagging.next).map((c) => c.ref.id)).toEqual([92]);
+        const caughtUp = run(pushed, lagging.next, ALL_ON, { [`${REPO}#92`]: true });
+        expect(caughtUp.sent).toEqual(['newVersion #92']);
+        expect(run(pushed, caughtUp.next).sent).toEqual([]);
+    });
+
     it('a card without a head keeps what was recorded for it', () => {
         const home = homeOf({ 'to-do': [card(90, { designatedReviewer: true })], mine: [card(91, { author: ME, build: failedBuild })] });
         const baseline = baselineOf(home);
@@ -381,26 +394,33 @@ describe('new version candidates and code check', () => {
             mine: [card(5, { author: ME, lastReviewed: 1, head: headOf(5, 2) })],
         }, { repos: [REPO, 'acme/records-web'] });
         expect(versionCandidates(home, state)).toEqual([
-            { ref: { workspace: 'acme', repo: 'records-api', id: 1 }, previousHead: headOf(1, 1) },
-            { ref: { workspace: 'acme', repo: 'records-api', id: 2 }, previousHead: headOf(2, 1) },
+            { ref: { workspace: 'acme', repo: 'records-api', id: 1 }, previousHead: headOf(1, 1), head: headOf(1, 2) },
+            { ref: { workspace: 'acme', repo: 'records-api', id: 2 }, previousHead: headOf(2, 1), head: headOf(2, 2) },
         ]);
         expect(versionCandidates(home, EMPTY)).toEqual([]);
     });
 
     const v = (name: string, kind: Parameters<typeof codeChangedSince>[0][number]['kind']): { hash: string; kind: typeof kind } => ({ hash: `${name}`.padEnd(40, '0'), kind });
 
-    it('code check since the previous head', () => {
+    it('code check since the previous head, up to the current head', () => {
+        const head = (name: string): string => name.padEnd(12, '0');
         // Rebase only after the previous head.
-        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only')], 'aaa'.padEnd(12, '0'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only')], head('aaa'), head('bbb'))).toBe(false);
         // Code after the previous head.
-        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only'), v('ccc', 'code')], 'aaa'.padEnd(12, '0'))).toBe(true);
-        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'deps')], 'aaa'.padEnd(12, '0'))).toBe(true);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only'), v('ccc', 'code')], head('aaa'), head('ccc'))).toBe(true);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'deps')], head('aaa'), head('bbb'))).toBe(true);
         // An earlier code version (seen, never reviewed) then a rebase-only push: only what follows the previous head counts.
-        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'code'), v('ccc', 'rebase-only')], 'bbb'.padEnd(12, '0'))).toBe(false);
-        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'message-only'), v('ccc', 'none')], 'aaa'.padEnd(12, '0'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'code'), v('ccc', 'rebase-only')], head('bbb'), head('ccc'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'message-only'), v('ccc', 'none')], head('aaa'), head('ccc'))).toBe(false);
         // Previous head no longer among the versions (force-push): only the last version is judged.
-        expect(codeChangedSince([v('aaa', 'code'), v('ddd', 'rebase-only')], 'zzz'.padEnd(12, '0'))).toBe(false);
-        expect(codeChangedSince([v('aaa', 'rebase-only'), v('ddd', 'code')], 'zzz'.padEnd(12, '0'))).toBe(true);
+        expect(codeChangedSince([v('aaa', 'code'), v('ddd', 'rebase-only')], head('eee'), head('ddd'))).toBe(false);
+        expect(codeChangedSince([v('aaa', 'rebase-only'), v('ddd', 'code')], head('eee'), head('ddd'))).toBe(true);
+    });
+
+    it('I4: versions that do not reach the current head yet (PR or activity lagging behind the list): null, not neutral', () => {
+        const head = (name: string): string => name.padEnd(12, '0');
+        expect(codeChangedSince([v('aaa', 'creation')], head('aaa'), head('bbb'))).toBeNull();
+        expect(codeChangedSince([v('aaa', 'creation'), v('bbb', 'rebase-only')], head('aaa'), head('ccc'))).toBeNull();
     });
 });
 

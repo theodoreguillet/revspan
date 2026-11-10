@@ -349,6 +349,26 @@ describe('cycles on stubbed services', () => {
             expect(store.notified().seen[prKey(1)]?.split(' ')[0]).toBe(hash(1, 2).slice(0, 12));
         });
 
+        it('I4: versions lagging behind the list (no version at the new head yet): not recorded, notified once they catch up', async () => {
+            let current = before;
+            let lagging = true;
+            const kinds = async (ref: unknown): Promise<{ hash: string; kind: VersionKind }[]> => {
+                const id = (ref as { id: number }).id;
+                return lagging ? [{ hash: hash(id, 1), kind: 'creation' }] : [{ hash: hash(id, 1), kind: 'creation' }, { hash: hash(id, 2), kind: 'code' }];
+            };
+            const { notifier, store } = await stubbed({ get: async () => current, kinds });
+            await notifier.poll();
+            current = after;
+            await notifier.poll();
+            expect(recorded.infos).toEqual([]);
+            expect(store.notified().seen[prKey(1)]).toBe(hash(1, 1).slice(0, 12));
+            lagging = false;
+            await notifier.poll();
+            expect(recorded.infos).toEqual(['New version to review: PR 1', 'New version to review: PR 2']);
+            await notifier.poll();
+            expect(recorded.infos).toHaveLength(2);
+        });
+
         it('never checked when the newVersion notification is off', async () => {
             let current = before;
             const { notifier, versionKinds, store } = await stubbed({ get: async () => current });

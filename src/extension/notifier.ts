@@ -190,10 +190,11 @@ export class Notifier implements vscode.Disposable {
      * taken from the state on disk, so heads another window already recorded are not checked again.
      */
     private async codeChanges(home: Home): Promise<CodeChanges> {
-        const changes: Record<string, boolean | null> = {};
-        await eachLimited(versionCandidates(home, this.store.notified()), SUMMARY_CONCURRENCY, async ({ ref, previousHead }: VersionCandidate) => {
+        const changes: Record<string, CodeChanges[string]> = {};
+        await eachLimited(versionCandidates(home, this.store.notified()), SUMMARY_CONCURRENCY, async ({ ref, previousHead, head }: VersionCandidate) => {
             try {
-                changes[prKeyOf(ref)] = codeChangedSince(await this.prs.versionKinds(ref, previousHead), previousHead);
+                // No version at the home's head yet (the PR or its activity lags behind the list): checked again next poll.
+                changes[prKeyOf(ref)] = codeChangedSince(await this.prs.versionKinds(ref, previousHead), previousHead, head) ?? 'pending';
             } catch (error) {
                 // Unknown counts as code: better a notification too many than a missed new version.
                 console.warn(`revspan: versions of ${prKeyOf(ref)} unreadable (${(error as Error).message})`);

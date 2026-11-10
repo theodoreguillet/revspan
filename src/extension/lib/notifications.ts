@@ -13,14 +13,20 @@ export interface PendingNotification {
 
 type Kind = PendingNotification['kind'];
 
-/** Whether code or dependencies changed since the previous head, per prKey; null: could not be checked (counts as code). */
-export type CodeChanges = Readonly<Record<string, boolean | null>>;
+/**
+ * Whether code or dependencies changed since the previous head, per prKey. null: could not be checked (counts as code).
+ * 'pending': the versions read do not reach the card's head yet (the PR or its activity lags behind the list): the PR is
+ * neither notified nor recorded this poll, so the next poll checks it again.
+ */
+export type CodeChanges = Readonly<Record<string, boolean | null | 'pending'>>;
 
 /** A PR whose head changed since it was recorded, on which I may be told about a new version. */
 export interface VersionCandidate {
     ref: PrRef;
     /** Most recent head recorded before this one. */
     previousHead: string;
+    /** Its head in the home (12 characters), which the versions read must reach. */
+    head: string;
 }
 
 /** Value of a repository's marker in `seen` (key "workspace/repo"): its PRs were recorded once, silently. */
@@ -67,7 +73,7 @@ export function versionCandidates(home: Home, state: NotifiedState): VersionCand
         for (const card of group.prs) {
             const recorded = state.seen[prKeyOf(card)];
             if (card.head && baselined(state, card) && hasNewHead(group.key, card, recorded)) {
-                candidates.push({ ref: { workspace: card.workspace, repo: card.repo, id: card.id }, previousHead: headsOf(recorded)[0] ?? '' });
+                candidates.push({ ref: { workspace: card.workspace, repo: card.repo, id: card.id }, previousHead: headsOf(recorded)[0] ?? '', head: card.head });
             }
         }
     }
@@ -76,9 +82,14 @@ export function versionCandidates(home: Home, state: NotifiedState): VersionCand
 
 /**
  * Whether a version after the previous head has code or dependencies (versions oldest first, full hashes; kind null: not
- * computed). If the previous head is no longer among them (force-push), only the last version is judged.
+ * computed). If the previous head is no longer among them (force-push), only the last version is judged. null when no
+ * version starts with the current head: the versions lag behind the list, and judging them would call a code push
+ * neutral.
  */
-export function codeChangedSince(versions: readonly { hash: string; kind: VersionKind | null }[], previousHead: string): boolean {
+export function codeChangedSince(versions: readonly { hash: string; kind: VersionKind | null }[], previousHead: string, head: string): boolean | null {
+    if (!versions.some((v) => v.hash.startsWith(head))) {
+        return null;
+    }
     return versionsAfter(versions, previousHead).some((v) => v.kind !== null && CODE_KINDS.has(v.kind));
 }
 
@@ -90,7 +101,7 @@ export function codeChangedSince(versions: readonly { hash: string; kind: Versio
  *   previous head (not checked: counts as code);
  * - newPullRequest again: I became a designated reviewer of a "to-do" PR already seen.
  */
-function kindsOf(group: HomeGroupKey, card: PrCard, state: NotifiedState, codeChanged: boolean | null | undefined): Kind[] {
+function kindsOf(group: HomeGroupKey, card: PrCard, state: NotifiedState, codeChanged: boolean | null): Kind[] {
     const key = prKeyOf(card);
     if (group === 'mine') {
         return card.build?.state === 'failed' && !headsOf(state.seen[`${key}${BUILD_SUFFIX}`]).includes(card.head) ? ['buildFailed'] : [];
@@ -148,12 +159,13 @@ export function planNotifications(home: Home, prefs: NotificationPrefs, state: N
             const key = prKeyOf(card);
             const buildKey = `${key}${BUILD_SUFFIX}`;
             const reviewerKey = `${key}${REVIEWER_SUFFIX}`;
-            if (!card.head) {
-                // Nothing to compare: what was recorded stays.
+            const change = codeChanged[key];
+            if (!card.head || change === 'pending') {
+                // Nothing to compare yet: what was recorded stays.
                 [key, buildKey, reviewerKey].forEach(keep);
                 continue;
             }
-            const kind = baselined(state, card) ? kindsOf(group.key, card, state, codeChanged[key]).find((k) => prefs[k]) : undefined;
+            const kind = baselined(state, card) ? kindsOf(group.key, card, state, change ?? null).find((k) => prefs[k]) : undefined;
             seen[key] = withHead(state.seen[key], card.head);
             if (group.key === 'mine' && card.build?.state === 'failed') {
                 seen[buildKey] = withHead(state.seen[buildKey], card.head);
