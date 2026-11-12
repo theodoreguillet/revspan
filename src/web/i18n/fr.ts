@@ -95,6 +95,8 @@ export const fr: Catalog = {
     'home.groupDesc.waiting': 'rien à faire de ton côté',
     'home.unknownAuthor': 'Auteur inconnu',
     'home.followedMark': 'Contributeur suivi',
+    'home.tipLastPush': 'Dernier push : {date}',
+    'home.tipOpened': 'Ouverte le {date}',
     'home.needsRebase': 'à rebaser',
     'home.needsRebaseTitle': '{branch} a avancé depuis la base de la PR',
     'home.designated': 'désigné relecteur',

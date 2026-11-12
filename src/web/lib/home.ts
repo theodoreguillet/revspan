@@ -1,7 +1,7 @@
 // Home: badges and subtitle of a PR card, notices about the repositories.
 import type { Home, HomeGroupKey, PrCard, User } from '../../shared/api.ts';
 import type { MessageKey, Translator } from '../i18n/index.ts';
-import { ago, displayName, openedSince } from './format.ts';
+import { ago, displayName, fmtMedium, openedSince } from './format.ts';
 
 export type BadgeTone = '' | 'grey' | 'green' | 'orange';
 
@@ -46,6 +46,15 @@ export function cardBadges(tr: Translator, card: PrCard, me: User | null): Badge
         badges.push({ text: tr.t('home.badge.approved'), tone: 'green' });
     }
     return badges;
+}
+
+/** Hover text of a PR row: reference and title, then the last push (the sort key) and the opening date, when known. */
+export function cardTooltip(tr: Translator, card: PrCard): string {
+    return [
+        `${card.repo} #${card.id} · ${card.title}`,
+        ...(card.lastPushAt ? [tr.t('home.tipLastPush', { date: fmtMedium(tr, card.lastPushAt) })] : []),
+        ...(card.createdOn ? [tr.t('home.tipOpened', { date: fmtMedium(tr, card.createdOn) })] : []),
+    ].join('\n');
 }
 
 export function cardSubtitle(tr: Translator, card: PrCard, me: User | null): string {

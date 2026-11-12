@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { PrCard, User } from '../../shared/api.ts';
 import { t, tr } from '../i18n/index.ts';
-import { cardBadges, cardSubtitle } from '../lib/home.ts';
+import { cardBadges, cardSubtitle, cardTooltip } from '../lib/home.ts';
 import { prRoute } from '../lib/prUrl.ts';
 import BuildBadge from './BuildBadge.vue';
 
@@ -12,6 +12,7 @@ const emit = defineEmits<{ follow: [user: User, follow: boolean] }>();
 
 const badges = computed(() => cardBadges(tr(), props.card, props.me));
 const subtitle = computed(() => cardSubtitle(tr(), props.card, props.me));
+const tooltip = computed(() => cardTooltip(tr(), props.card));
 const prKey = computed(() => `${props.card.workspace}/${props.card.repo}/${props.card.id}`);
 /** Author one can follow: known, and not me. */
 const author = computed(() => (props.card.author && props.card.author.uuid !== props.me?.uuid ? props.card.author : null));
@@ -84,7 +85,7 @@ onBeforeUnmount(closeMenu);
     <div ref="root" :class="['rv-roww', { 'has-menu': author }]" :data-row="prKey">
         <RouterLink class="rv-row" :to="prRoute(card)" :data-pr="prKey">
             <div class="t">
-                <div class="ti" :title="`${card.repo} #${card.id} · ${card.title}`">
+                <div class="ti" :title="tooltip">
                     <span v-if="card.followed" class="rv-star" :title="t('home.followedMark')">★</span><span class="ref">{{ card.repo }} #{{ card.id }}</span>{{ card.title }}
                 </div>
                 <div class="su">{{ subtitle }}</div>

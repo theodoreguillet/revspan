@@ -8,6 +8,7 @@ const DAY_YEAR: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', y
 const MONTH: Intl.DateTimeFormatOptions = { month: 'short' };
 const DATE_TIME: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' };
 const FULL: Intl.DateTimeFormatOptions = { dateStyle: 'full', timeStyle: 'short' };
+const MEDIUM: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
 
 export const MINUS = '−';
 
@@ -30,6 +31,11 @@ export function fmtMonth(tr: Translator, value: DateLike): string {
 /** "10/14, 11:10 AM" (local time). */
 export function fmtDateTime(tr: Translator, value: DateLike): string {
     return tr.date(toDate(value), DATE_TIME);
+}
+
+/** "Nov 10, 2026, 1:00 PM" (local time): a date with its year, for tooltips. */
+export function fmtMedium(tr: Translator, value: DateLike): string {
+    return tr.date(toDate(value), MEDIUM);
 }
 
 export function fmtFull(tr: Translator, value: DateLike): string {

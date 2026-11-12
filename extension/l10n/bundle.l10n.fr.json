@@ -62,5 +62,7 @@
     "Open": "Ouvrir",
     "Show": "Afficher",
     "{count} more pull request needs your attention": "{count} autre PR demande ton attention",
-    "{count} more pull requests need your attention": "{count} autres PR demandent ton attention"
+    "{count} more pull requests need your attention": "{count} autres PR demandent ton attention",
+    "Last push: {date}": "Dernier push : {date}",
+    "Opened: {date}": "Ouverte le {date}"
 }

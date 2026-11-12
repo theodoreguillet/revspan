@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - PRs are sorted by date everywhere in "My PRs" (page and VS Code view): newest push first inside each group, and
   repository or contributor subgroups ordered by their most recent PR instead of by name. Followed contributors no
   longer jump to the top; the groups themselves keep their order.
+- Hovering a PR (page and VS Code view) shows the date of its last push and the date it was opened.
 
 ## [3.2.0] - 2026-11-10
 

@@ -463,6 +463,17 @@ describe('"My PRs" tree', () => {
         expect(approved[0]?.subgroups[0]?.prs[0]?.tooltip).toContain('2 approvals');
     });
 
+    it('tooltip: last push and opening dates after the reference, in the display language', () => {
+        const dated = { ...home, groups: [{ key: 'others' as const, prs: [card(8, { lastPushAt: '2026-11-10T12:00:00Z', createdOn: '2026-11-01T12:00:00Z' })] }] };
+        const enTip = buildHomeTree(dated, en)[0]?.prs[0]?.tooltip.split('\n') ?? [];
+        expect(enTip.slice(0, 2)).toEqual(['PR 8', 'acme/records-api #8 · Camille']);
+        expect(enTip[2]).toMatch(/^Last push: Nov 10, 2026/);
+        expect(enTip[3]).toMatch(/^Opened: Nov 1, 2026/);
+        const frTip = buildHomeTree(dated, fr)[0]?.prs[0]?.tooltip.split('\n') ?? [];
+        expect(frTip[2]).toMatch(/^Dernier push : 10 nov\. 2026/);
+        expect(frTip[3]).toMatch(/^Ouverte le 1 nov\. 2026/);
+    });
+
     it('plurals follow the display language: 0 and 1 are singular in French, only 1 in English', () => {
         const zero = { ...home, groups: [{ key: 'others' as const, prs: [card(4, { versionsCount: 0, approvals: 0 })] }] };
         expect(buildHomeTree(zero, fr)[0]?.prs[0]?.tooltip).toContain('\n0 version\n');

@@ -18,10 +18,13 @@ export interface L10n {
     t: Translate;
     /** Whether this count takes the singular form in the language of the texts (French: 0 and 1, English: 1). */
     isSingular(count: number): boolean;
+    /** A date with its year and time, in the display language (local time). */
+    date(iso: string): string;
 }
 
 /** The texts exist in French and English only: an untranslated display language gets English plural rules. */
 export function createL10n(t: Translate, language: string): L10n {
     const rules = new Intl.PluralRules(pageLocale(language));
-    return { t, isSingular: (count) => rules.select(count) === 'one' };
+    const dates = new Intl.DateTimeFormat(pageLocale(language), { dateStyle: 'medium', timeStyle: 'short' });
+    return { t, isSingular: (count) => rules.select(count) === 'one', date: (iso) => dates.format(new Date(iso)) };
 }

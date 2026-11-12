@@ -96,6 +96,8 @@ export const en = {
     'home.groupDesc.waiting': 'nothing to do on your side',
     'home.unknownAuthor': 'Unknown author',
     'home.followedMark': 'Followed contributor',
+    'home.tipLastPush': 'Last push: {date}',
+    'home.tipOpened': 'Opened: {date}',
     'home.needsRebase': 'needs rebase',
     'home.needsRebaseTitle': '{branch} moved since the PR’s base',
     'home.designated': 'designated reviewer',

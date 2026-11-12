@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
-import { GROUP_TITLES, cardBadges, cardSubtitle, emptyHome, truncatedNotice } from '../../src/web/lib/home.ts';
+import { GROUP_TITLES, cardBadges, cardSubtitle, cardTooltip, emptyHome, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
 import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
 import { prLong } from './fixtures.ts';
@@ -101,6 +101,19 @@ describe('home cards', () => {
         const mine = card({ author: me, lastReviewed: null, newComments: 1, approvals: 1 });
         expect(cardSubtitle(fr, mine, me)).toMatch(/^toi · /);
         expect(badges(mine)).toEqual(['💬 1 nouveau']);
+    });
+
+    it('tooltip: reference and title, then the last push date and the opening date', () => {
+        const dated = card({ lastPushAt: '2026-11-10T12:00:00Z', createdOn: '2026-11-01T12:00:00Z', title: 'feat: archive' });
+        const enTip = cardTooltip(en, dated).split('\n');
+        expect(enTip[0]).toBe('records-api #1 · feat: archive');
+        expect(enTip[1]).toMatch(/^Last push: Nov 10, 2026/);
+        expect(enTip[2]).toMatch(/^Opened: Nov 1, 2026/);
+        const frTip = cardTooltip(fr, dated).split('\n');
+        expect(frTip[1]).toMatch(/^Dernier push : 10 nov\. 2026/);
+        expect(frTip[2]).toMatch(/^Ouverte le 1 nov\. 2026/);
+        // Unknown dates are left out rather than shown as an invalid date.
+        expect(cardTooltip(en, card({ lastPushAt: '', createdOn: '' }))).toBe('records-api #1 · t');
     });
 });
 

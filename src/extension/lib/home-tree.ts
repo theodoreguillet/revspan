@@ -125,6 +125,8 @@ function prNode(l10n: L10n, card: PrCard, key: HomeGroupKey, me: User | null): P
         tooltip: [
             card.title,
             `${card.workspace}/${card.repo} #${card.id} · ${card.author?.displayName ?? '?'}`,
+            ...(card.lastPushAt ? [l10n.t('Last push: {date}', { date: l10n.date(card.lastPushAt) })] : []),
+            ...(card.createdOn ? [l10n.t('Opened: {date}', { date: l10n.date(card.createdOn) })] : []),
             ...(card.versionsCount === null ? [] : [versions(l10n, card.versionsCount)]),
             ...(card.approvals > 0 ? [approvals(l10n, card.approvals)] : []),
             ...extra,
