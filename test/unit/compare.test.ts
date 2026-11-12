@@ -80,6 +80,16 @@ describe('compareVersions', () => {
         expect(file!.hunks[0]!.lines.every((l) => !l.text.includes('\u0000'))).toBe(true);
     });
 
+    it('files follow the explorer order (folders first), code before dependencies', async () => {
+        const order = ['src/z.ts', 'package-lock.json', 'README.md', 'src/core/a.ts', 'src/a.ts', 'docs/x.md'];
+        const src: CompareSource = {
+            diffstat: async () => order.map((path) => ({ status: 'modified', oldPath: path, newPath: path, added: 1, removed: 1 })),
+            content: async (hash, path) => ({ text: `${hash} ${path}\n` }),
+        };
+        const result = await compareVersions(src, oneVersion, 0, 1);
+        expect(paths(result.files)).toEqual(['docs/x.md', 'src/core/a.ts', 'src/a.ts', 'src/z.ts', 'README.md', 'package-lock.json']);
+    });
+
     it('submodule: grouped with the dependencies', async () => {
         const src = singleFile('shared-submodule', {
             old: { text: `Subproject commit ${'a'.repeat(40)}\n`, submodule: true },

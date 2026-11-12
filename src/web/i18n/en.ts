@@ -298,6 +298,9 @@ export const en = {
     'files.masterOnly': { one: '{count} file changed only by master is hidden.', other: '{count} files changed only by master are hidden.' },
     'files.show': 'Show',
     'files.hide': 'Hide',
+    'files.dirUnseen': { one: '{count} file not viewed yet', other: '{count} files not viewed yet' },
+    'files.dirViewed': 'All files viewed',
+    'files.resize': 'Drag to resize the file list (double-click: default width)',
 
     // ---------- Versions tab ----------
     'versions.colVersion': 'Version',

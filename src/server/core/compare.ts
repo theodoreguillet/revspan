@@ -8,6 +8,7 @@ import type {
 import { buildHunks, diffLines, diffStats, NO_EOL, splitDiffLines } from './diff.ts';
 import { merge3 } from './merge3.ts';
 import { mapLine } from './linemap.ts';
+import { compareTreePaths } from '../../shared/file-tree.ts';
 import { categoryOf, sameHash } from './classify.ts';
 import { isReadable, previousAvailable } from './model.ts';
 
@@ -204,8 +205,9 @@ function sidesFor(src: CompareSource, entry: DiffstatEntry, va: CompareVersion |
     return rebasedSides(src, entry, va, vb);
 }
 
+/** Code before dependencies, each in the file list's tree order, so that the diff follows the list. */
 function sortFiles(files: FileDiff[]): FileDiff[] {
-    return files.sort((a, b) => (a.category === b.category ? a.path.localeCompare(b.path) : a.category === 'code' ? -1 : 1));
+    return files.sort((a, b) => (a.category === b.category ? compareTreePaths(a.path, b.path) : a.category === 'code' ? -1 : 1));
 }
 
 /** from = 0: full `to` version against its base; otherwise the author's changes between from and to. */

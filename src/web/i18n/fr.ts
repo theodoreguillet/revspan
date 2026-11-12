@@ -297,6 +297,9 @@ export const fr: Catalog = {
     'files.masterOnly': { one: '{count} fichier modifié uniquement par master est masqué.', other: '{count} fichiers modifiés uniquement par master sont masqués.' },
     'files.show': 'Afficher',
     'files.hide': 'Masquer',
+    'files.dirUnseen': { one: '{count} fichier pas encore vu', other: '{count} fichiers pas encore vus' },
+    'files.dirViewed': 'Tous les fichiers vus',
+    'files.resize': 'Glisse pour redimensionner la liste des fichiers (double-clic : largeur par défaut)',
 
     // ---------- Versions tab ----------
     'versions.colVersion': 'Version',

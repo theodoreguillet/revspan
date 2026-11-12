@@ -688,6 +688,56 @@ def run_checks(page):
             expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', row.get_attribute('data-idx'))
     file_list_keys(page)
 
+    @check('file list: folder tree in the diff order, folder collapsed with a summary and reopened by k')
+    def file_tree(page):
+        open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
+        list_paths = page.locator('.rv-files .rv-f').evaluate_all('els => els.map(e => e.dataset.path)')
+        diff_paths = page.locator('.rv-diff .rv-file').evaluate_all('els => els.map(e => e.dataset.path)')
+        assert list_paths == diff_paths, f'list {list_paths} != diff {diff_paths}'
+        path = code_file['path']
+        folder = path.rsplit('/', 1)[0]
+        idx = list_paths.index(path)
+        assert idx + 1 < len(list_paths) and not list_paths[idx + 1].startswith(f'{folder}/'), list_paths
+        dir_row = page.locator(f'.rv-d[data-dir="{folder}"]')
+        file_row = page.locator(f'.rv-f[data-path="{path}"]')
+        expect(dir_row).to_have_attribute('aria-expanded', 'true')
+        expect(file_row).to_contain_text(path.rsplit('/', 1)[1])
+        page.locator(f'.rv-f[data-path="{list_paths[idx + 1]}"]').click()
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(idx + 1))
+        dir_row.click()
+        expect(dir_row).to_have_attribute('aria-expanded', 'false')
+        expect(file_row).to_have_count(0)
+        expect(dir_row.locator('.un, .ck.seen')).to_have_count(1)
+        page.locator('.rv-files').screenshot(path=os.path.join(SHOTS, 'file-tree-collapsed.png'))
+        page.keyboard.press('k')
+        expect(dir_row).to_have_attribute('aria-expanded', 'true')
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', path)
+    file_tree(page)
+
+    @check('file list: width dragged from its edge, remembered after a reload, reset by double-click')
+    def file_list_resize(page):
+        panel = page.locator('.rv-files')
+        handle = page.locator('.rv-resize')
+        initial = panel.bounding_box()['width']
+        box = handle.bounding_box()
+        x, y = box['x'] + box['width'] / 2, box['y'] + min(60, box['height'] / 2)
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x + 120, y, steps=6)
+        page.mouse.up()
+        wider = panel.bounding_box()['width']
+        assert abs(wider - (initial + 120)) <= 2, f'{initial} -> {wider}'
+        page.reload()
+        wait_pr_ready(page)
+        assert abs(panel.bounding_box()['width'] - wider) <= 2
+        handle.dblclick()
+        page.wait_for_function(f'() => Math.abs(document.querySelector(".rv-files").getBoundingClientRect().width - {initial}) <= 2')
+        handle.focus()
+        page.keyboard.press('ArrowRight')
+        assert abs(panel.bounding_box()['width'] - (initial + 16)) <= 2
+        handle.dblclick()
+    file_list_resize(page)
+
     @check('shortcuts help: focus trapped in the box, returned to the button on close')
     def shortcuts_focus(page):
         opener = page.locator('.rv-nav button[aria-label="Raccourcis clavier"]')

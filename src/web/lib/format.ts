@@ -130,8 +130,6 @@ export const vname = (i: number): string => (i === 0 ? 'master' : `v${i}`);
 
 export const basename = (p: string): string => p.slice(p.lastIndexOf('/') + 1);
 
-export const dirname = (p: string): string => p.slice(0, p.lastIndexOf('/') + 1);
-
 export function displayName(user: User | null | undefined): string {
     return user?.displayName ?? '?';
 }

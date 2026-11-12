@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-11-12
+
+### Added
+
+- The file list of the diff can be resized: drag its right edge, like the VS Code sidebar (arrow keys when the edge
+  has the focus, double-click for the default width). The width is remembered.
+
+### Changed
+
+- The file list is a folder tree, like the VS Code explorer: folders first, chains of single folders merged
+  ("src/server/core"), file names no longer truncated by their folder. A folder collapses with a click and then shows
+  its unviewed file count and its threads; moving to one of its files (j/k, scroll) opens it again.
+- The diff follows the order of the tree, so j/k and scrolling match the list.
+
 ## [3.2.1] - 2026-11-12
 
 ### Changed

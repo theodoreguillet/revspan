@@ -2,7 +2,7 @@
     "name": "revspan",
     "displayName": "%displayName%",
     "description": "%description%",
-    "version": "3.2.1",
+    "version": "3.3.0",
     "publisher": "theodoreguillet",
     "license": "MIT",
     "icon": "media/icon.png",
