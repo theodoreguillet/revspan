@@ -112,7 +112,8 @@ budget are unchanged.
 
 "To review" and "Other open PRs" can be grouped by repository, by contributor or not at all. "To rebase" and "My PRs"
 are always by repository and "Waiting" is never grouped. The choice is stored **separately** for the page (browser) and
-for the VS Code tree. Followed contributors' PRs come first.
+for the VS Code tree. Inside each group the PRs are sorted newest push first, and subgroups (repositories or contributors)
+by their most recent PR.
 
 ### Settings
 

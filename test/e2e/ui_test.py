@@ -337,7 +337,12 @@ def run_checks(page):
         @check('home: grouping by contributor regroups "to do" and survives a reload')
         def grouping(page):
             todo_prs = home_cards('to-do')
-            authors = sorted({p['author']['displayName'] for p in todo_prs})
+            latest = {}
+            for p in todo_prs:
+                name = p['author']['displayName']
+                latest[name] = max(latest.get(name, ''), p['lastPushAt'])
+            # Subgroups by their most recent PR, then by name.
+            authors = sorted(sorted(latest), key=lambda name: latest[name], reverse=True)
             by_author = [f'{name} · {sum(1 for p in todo_prs if p["author"]["displayName"] == name)}' for name in authors]
             subs = page.locator('section[data-group="to-do"] .rv-sg')
             expect(subs).to_have_text([f'{ws}/{repo} · {len(todo_prs)}'])
@@ -356,23 +361,25 @@ def run_checks(page):
             expect(subs).to_have_count(1)
         grouping(page)
 
-        @check('home: following an author from the row menu moves their "to do" PR to the top with a ★')
+        @check('home: following an author from the row menu adds a ★; PRs stay sorted newest push first')
         def follow_row(page):
             ref = fake_ref('neverReviewed')
             author = next(p['author'] for p in home_cards('to-do') if p['id'] == FAKE_PRS['neverReviewed'])
-            rows = page.locator('section[data-group="to-do"] .rv-row')
-            assert rows.first.get_attribute('data-pr') != ref, 'the PR must not already be first'
+            row = page.locator(f'.rv-roww[data-row="{ref}"]')
             expect(page.locator('.rv-star')).to_have_count(0)
-            page.locator(f'.rv-roww[data-row="{ref}"] .rv-row-more').click()
+            row.locator('.rv-row-more').click()
             item = page.locator('.rv-menu [data-action="follow"]')
             expect(item).to_have_text(f'Suivre {author["displayName"]}')
             item.click()
-            expect(rows.first).to_have_attribute('data-pr', ref)
-            expect(rows.first.locator('.rv-star')).to_be_visible()
+            expect(row.locator('.rv-star')).to_be_visible()
             wait_api(lambda: followed_uuids() == [author['uuid']], 'author saved in review.followed')
             page.reload()
-            expect(rows.first).to_have_attribute('data-pr', ref, timeout=20000)
-            expect(rows.first.locator('.rv-star')).to_be_visible()
+            expect(row.locator('.rv-star')).to_be_visible(timeout=20000)
+            # Following does not reorder: "to do" rows follow the push dates of the home data.
+            todo = sorted(home_cards('to-do'), key=lambda p: p['lastPushAt'], reverse=True)
+            shown = page.locator('section[data-group="to-do"] .rv-row').evaluate_all('rows => rows.map((r) => r.dataset.pr)')
+            expected = [f"{p['workspace']}/{p['repo']}/{p['id']}" for p in todo]
+            assert shown == expected, (shown, expected)
             page.locator(f'.rv-roww[data-row="{ref}"] .rv-row-more').click()
             expect(item).to_have_text(f'Ne plus suivre {author["displayName"]}')
             item.click()

@@ -500,7 +500,7 @@ describe('"My PRs" tree', () => {
         const queue = (grouping: Grouping, extra: Partial<Home> = {}): ReturnType<typeof buildHomeTree> => buildHomeTree({
             ...home,
             groups: [
-                { key: 'to-do', prs: [card(1), card(6, { repo: 'records-web', author: yann, followed: true }), card(7, { author: yann, followed: true, build: { state: 'failed', failed: 1, running: 0, total: 2 } })] },
+                { key: 'to-do', prs: [card(1, { lastPushAt: '2026-10-01T09:00:00Z' }), card(6, { repo: 'records-web', author: yann, followed: true, lastPushAt: '2026-10-09T09:00:00Z' }), card(7, { author: yann, followed: true, lastPushAt: '2026-10-08T09:00:00Z', build: { state: 'failed', failed: 1, running: 0, total: 2 } })] },
                 { key: 'mine', prs: [card(8, { author: home.me, needsRebase: true, build: { state: 'running', failed: 0, running: 1, total: 1 } })] },
                 { key: 'waiting', prs: [card(9)] },
                 { key: 'others', prs: [card(10, { author: null })] },
@@ -508,7 +508,7 @@ describe('"My PRs" tree', () => {
             ...extra,
         }, en, grouping);
 
-        it('contributor grouping: subnodes in to-do and others, followed first, none in waiting, mine by repository', () => {
+        it('contributor grouping: subnodes in to-do and others, newest subgroup first, none in waiting, mine by repository', () => {
             const tree = queue('contributor');
             expect(tree.map((g) => [g.key, g.prs.length, g.subgroups.map((s) => s.label)])).toEqual([
                 ['to-do', 0, ['★ Yann (2)', 'Camille (1)']],
@@ -520,7 +520,7 @@ describe('"My PRs" tree', () => {
         });
 
         it('repository grouping and no grouping', () => {
-            expect(queue('repository')[0]?.subgroups.map((s) => s.label)).toEqual(['acme/records-api (2)', 'acme/records-web (1)']);
+            expect(queue('repository')[0]?.subgroups.map((s) => s.label)).toEqual(['acme/records-web (1)', 'acme/records-api (2)']);
             const flat = queue('none')[0];
             expect(flat?.subgroups).toEqual([]);
             expect(flat?.prs).toHaveLength(3);

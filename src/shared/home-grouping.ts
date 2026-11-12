@@ -33,9 +33,9 @@ export function groupingFor(group: HomeGroupKey, choice: Grouping): Grouping {
     return choice;
 }
 
-/** Followed authors first, then the most recent push first. */
-function byFollowedThenPush(a: PrCard, b: PrCard): number {
-    return Number(b.followed) - Number(a.followed) || b.lastPushAt.localeCompare(a.lastPushAt);
+/** Most recent push first. */
+function byLastPush(a: PrCard, b: PrCard): number {
+    return b.lastPushAt.localeCompare(a.lastPushAt);
 }
 
 function keyOf(card: PrCard, grouping: Grouping): { key: string; label: string } {
@@ -46,13 +46,9 @@ function keyOf(card: PrCard, grouping: Grouping): { key: string; label: string }
     return { key: card.author?.uuid ?? '', label: card.author?.displayName ?? '' };
 }
 
-/** Repositories by name; contributors followed first, then by name, the unknown author last. */
-function compareGroups(grouping: Grouping): (a: CardGroup, b: CardGroup) => number {
-    if (grouping === 'repository') {
-        return (a, b) => a.label.localeCompare(b.label);
-    }
-    const followed = (g: CardGroup): number => Number(g.cards.some((c) => c.followed));
-    return (a, b) => Number(a.key === '') - Number(b.key === '') || followed(b) - followed(a) || a.label.localeCompare(b.label);
+/** Subgroups by their most recent PR (cards are already sorted newest first), then by name. */
+function bySubgroupRecency(a: CardGroup, b: CardGroup): number {
+    return (b.cards[0]?.lastPushAt ?? '').localeCompare(a.cards[0]?.lastPushAt ?? '') || a.label.localeCompare(b.label);
 }
 
 export function groupCards(cards: readonly PrCard[], grouping: Grouping): CardGroup[] {
@@ -60,7 +56,7 @@ export function groupCards(cards: readonly PrCard[], grouping: Grouping): CardGr
         return [];
     }
     if (grouping === 'none') {
-        return [{ key: NO_GROUP_KEY, label: '', cards: [...cards].sort(byFollowedThenPush) }];
+        return [{ key: NO_GROUP_KEY, label: '', cards: [...cards].sort(byLastPush) }];
     }
     const groups = new Map<string, CardGroup>();
     for (const card of cards) {
@@ -74,7 +70,7 @@ export function groupCards(cards: readonly PrCard[], grouping: Grouping): CardGr
     }
     const list = [...groups.values()];
     for (const group of list) {
-        group.cards.sort(byFollowedThenPush);
+        group.cards.sort(byLastPush);
     }
-    return list.sort(compareGroups(grouping));
+    return list.sort(bySubgroupRecency);
 }

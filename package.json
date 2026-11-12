@@ -1,6 +1,6 @@
 {
     "name": "revspan",
-    "version": "3.2.0",
+    "version": "3.2.1",
     "private": true,
     "description": "Review Bitbucket PRs version by version, despite amend, rebase and force-push — local tool and VS Code extension",
     "license": "MIT",
