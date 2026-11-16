@@ -14,7 +14,7 @@ import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { errorText as pageErrorText } from '../../src/web/lib/errors.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { isUnregisteredSetting, settingTarget } from '../../src/extension/lib/setting-target.ts';
-import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead, screenOfRoute } from '../../src/extension/lib/panel-route.ts';
+import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, roleTitles, routeOfApiRead, screenOfRoute } from '../../src/extension/lib/panel-route.ts';
 import { settingsChangeActions } from '../../src/extension/lib/settings-change.ts';
 
 const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -183,6 +183,14 @@ describe('screen of a route (reveal an open tab without navigating)', () => {
         expect(screenOfRoute('/pr/acme/records-api/212')).toBe('/pr/acme/records-api/212');
         expect(screenOfRoute('/settings')).toBe('/settings');
         expect(screenOfRoute('/')).toBe('/');
+    });
+});
+
+describe('titles of a tab role (a tab reopened but not revived yet, found by its title)', () => {
+    it('the PR\'s title, or those of the home page and settings', () => {
+        expect(roleTitles(enT, '/pr/acme/records-api/212?from=2&to=6')).toEqual(['PR #212 · records-api']);
+        expect(roleTitles(enT, '/settings')).toEqual(['Revspan', 'Revspan · Settings']);
+        expect(roleTitles(frT, '/')).toEqual(['Revspan', 'Revspan · Réglages']);
     });
 });
 

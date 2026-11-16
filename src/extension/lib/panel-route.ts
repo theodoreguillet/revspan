@@ -38,10 +38,12 @@ export function routeOfApiRead(method: string, apiPath: string): string | null {
     return SCREENS.get(pagePath.split('?')[0] ?? '') ?? null;
 }
 
-/**
- * What a tab shows of a route, to know whether showing that route again must navigate: the PR itself (its range is
- * the page's business: revealing an open PR keeps it), otherwise the route.
- */
+/** Titles a tab of the role of `route` can have: the PR's, or those of the home page and settings. */
+export function roleTitles(t: Translate, route: string): string[] {
+    return PR_ROUTE.test(route) ? [panelTitle(t, route)] : [panelTitle(t, HOME_ROUTE), panelTitle(t, '/settings')];
+}
+
+/** The PR route without its range (revealing an open PR navigates only when a range is asked), otherwise the route. */
 export function screenOfRoute(route: string): string {
     return PR_ROUTE.exec(route)?.[0] ?? route;
 }

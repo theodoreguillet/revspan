@@ -9,7 +9,7 @@ import type { DiffDocuments } from './diff-documents.ts';
 import { hostL10n, hostPageLocale } from './host-l10n.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
 import { errorText } from './lib/error-text.ts';
-import { PANEL_VIEW_TYPE, panelTitle, routeOfApiRead, screenOfRoute } from './lib/panel-route.ts';
+import { PANEL_VIEW_TYPE, panelTitle, roleTitles, routeOfApiRead, screenOfRoute } from './lib/panel-route.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
 import { parseWebviewMessage } from './lib/webview-messages.ts';
 import { openLocalFile } from './local-files.ts';
@@ -17,13 +17,16 @@ import { openLocalFile } from './local-files.ts';
 /** Tab title of a page route, in VS Code's display language. */
 const titleOf = (route: string): string => panelTitle(hostL10n().t, route);
 
-/** A Revspan tab: its role, fixed when it opens (home page and settings, or one PR), and what it shows. */
+/** A Revspan tab: its role, fixed when it opens (home page and settings, or one PR). */
 interface Tab {
     readonly role: PanelRole;
     readonly panel: vscode.WebviewPanel;
-    /** Screen shown as far as the extension knows (screenOfRoute: the PR, not its range). */
-    shown: string;
+    /** Closed by the user: its webview can no longer be used (VS Code throws). */
+    closed: boolean;
 }
+
+/** Whether a VS Code tab holds a Revspan webview (VS Code prefixes the view type, e.g. "mainThreadWebview-revspan"). */
+const isRevspanTab = (tab: vscode.Tab): boolean => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith(PANEL_VIEW_TYPE);
 
 /** The Revspan tabs: the "Revspan" tab (home page and settings) and one tab per open PR. */
 export class RevspanPanel {
@@ -47,22 +50,42 @@ export class RevspanPanel {
 
     /** Shows a page route in the tab of its role: brought to the front if open (no duplicate), created otherwise. */
     show(route: string): void {
-        const tab = this.tabs.get(roleOfRoute(route));
+        const role = roleOfRoute(route);
+        const tab = this.tabs.get(role);
         if (tab) {
             tab.panel.reveal();
-            // An open PR keeps its range unless one is asked; the "Revspan" tab goes to the asked screen.
-            if (route !== tab.shown) {
-                tab.shown = screenOfRoute(route);
+            // The "Revspan" tab goes to the asked screen (a push to the current route does nothing); an open PR keeps
+            // its range unless one is asked.
+            if (role === 'home' || route !== screenOfRoute(route)) {
                 tab.panel.title = titleOf(route);
                 void this.post(tab, { type: 'navigate', route });
             }
             return;
         }
-        const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, titleOf(route), vscode.ViewColumn.Active, {
+        // A tab of that role reopened after a reload but not revived yet (VS Code revives a tab when it is first shown):
+        // replaced in its place, not duplicated.
+        const dormant = this.dormantTab(route);
+        const panel = vscode.window.createWebviewPanel(PANEL_VIEW_TYPE, titleOf(route), dormant?.group.viewColumn ?? vscode.ViewColumn.Active, {
             ...this.webviewOptions(),
             retainContextWhenHidden: true,
         });
         this.attach(panel, route);
+        if (dormant) {
+            void vscode.window.tabGroups.close(dormant, true);
+        }
+    }
+
+    /**
+     * Revspan tab of the role of `route` that VS Code shows but has not revived (no panel yet), found by its title.
+     * A tab with the title and column of a live panel is left alone (two workspaces can have the same PR title).
+     */
+    private dormantTab(route: string): vscode.Tab | undefined {
+        const titles = roleTitles(hostL10n().t, route);
+        const live = [...this.tabs.values()].map(({ panel }) => panel);
+        return vscode.window.tabGroups.all
+            .flatMap((group) => group.tabs)
+            .find((tab) => isRevspanTab(tab) && titles.includes(tab.label)
+                && !live.some((panel) => panel.title === tab.label && panel.viewColumn === tab.group.viewColumn));
     }
 
     /**
@@ -88,7 +111,7 @@ export class RevspanPanel {
 
     /** Page, title, icon and listeners of a tab. */
     private attach(panel: vscode.WebviewPanel, route: string): void {
-        const tab: Tab = { role: roleOfRoute(route), panel, shown: screenOfRoute(route) };
+        const tab: Tab = { role: roleOfRoute(route), panel, closed: false };
         panel.title = titleOf(route);
         panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon.svg');
         const indexHtml = fs.readFileSync(vscode.Uri.joinPath(this.webDir, 'index.html').fsPath, 'utf8');
@@ -111,16 +134,20 @@ export class RevspanPanel {
             void this.post(tab, { type: 'visibility', visible: panel.visible });
         }, undefined, listeners);
         panel.onDidDispose(() => {
+            tab.closed = true;
             if (this.tabs.get(tab.role) === tab) {
                 this.tabs.delete(tab.role);
             }
             listeners.forEach((listener) => listener.dispose());
         }, undefined, listeners);
         this.tabs.set(tab.role, tab);
+        // Delivered once the page is loaded: a tab revived in the background starts paused.
+        void this.post(tab, { type: 'visibility', visible: panel.visible });
     }
 
+    /** Message to the tab's page; nothing once the tab is closed (e.g. a response arriving after the user closed it). */
     private post(tab: Tab, message: HostToWebview): Thenable<boolean> {
-        return tab.panel.webview.postMessage(message);
+        return tab.closed ? Promise.resolve(false) : tab.panel.webview.postMessage(message);
     }
 
     private async handle(tab: Tab, message: WebviewToHost): Promise<void> {
@@ -131,7 +158,6 @@ export class RevspanPanel {
                     // Only a screen of the tab's role counts (a PR tab keeps its title whatever it reads).
                     const route = routeOfApiRead(message.method, message.path);
                     if (route && roleOfRoute(route) === tab.role) {
-                        tab.shown = route;
                         tab.panel.title = titleOf(route);
                     }
                     const result = await callApi(this.app.http, message);

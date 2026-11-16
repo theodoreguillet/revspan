@@ -74,6 +74,30 @@ export class Range {
 
 export const ViewColumn = { Active: -1 };
 
+/** Input of a webview tab (VS Code prefixes the panel's view type, e.g. "mainThreadWebview-revspan"). */
+export class TabInputWebview {
+    readonly viewType: string;
+
+    constructor(viewType: string) {
+        this.viewType = viewType;
+    }
+}
+
+export interface FakeTab {
+    readonly label: string;
+    readonly input: unknown;
+    readonly group: FakeTabGroup;
+}
+
+export class FakeTabGroup {
+    readonly viewColumn: number;
+    readonly tabs: FakeTab[] = [];
+
+    constructor(viewColumn: number) {
+        this.viewColumn = viewColumn;
+    }
+}
+
 /** Webview panel: messages posted to the page, attached listeners, visibility, closing. */
 export class FakeWebviewPanel {
     readonly viewType: string;
@@ -89,7 +113,11 @@ export class FakeWebviewPanel {
     private readonly messages = new EventEmitter<unknown>();
     private readonly disposal = new EventEmitter<void>();
     private readonly viewState = new EventEmitter<{ webviewPanel: FakeWebviewPanel }>();
-    readonly webview = {
+    /** Editor group (column) of its tab. */
+    viewColumn = 1;
+    /** Removes its tab from the editor group when it closes (panels created by createWebviewPanel). */
+    closeTab: (() => void) | null = null;
+    private readonly page = {
         html: '',
         options: {} as unknown,
         cspSource: 'vscode-webview:',
@@ -100,6 +128,14 @@ export class FakeWebviewPanel {
         },
         onDidReceiveMessage: this.messages.event,
     };
+    /** Like VS Code, the webview can no longer be used once the panel is closed. */
+    get webview(): typeof this.page {
+        if (this.disposed) {
+            throw new Error('Webview is disposed');
+        }
+        return this.page;
+    }
+
     readonly onDidDispose = this.disposal.event;
     readonly onDidChangeViewState = this.viewState.event;
 
@@ -125,6 +161,7 @@ export class FakeWebviewPanel {
     dispose(): void {
         if (!this.disposed) {
             this.disposed = true;
+            this.closeTab?.();
             this.disposal.fire();
         }
     }
@@ -143,6 +180,8 @@ export class FakeWebviewPanel {
 /** What the extension did on the VS Code side. */
 export const recorded = {
     panels: [] as FakeWebviewPanel[],
+    /** Tabs closed by the extension (tabGroups.close). */
+    closedTabs: [] as FakeTab[],
     warnings: [] as string[],
     errors: [] as string[],
     infos: [] as string[],
@@ -212,11 +251,42 @@ export const workspace = {
     },
 };
 
+function tabGroup(viewColumn: number): FakeTabGroup {
+    const existing = window.tabGroups.all.find((group) => group.viewColumn === viewColumn);
+    if (existing) {
+        return existing;
+    }
+    const group = new FakeTabGroup(viewColumn);
+    window.tabGroups.all.push(group);
+    return group;
+}
+
+/** A Revspan tab reopened by VS Code after a reload but not revived yet: a tab, no panel. */
+export function dormantTab(label: string, viewColumn = 1, viewType = 'mainThreadWebview-revspan'): FakeTab {
+    const group = tabGroup(viewColumn);
+    const tab: FakeTab = { label, input: new TabInputWebview(viewType), group };
+    group.tabs.push(tab);
+    return tab;
+}
+
 export const window = {
-    createWebviewPanel(viewType: string, title: string, _column: number, options: unknown): FakeWebviewPanel {
+    createWebviewPanel(viewType: string, title: string, column: number, options: unknown): FakeWebviewPanel {
         const panel = new FakeWebviewPanel(viewType, title, options);
+        panel.viewColumn = column === ViewColumn.Active ? 1 : column;
+        const group = tabGroup(panel.viewColumn);
+        const tab: FakeTab = { get label() { return panel.title; }, input: new TabInputWebview(`mainThreadWebview-${viewType}`), group };
+        group.tabs.push(tab);
+        panel.closeTab = () => group.tabs.splice(group.tabs.indexOf(tab), 1);
         recorded.panels.push(panel);
         return panel;
+    },
+    tabGroups: {
+        all: [] as FakeTabGroup[],
+        async close(tab: FakeTab): Promise<boolean> {
+            tab.group.tabs.splice(tab.group.tabs.indexOf(tab), 1);
+            recorded.closedTabs.push(tab);
+            return true;
+        },
     },
     async showWarningMessage(message: string): Promise<undefined> {
         recorded.warnings.push(message);
@@ -253,6 +323,7 @@ export function resetFakeVscode(): void {
         list.length = 0;
     }
     workspace.workspaceFolders = [];
+    window.tabGroups.all = [];
     workspace.isTrusted = true;
     settingLevels.clear();
     unregisteredSettings.clear();

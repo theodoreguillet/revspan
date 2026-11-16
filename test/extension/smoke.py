@@ -288,24 +288,49 @@ def run() -> None:
         before = sorted(revspan_tabs(page))
         check('tabs: exactly 3 Revspan tabs before the reload', len(before) == 3, str(before))
 
-        # "Reload Window": VS Code reopens every tab on the route saved by its page, no duplicate.
+        # "Reload Window" with the PR #42 tab in front: VS Code reopens every tab but revives only the one shown, the
+        # others when first shown. The ones still asleep are replaced in their place, never duplicated.
+        tab(page, 'PR #42').click()
+        wait_until(lambda: active_tab(page).startswith('PR #42'), 15)
         command(page, 'Developer: Reload Window')
         time.sleep(3)
         page.wait_for_selector('.monaco-workbench', timeout=60000)
         restored = wait_until(lambda: sorted(revspan_tabs(page)) == before, 60)
         check('reload: same Revspan tabs', bool(restored), f'{revspan_tabs(page)} vs {before}')
-        # Tabs are revived when shown: each one shows its own route, still without duplicates.
+        frame = wait_until(lambda: app_frame(page, PR_42), 60)
+        if not frame:
+            check('reload: PR #42 tab revived', False, str(tab_titles(page)))
+            return
+        frame.wait_for_selector('.rv-v', timeout=60000)
+        check('reload: PR page displayed', frame.locator('.rv-v').count() == 7)
+        # ⚙ in PR #42 while the "Revspan" tab has not been shown since the reload.
+        frame.locator('a.rv-ic[href$="/settings"]').first.click()
+        settings_tab = wait_until(lambda: active_tab(page) == 'Revspan · Settings' and app_frame(page, is_home), 30)
+        time.sleep(1)
+        check('reload: ⚙ in PR #42 before showing the "Revspan" tab -> exactly 3 Revspan tabs',
+              bool(settings_tab) and len(revspan_tabs(page)) == 3 and frame_route(frame).startswith(PR_42),
+              f'{revspan_tabs(page)}, active {active_tab(page)}, PR tab on {frame_route(frame)}')
+        # A PR whose tab is still asleep, clicked in "My PRs".
+        row45 = page.locator('.monaco-list-row', has_text='demo-repo #45 ·').first
+        if row45.count():
+            row45.click()
+            shown45 = wait_until(lambda: active_tab(page).startswith('PR #45') and app_frame(page, PR_45), 60)
+            time.sleep(1)
+            check('reload: PR #45 clicked in "My PRs" before showing its tab -> no duplicate',
+                  bool(shown45) and len([t for t in revspan_tabs(page) if t.startswith('PR #45')]) == 1 and len(revspan_tabs(page)) == 3,
+                  f'{revspan_tabs(page)}, active {active_tab(page)}')
+        else:
+            check('reload: PR #45 row in "My PRs"', False, ' | '.join(page.locator('.pane-body .monaco-list-row').all_inner_texts())[:600])
+        page.screenshot(path=f'{SHOTS}/08-recharge.png')
+        # Every tab shows its own page, still without duplicates.
         for title, route in (('PR #45', PR_45), ('PR #42', PR_42), ('Revspan', is_home)):
             tab(page, title).click()
             shown = wait_until(lambda: app_frame(page, route), 60)
             check(f'reload: "{title}" tab shows its page', bool(shown), f'{revspan_tabs(page)}')
-        frame = app_frame(page, PR_42)
-        if frame:
-            frame.wait_for_selector('.rv-v', timeout=60000)
-        page.screenshot(path=f'{SHOTS}/08-recharge.png')
-        check('reload: PR page displayed', bool(frame) and frame.locator('.rv-v').count() == 7)
         time.sleep(2)
-        check('reload: exactly 3 Revspan tabs once all revived', sorted(revspan_tabs(page)) == before, f'{revspan_tabs(page)} vs {before}')
+        after = sorted(t.replace('Revspan · Settings', 'Revspan') for t in revspan_tabs(page))
+        check('reload: exactly 3 Revspan tabs once all revived', after == sorted(t.replace('Revspan · Settings', 'Revspan') for t in before),
+              f'{revspan_tabs(page)} vs {before}')
 
 
 def main() -> int:
