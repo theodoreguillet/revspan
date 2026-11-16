@@ -73,6 +73,11 @@ export class PrService {
         return (await this.loadCached(ref, { health: true }, { fresh: true })).detail;
     }
 
+    /** Source branch of the PR, from the cached load (no new read when the PR was loaded lately). */
+    async sourceBranch(ref: PrRef): Promise<string> {
+        return (await this.loadCached(ref, VERSIONS_ONLY)).detail.pr.sourceBranch;
+    }
+
     async summary(ref: PrRef): Promise<Summary> {
         const { results } = await this.summarize(ref);
         return { versions: results.filter((r): r is VersionSummary => r !== null) };

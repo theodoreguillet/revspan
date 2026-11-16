@@ -26,7 +26,7 @@ const nodeFs: RepoFs = {
 
 export async function openLocalFile(prs: PrService, ref: PrRef, filePath: string, line: number | null): Promise<void> {
     const roots = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
-    const branch = await prs.detail(ref).then((d) => d.pr.sourceBranch, () => null);
+    const branch = await prs.sourceBranch(ref).catch(() => null);
     const repo = findLocalRepo(roots, ref, branch, nodeFs);
     if (!repo) {
         void vscode.window.showWarningMessage(vscode.l10n.t(

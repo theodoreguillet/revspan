@@ -15,7 +15,10 @@ const ref = { workspace: WS, repo: REPO, id: FAKE_PRS.mine };
 let fake: FakeBitbucket;
 let dir: string;
 let clock: number;
+let arm: () => void;
 let service: PrService;
+/** Held (once) before the comments of the PR are answered, to simulate a slow read in flight. */
+let gate: { release: () => void; reached: Promise<void> } | null = null;
 
 beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-prcache-'));
@@ -24,7 +27,23 @@ beforeEach(async () => {
     await store.saveConfig({ email: FAKE_EMAIL, repos: [`${WS}/${REPO}`] });
     const secrets = { kind: 'file', get: async () => FAKE_TOKEN, set: async () => undefined, remove: async () => undefined } as unknown as SecretStore;
     const cache = new Cache(null);
-    const session = new BitbucketSession({ store, secrets, cache, baseUrl: fake.url });
+    let armed = false;
+    gate = null;
+    const slowFetch: typeof fetch = async (input, init) => {
+        const response = await fetch(input, init);
+        if (armed && new RegExp(`/pullrequests/${ref.id}/comments(\\?|$)`).test(String(input)) && (init?.method ?? 'GET') === 'GET') {
+            armed = false;
+            let reached!: () => void;
+            let release!: () => void;
+            const open = new Promise<void>((resolve) => { release = resolve; });
+            gate = { release, reached: new Promise<void>((resolve) => { reached = resolve; }) };
+            reached();
+            await open;
+        }
+        return response;
+    };
+    arm = () => { armed = true; };
+    const session = new BitbucketSession({ store, secrets, cache, baseUrl: fake.url, fetchImpl: slowFetch });
     clock = 1_000_000;
     service = new PrService({ session, store, cache, now: () => clock });
 });
@@ -85,5 +104,28 @@ describe('PrService in-memory cache', () => {
             commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
         });
         expect(await service.versionKinds(ref)).toHaveLength(3);
+    });
+
+    it('never serves data read before a write', async () => {
+        arm();
+        const cold = service.compare(ref, 1, 2, 3);
+        while (!gate) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        await service.createComment(ref, { raw: 'brand new' });
+        const detail = service.detail(ref);
+        gate.release();
+        await cold;
+        expect(JSON.stringify((await detail).threads)).toContain('brand new');
+        // The following compare reuses the post-write load (no third read).
+        await service.compare(ref, 1, 2, 3);
+        expect(reads()).toMatchObject({ pr: 2, comments: 2 });
+    });
+
+    it('reads the source branch without a new PR read after detail', async () => {
+        const { pr } = await service.detail(ref);
+        expect(await service.sourceBranch(ref)).toBe(pr.sourceBranch);
+        await service.sourceBranch(ref);
+        expect(reads().pr).toBe(1);
     });
 });

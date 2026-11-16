@@ -121,15 +121,22 @@ export class Cache {
         if (pending) {
             return pending as Promise<T>;
         }
+        const own: { promise?: Promise<T> } = {};
         const promise = (async () => {
             try {
                 const value = await compute();
-                this.live.set(key, { at: Date.now(), value });
+                // Invalidated while in flight (the slot was dropped): the value predates the invalidation, never keep it.
+                if (this.livePending.get(key) === own.promise) {
+                    this.live.set(key, { at: Date.now(), value });
+                }
                 return value;
             } finally {
-                this.livePending.delete(key);
+                if (this.livePending.get(key) === own.promise) {
+                    this.livePending.delete(key);
+                }
             }
         })();
+        own.promise = promise;
         this.livePending.set(key, promise);
         return promise;
     }
@@ -138,6 +145,12 @@ export class Cache {
         for (const key of this.live.keys()) {
             if (key.startsWith(prefix)) {
                 this.live.delete(key);
+            }
+        }
+        // In-flight reads started before the invalidation must not be joined by later reads, nor stored.
+        for (const key of this.livePending.keys()) {
+            if (key.startsWith(prefix)) {
+                this.livePending.delete(key);
             }
         }
     }
