@@ -2,7 +2,8 @@
 // The hash is kept in VS Code too: "#/..." links stay internal there (otherwise the panel opens them in the browser).
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { clearErrors } from './composables/useErrors.ts';
-import { isVsCode, onHostMessage, readInitialRoute, rememberRoute } from './services/host.ts';
+import { isVsCode, readInitialRoute, rememberRoute } from './services/host.ts';
+import { bindRouterToHost } from './services/host-tab.ts';
 import HomeView from './views/HomeView.vue';
 import PrView from './views/PrView.vue';
 import SettingsView from './views/SettingsView.vue';
@@ -25,6 +26,12 @@ export const router = createRouter({
     ],
 });
 
+// In VS Code, each tab keeps the role of its initial route (the "Revspan" tab: home page and settings; a PR tab: that
+// PR): other screens open in their own tab. The extension can also make the tab navigate ("Open settings"...).
+if (isVsCode) {
+    bindRouterToHost(router, initialRoute);
+}
+
 // Changing screen clears the previous screen's errors (not a mere range change).
 // In VS Code, the displayed route is kept in the panel state (reopened on it after a reload).
 router.afterEach((to, from, failure) => {
@@ -36,12 +43,3 @@ router.afterEach((to, from, failure) => {
         window.scrollTo(0, 0);
     }
 });
-
-// The extension can ask to show another PR ("Open a PR" command, clicked link...).
-if (isVsCode) {
-    onHostMessage((message) => {
-        if (message.type === 'navigate') {
-            void router.push(message.route);
-        }
-    });
-}

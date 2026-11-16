@@ -2,7 +2,7 @@
 // and "Open file" never leaves the repository's local copy.
 import path from 'node:path';
 import { z } from 'zod';
-import type { WebviewToHost } from '../../shared/webview-protocol.ts';
+import { isPageRoute, type WebviewToHost } from '../../shared/webview-protocol.ts';
 import { prRefSchema } from '../../server/http/schemas.ts';
 
 const filePath = z.string().min(1).max(4096);
@@ -18,6 +18,7 @@ const messageSchema = z.discriminatedUnion('type', [
         path: filePath,
         oldPath: filePath.nullable(),
     }),
+    z.object({ type: z.literal('openRoute'), route: z.string().max(4096).refine(isPageRoute) }),
 ]);
 
 /** Message from the page, or null if malformed (to be ignored). The method and the API path are checked by the bridge. */

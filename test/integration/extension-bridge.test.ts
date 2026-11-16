@@ -247,17 +247,22 @@ describe('extension panel (simulated VS Code)', () => {
         await vi.waitFor(() => expect(recorded.opened).toEqual([path.join(root, REPO, 'README.md')]));
     });
 
-    it('tab title: that of the screen, also when the page goes back to the home page or the settings', async () => {
+    it('tab title: that of the screen in the Revspan tab; a PR tab keeps its PR\'s title', async () => {
+        const { panel: home } = open('/');
+        expect(home.title).toBe('Revspan');
+        home.receive({ type: 'request', id: 1, method: 'GET', path: '/api/settings' });
+        await vi.waitFor(() => expect(home.title).toBe('Revspan · Settings'));
+        home.receive({ type: 'request', id: 2, method: 'GET', path: '/api/home' });
+        await vi.waitFor(() => expect(home.title).toBe('Revspan'));
+        await vi.waitFor(() => expect(home.posted).toHaveLength(2), { timeout: 5000 });
+
         const prTitle = `PR #${FAKE_PRS.main} · ${REPO}`;
-        const { panel } = open(`/pr/${WS}/${REPO}/${FAKE_PRS.main}`);
-        expect(panel.title).toBe(prTitle);
-        panel.receive({ type: 'request', id: 1, method: 'GET', path: '/api/settings' });
-        await vi.waitFor(() => expect(panel.title).toBe('Revspan · Settings'));
-        panel.receive({ type: 'request', id: 2, method: 'GET', path: '/api/home' });
-        await vi.waitFor(() => expect(panel.title).toBe('Revspan'));
-        panel.receive({ type: 'request', id: 3, method: 'GET', path: `/api/pr/${WS}/${REPO}/${FAKE_PRS.main}` });
-        await vi.waitFor(() => expect(panel.title).toBe(prTitle));
-        await vi.waitFor(() => expect(panel.posted).toHaveLength(3), { timeout: 5000 });
+        const { panel: pr } = open(`/pr/${WS}/${REPO}/${FAKE_PRS.main}`);
+        expect(pr.title).toBe(prTitle);
+        pr.receive({ type: 'request', id: 1, method: 'GET', path: '/api/settings' });
+        pr.receive({ type: 'request', id: 2, method: 'GET', path: '/api/home' });
+        await vi.waitFor(() => expect(pr.posted).toHaveLength(2), { timeout: 5000 });
+        expect(pr.title).toBe(prTitle);
     });
 
     it('follows VS Code\'s display language: page language passed to the page, tab title and warnings', async () => {
@@ -284,13 +289,6 @@ describe('extension panel (simulated VS Code)', () => {
         expect(restored.webview.html).toContain(`<meta name="revspan-route" content="/pr/${WS}/${REPO}/${FAKE_PRS.main}?from=2&#38;to=6">`);
         restored.receive({ type: 'request', id: 1, method: 'GET', path: '/api/health' });
         await vi.waitFor(() => expect(restored.posted).toEqual([expect.objectContaining({ type: 'response', id: 1, status: 200 })]));
-        revspan.show('/settings');
-        expect(recorded.panels).toEqual([]);
-        expect(restored.posted.at(-1)).toEqual({ type: 'navigate', route: '/settings' });
-        const duplicate = new FakeWebviewPanel('revspan', 'Revspan');
-        revspan.restore(duplicate as unknown as vscode.WebviewPanel, '/');
-        expect(duplicate.disposed).toBe(true);
-        expect(restored.disposed).toBe(false);
     });
 
     it('panel-specific listeners, released when it closes; a new panel afterwards', () => {
@@ -302,6 +300,129 @@ describe('extension panel (simulated VS Code)', () => {
         revspan.show('/settings');
         expect(recorded.panels).toHaveLength(2);
         expect(subscriptions).toEqual([]);
+    });
+
+    describe('one tab per PR', () => {
+        const prRoute = (id: number): string => `/pr/${WS}/${REPO}/${id}`;
+        const prTitle = (id: number): string => `PR #${id} · ${REPO}`;
+        const navigations = (panel: FakeWebviewPanel): unknown[] => panel.posted.filter((message) => (message as { type: string }).type === 'navigate');
+
+        it('opens two PRs in two panels, the home page in a third one', () => {
+            const revspan = create();
+            revspan.show(prRoute(FAKE_PRS.main));
+            revspan.show(prRoute(FAKE_PRS.mine));
+            revspan.show('/');
+            expect(recorded.panels.map((panel) => panel.title)).toEqual([prTitle(FAKE_PRS.main), prTitle(FAKE_PRS.mine), 'Revspan']);
+            expect(recorded.panels[1]?.webview.html).toContain(`<meta name="revspan-route" content="${prRoute(FAKE_PRS.mine)}">`);
+        });
+
+        it('reveals the existing panel of an open PR, on its range unless one is asked', () => {
+            const revspan = create();
+            revspan.show(prRoute(FAKE_PRS.main));
+            revspan.show(prRoute(FAKE_PRS.mine));
+            revspan.show(prRoute(FAKE_PRS.main));
+            expect(recorded.panels).toHaveLength(2);
+            const [first, second] = recorded.panels;
+            expect(first?.revealed).toBe(1);
+            expect(second?.revealed).toBe(0);
+            expect(first && navigations(first)).toEqual([]);
+            revspan.show(`${prRoute(FAKE_PRS.main)}?from=2&to=6`);
+            expect(recorded.panels).toHaveLength(2);
+            expect(first && navigations(first)).toEqual([{ type: 'navigate', route: `${prRoute(FAKE_PRS.main)}?from=2&to=6` }]);
+        });
+
+        it('restores a PR panel and drops a duplicate', () => {
+            const revspan = create();
+            const pr = new FakeWebviewPanel('revspan', 'Revspan');
+            revspan.restore(pr as unknown as vscode.WebviewPanel, `${prRoute(FAKE_PRS.main)}?from=2&to=6`);
+            const duplicate = new FakeWebviewPanel('revspan', 'Revspan');
+            revspan.restore(duplicate as unknown as vscode.WebviewPanel, prRoute(FAKE_PRS.main));
+            expect(duplicate.disposed).toBe(true);
+            expect(pr.disposed).toBe(false);
+            const home = new FakeWebviewPanel('revspan', 'Revspan');
+            revspan.restore(home as unknown as vscode.WebviewPanel, '/settings');
+            expect(home.title).toBe('Revspan · Settings');
+            const homeDuplicate = new FakeWebviewPanel('revspan', 'Revspan');
+            revspan.restore(homeDuplicate as unknown as vscode.WebviewPanel, '/');
+            expect(homeDuplicate.disposed).toBe(true);
+            // The restored tabs are reused: no new panel, the PR keeps its range, the home page goes back home.
+            revspan.show(prRoute(FAKE_PRS.main));
+            revspan.show('/');
+            expect(recorded.panels).toEqual([]);
+            expect(pr.revealed).toBe(1);
+            expect(navigations(pr)).toEqual([]);
+            expect(navigations(home)).toEqual([{ type: 'navigate', route: '/' }]);
+            expect(home.title).toBe('Revspan');
+        });
+
+        it('openRoute from a PR panel to settings reveals the home panel, reopened if it was closed', async () => {
+            const revspan = create();
+            revspan.show('/');
+            revspan.show(prRoute(FAKE_PRS.main));
+            const [home, pr] = recorded.panels;
+            if (!home || !pr) {
+                throw new Error('panels not created');
+            }
+            pr.receive({ type: 'openRoute', route: '/settings' });
+            await vi.waitFor(() => expect(navigations(home)).toEqual([{ type: 'navigate', route: '/settings' }]));
+            expect(home.revealed).toBe(1);
+            expect(home.title).toBe('Revspan · Settings');
+            expect(pr.posted).toEqual([]);
+            expect(pr.title).toBe(prTitle(FAKE_PRS.main));
+
+            // The user closes the Revspan tab, then clicks "Revspan" in the PR tab: it reopens on the home page.
+            home.dispose();
+            pr.receive({ type: 'openRoute', route: '/' });
+            await vi.waitFor(() => expect(recorded.panels).toHaveLength(3));
+            expect(recorded.panels[2]?.title).toBe('Revspan');
+            expect(recorded.panels[2]?.webview.html).toContain('<meta name="revspan-route" content="/">');
+            // Only a page route is accepted.
+            pr.receive({ type: 'openRoute', route: '//evil.example/x' });
+            pr.receive({ type: 'openRoute', route: 'https://evil.example/' });
+            expect(recorded.panels).toHaveLength(3);
+        });
+
+        it('openRoute from the home panel opens the PR in its own tab, the home page stays', async () => {
+            const revspan = create();
+            revspan.show('/');
+            const home = recorded.panels[0];
+            home?.receive({ type: 'openRoute', route: prRoute(FAKE_PRS.mine) });
+            await vi.waitFor(() => expect(recorded.panels).toHaveLength(2));
+            expect(recorded.panels[1]?.title).toBe(prTitle(FAKE_PRS.mine));
+            expect(home?.posted).toEqual([]);
+        });
+
+        it('tells each page whether its tab is on screen; visible while any tab is', () => {
+            const revspan = create();
+            revspan.show('/');
+            revspan.show(prRoute(FAKE_PRS.main));
+            const [home, pr] = recorded.panels;
+            if (!home || !pr) {
+                throw new Error('panels not created');
+            }
+            pr.setVisible(false);
+            expect(pr.posted).toEqual([{ type: 'visibility', visible: false }]);
+            expect(revspan.visible).toBe(true);
+            home.setVisible(false);
+            expect(home.posted).toEqual([{ type: 'visibility', visible: false }]);
+            expect(revspan.visible).toBe(false);
+            revspan.show(prRoute(FAKE_PRS.main));
+            expect(pr.posted.at(-1)).toEqual({ type: 'visibility', visible: true });
+            expect(revspan.visible).toBe(true);
+        });
+
+        it('a closed PR tab releases its listeners; the PR opens again in a new tab', () => {
+            const revspan = create();
+            revspan.show('/');
+            revspan.show(prRoute(FAKE_PRS.main));
+            const [home, pr] = recorded.panels;
+            pr?.dispose();
+            expect(pr?.listenerCount).toBe(0);
+            expect(home?.listenerCount).toBeGreaterThan(0);
+            revspan.show(prRoute(FAKE_PRS.main));
+            expect(recorded.panels).toHaveLength(3);
+            expect(home?.revealed).toBe(0);
+        });
     });
 
     it('"My PRs" view: a line tells how many PRs are hidden, and opens the settings', async () => {

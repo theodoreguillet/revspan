@@ -38,6 +38,14 @@ export function routeOfApiRead(method: string, apiPath: string): string | null {
     return SCREENS.get(pagePath.split('?')[0] ?? '') ?? null;
 }
 
+/**
+ * What a tab shows of a route, to know whether showing that route again must navigate: the PR itself (its range is
+ * the page's business: revealing an open PR keeps it), otherwise the route.
+ */
+export function screenOfRoute(route: string): string {
+    return PR_ROUTE.exec(route)?.[0] ?? route;
+}
+
 /** Route saved by the page in the panel state (PanelState); the home page if the state is missing or invalid. */
 export function restoredRoute(state: unknown): string {
     const route = typeof state === 'object' && state !== null ? (state as Partial<Record<keyof PanelState, unknown>>).route : undefined;

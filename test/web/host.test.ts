@@ -104,6 +104,17 @@ describe('in a VS Code panel', () => {
         expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('extension messages: visibility of the tab forwarded, malformed ones ignored', async () => {
+        const { onHostMessage } = await import('../../src/web/services/host.ts');
+        const handler = vi.fn();
+        onHostMessage(handler);
+        reply({ type: 'visibility', visible: false });
+        reply({ type: 'visibility', visible: 'no' });
+        reply({ type: 'visibility' });
+        reply({ type: 'visibility', visible: true });
+        expect(handler.mock.calls).toEqual([[{ type: 'visibility', visible: false }], [{ type: 'visibility', visible: true }]]);
+    });
+
     it('displayed route saved in the panel state (reopened on it after "Reload Window")', async () => {
         const { rememberRoute } = await import('../../src/web/services/host.ts');
         rememberRoute('/pr/acme/demo-repo/42?from=2&to=6');

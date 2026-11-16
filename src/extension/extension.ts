@@ -87,6 +87,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         home: app.services.home,
         prs: app.services.prs,
         onPolled: () => tree.refresh(),
+        // The view or any Revspan tab on screen.
         isVisible: () => treeView.visible || panel.visible,
     });
     context.subscriptions.push(
@@ -100,10 +101,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             }
         }),
         vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
-        // After "Reload Window", VS Code reopens the panel with the state saved by the page (its route).
+        // After "Reload Window", VS Code reopens each Revspan tab with the state saved by its page (its route).
         vscode.window.registerWebviewPanelSerializer(PANEL_VIEW_TYPE, {
             deserializeWebviewPanel: async (webviewPanel, state: unknown) => panel.restore(webviewPanel, restoredRoute(state)),
         }),
+        // Home page and settings in the "Revspan" tab, each PR in its own tab (roleOfRoute).
         vscode.commands.registerCommand('revspan.openHome', () => panel.show('/')),
         vscode.commands.registerCommand('revspan.openSettings', () => panel.show('/settings')),
         vscode.commands.registerCommand('revspan.refresh', () => tree.refresh({ fresh: true })),

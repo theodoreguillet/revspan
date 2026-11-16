@@ -14,7 +14,7 @@ import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { errorText as pageErrorText } from '../../src/web/lib/errors.ts';
 import { fileInRepo, parseWebviewMessage } from '../../src/extension/lib/webview-messages.ts';
 import { isUnregisteredSetting, settingTarget } from '../../src/extension/lib/setting-target.ts';
-import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead } from '../../src/extension/lib/panel-route.ts';
+import { PANEL_VIEW_TYPE, panelTitle, restoredRoute, routeOfApiRead, screenOfRoute } from '../../src/extension/lib/panel-route.ts';
 import { settingsChangeActions } from '../../src/extension/lib/settings-change.ts';
 
 const readJson = (file: string): Record<string, unknown> => JSON.parse(fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -177,6 +177,15 @@ describe('panel title', () => {
     });
 });
 
+describe('screen of a route (reveal an open tab without navigating)', () => {
+    it('a PR whatever its range; any other route as is', () => {
+        expect(screenOfRoute('/pr/acme/records-api/212?from=2&to=6')).toBe('/pr/acme/records-api/212');
+        expect(screenOfRoute('/pr/acme/records-api/212')).toBe('/pr/acme/records-api/212');
+        expect(screenOfRoute('/settings')).toBe('/settings');
+        expect(screenOfRoute('/')).toBe('/');
+    });
+});
+
 describe('restored panel', () => {
     it('route saved by the page; home if the state is missing or invalid', () => {
         expect(restoredRoute({ route: '/pr/acme/records-api/212?from=2&to=6' })).toBe('/pr/acme/records-api/212?from=2&to=6');
@@ -196,7 +205,8 @@ describe('page messages', () => {
         const write = { type: 'request', id: 4, method: 'POST', path: '/api/pr/acme/records-api/212/comments', body: { raw: 'Merci' } };
         const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
         const openDiff = { type: 'openDiff', ref, from: 0, to: 3, path: 'src/A.ts', oldPath: 'src/Old.ts' };
-        for (const message of [read, write, openFile, { ...openFile, line: null }, openDiff, { ...openDiff, oldPath: null }]) {
+        const openRoute = { type: 'openRoute', route: '/pr/acme/records-api/212?from=2&to=6' };
+        for (const message of [read, write, openFile, { ...openFile, line: null }, openDiff, { ...openDiff, oldPath: null }, openRoute, { type: 'openRoute', route: '/settings' }]) {
             expect(parseWebviewMessage(message)).toEqual(message);
         }
         expect(parseWebviewMessage({ ...openFile, ref: { ...ref, extra: 'x' } })).toEqual(openFile);
@@ -226,6 +236,13 @@ describe('page messages', () => {
             { ...openDiff, to: 0 },
             { ...openDiff, to: 3.5 },
             { ...openDiff, oldPath: 3 },
+            { type: 'openRoute' },
+            { type: 'openRoute', route: 42 },
+            { type: 'openRoute', route: '' },
+            { type: 'openRoute', route: 'settings' },
+            { type: 'openRoute', route: '//evil.example/x' },
+            { type: 'openRoute', route: 'https://evil.example/' },
+            { type: 'openRoute', route: `/${'x'.repeat(5000)}` },
         ];
         for (const data of malformed) {
             expect(parseWebviewMessage(data), JSON.stringify(data)).toBeNull();

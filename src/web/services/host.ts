@@ -33,9 +33,10 @@ function isHostMessage(data: unknown): data is HostToWebview {
     if (typeof data !== 'object' || data === null) {
         return false;
     }
-    const msg = data as Partial<Record<'type' | 'id' | 'status' | 'route', unknown>>;
+    const msg = data as Partial<Record<'type' | 'id' | 'status' | 'route' | 'visible', unknown>>;
     return (msg.type === 'response' && typeof msg.id === 'number' && typeof msg.status === 'number')
-        || (msg.type === 'navigate' && typeof msg.route === 'string');
+        || (msg.type === 'navigate' && typeof msg.route === 'string')
+        || (msg.type === 'visibility' && typeof msg.visible === 'boolean');
 }
 
 /** Listens to the extension's messages; returns the unsubscribe function. */

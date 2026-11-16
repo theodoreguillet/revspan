@@ -74,16 +74,21 @@ export class Range {
 
 export const ViewColumn = { Active: -1 };
 
-/** Webview panel: messages posted to the page, attached listeners, closing. */
+/** Webview panel: messages posted to the page, attached listeners, visibility, closing. */
 export class FakeWebviewPanel {
     readonly viewType: string;
     readonly options: unknown;
     title: string;
     iconPath: unknown = null;
     disposed = false;
+    /** On screen (a new panel opens in the active editor group, in front). */
+    visible = true;
+    /** Times the extension brought it to the front. */
+    revealed = 0;
     readonly posted: unknown[] = [];
     private readonly messages = new EventEmitter<unknown>();
     private readonly disposal = new EventEmitter<void>();
+    private readonly viewState = new EventEmitter<{ webviewPanel: FakeWebviewPanel }>();
     readonly webview = {
         html: '',
         options: {} as unknown,
@@ -96,6 +101,7 @@ export class FakeWebviewPanel {
         onDidReceiveMessage: this.messages.event,
     };
     readonly onDidDispose = this.disposal.event;
+    readonly onDidChangeViewState = this.viewState.event;
 
     constructor(viewType: string, title: string, options: unknown = {}) {
         this.viewType = viewType;
@@ -104,7 +110,16 @@ export class FakeWebviewPanel {
     }
 
     reveal(): void {
-        // nothing to do
+        this.revealed++;
+        this.setVisible(true);
+    }
+
+    /** The user shows or hides the tab (another tab in front, editor group closed...). */
+    setVisible(visible: boolean): void {
+        if (this.visible !== visible) {
+            this.visible = visible;
+            this.viewState.fire({ webviewPanel: this });
+        }
     }
 
     dispose(): void {
@@ -119,9 +134,9 @@ export class FakeWebviewPanel {
         this.messages.fire(message);
     }
 
-    /** Listeners still attached to the panel (messages and closing). */
+    /** Listeners still attached to the panel (messages, visibility and closing). */
     get listenerCount(): number {
-        return this.messages.listenerCount + this.disposal.listenerCount;
+        return this.messages.listenerCount + this.disposal.listenerCount + this.viewState.listenerCount;
     }
 }
 

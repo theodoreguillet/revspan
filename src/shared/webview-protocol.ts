@@ -9,14 +9,18 @@ export type WebviewToHost =
     /** Open the file of the locally cloned repository, at a line (1-based) or at the start. */
     | { type: 'openFile'; ref: PrRef; path: string; line: number | null }
     /** Open a file's comparison in VS Code's diff editor (from = 0: against the base). */
-    | { type: 'openDiff'; ref: PrRef; from: number; to: number; path: string; oldPath: string | null };
+    | { type: 'openDiff'; ref: PrRef; from: number; to: number; path: string; oldPath: string | null }
+    /** Show a route that belongs to another tab (a PR from the "Revspan" tab, the home page or settings from a PR tab). */
+    | { type: 'openRoute'; route: string };
 
 /** Extension -> page. */
 export type HostToWebview =
     /** Response to a request (HTTP status, JSON body or null). */
     | { type: 'response'; id: number; status: number; body: unknown }
     /** Show a page route (e.g. "/pr/ws/repo/42", "/settings"). */
-    | { type: 'navigate'; route: string };
+    | { type: 'navigate'; route: string }
+    /** The tab was shown or hidden (the page pauses its background work while hidden). */
+    | { type: 'visibility'; visible: boolean };
 
 /** <meta> tag through which the extension gives the initial route to the page. */
 export const INITIAL_ROUTE_META = 'revspan-route';
