@@ -4,7 +4,7 @@ import { computed, ref, shallowRef, watch, type WatchStopHandle } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import { diffDisplay, SKELETON_DELAY_MS } from '../lib/loading.ts';
-import { prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
+import { PREFETCH_CONTEXT, prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
 import type { Preset, Range } from '../lib/selection.ts';
 import { t } from '../i18n/index.ts';
 import { api, ApiError } from '../services/api.ts';
@@ -96,6 +96,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             return;
         }
         summary.value = result;
+        // the PR size the prefetch waits for
+        pumpPrefetch();
         // A commit erased by Bitbucket after being cached only shows up when the summary is computed: the detail, loaded
         // before, still thinks the version is readable (and the range may start from it). It is reloaded once.
         if (purgedSinceDetail(detail.value.versions, result)) {
@@ -260,17 +262,26 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             return;
         }
         const { presets, context } = prefetchPlan();
+        if (context !== PREFETCH_CONTEXT) {
+            return;
+        }
         const rangeKey = (r: Range): string => keyOf({ ...r, context });
         const skip = new Set([...cache.keys(), ...inflight.keys(), ...prefetched]);
         const last = Math.max(0, ...presets.map((p) => p.to));
-        const next = prefetchQueue(presets, skip, rangeKey, prefetchFileCount(cache.values(), last))[0];
+        const next = prefetchQueue(presets, skip, rangeKey, prefetchFileCount(summary.value, cache.values(), last))[0];
         if (!next) {
             return;
         }
-        prefetched.add(rangeKey(next));
+        const key = rangeKey(next);
+        prefetched.add(key);
         prefetchRunning = true;
         // a failure stays silent: a click on that preset asks again and shows the error
-        void fetchIntoCache({ ...next, context }).catch(() => null).finally(() => {
+        void fetchIntoCache({ ...next, context }).then((result) => {
+            if (result === null) {
+                // dropped because the comparisons went stale (new inline thread): it may be prefetched again
+                prefetched.delete(key);
+            }
+        }, () => undefined).finally(() => {
             prefetchRunning = false;
             pumpPrefetch();
         });

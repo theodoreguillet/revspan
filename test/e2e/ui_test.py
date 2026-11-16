@@ -429,21 +429,28 @@ def run_checks(page):
     if FAKE_PRS and CALLS_URL:
         @check('diff_skeleton: a slow diff shows the progress bar, then a skeleton instead of the greyed diff')
         def diff_skeleton(page):
-            # Shift+click on v4 inside v2 → v6 moves "from": v3 → v6, never computed yet (its diffstat is slowed down)
-            fake_delay('diffstat', 1500)
+            # v5 alone (v4 → v5) is computed by the version summaries; Shift+click on v6 then gives v4 → v6, a range no
+            # other check selects nor the prefetch computes: its diffstat reaches the (slowed down) fake Bitbucket.
+            page.click('.rv-v[data-i="5"]')
+            expect_selection(page, 4, 5)
+            wait_pr_ready(page)
+            fake_delay('diffstat', 3000)
             try:
-                page.click('.rv-v[data-i="4"]', modifiers=['Shift'])
+                page.click('.rv-v[data-i="6"]', modifiers=['Shift'])
+                expect_selection(page, 4, 6)
                 expect(page.locator('.rv-progress[role="progressbar"][data-loading]')).to_be_attached()
                 expect(page.locator('.rv-diff-skel[aria-busy="true"]')).to_be_visible()
                 expect(page.locator('.rv-files-skel[aria-busy="true"]')).to_be_visible()
                 expect(page.locator('.rv-diff .rv-file')).to_have_count(0)
-                expect(page.locator('.rv-body.loading')).to_have_count(0)
+                # the diff area is never greyed out nor blocked (the old loading state)
+                style = page.evaluate('() => { const s = getComputedStyle(document.querySelector(".rv-diff")); return [s.opacity, s.pointerEvents]; }')
+                assert style == ['1', 'auto'], f'diff area greyed or blocked while loading: {style}'
             finally:
                 fake_delay('diffstat', 0)
             expect(page.locator('.rv-diff-skel')).to_have_count(0, timeout=10000)
             expect(page.locator('.rv-progress')).to_have_count(0)
             expect(page.locator('.rv-diff .rv-file')).not_to_have_count(0)
-            expect(readout(page)).to_contain_text('Changements de v4 à v6 · par rapport à v3')
+            expect(readout(page)).to_contain_text('Changements de v5 à v6 · par rapport à v4')
         diff_skeleton(page)
 
     @check('click on a version = what it changed')

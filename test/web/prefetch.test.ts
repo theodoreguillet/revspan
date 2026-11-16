@@ -28,13 +28,22 @@ describe('prefetchQueue', () => {
 
 describe('prefetchFileCount', () => {
     const cmp = (from: number, to: number, files: number) => ({ from, to, stats: { files, added: 0, removed: 0 } });
+    const version = (index: number, paths: string[]) => ({
+        index, kind: 'code' as const, added: 0, removed: 0, masterFiles: 0, conflicts: 0,
+        files: paths.map((path) => ({ path, added: 1, removed: 0, category: 'code' as const })),
+    });
+    const summary = { versions: [version(1, ['a.ts', 'b.ts']), version(2, ['b.ts', 'c.ts']), version(3, [])] };
 
     it('takes the comparison against master when it is known', () => {
-        expect(prefetchFileCount([cmp(5, 6, 40), cmp(0, 6, 8)], 6)).toBe(8);
+        expect(prefetchFileCount(null, [cmp(5, 6, 40), cmp(0, 6, 8)], 6)).toBe(8);
     });
 
-    it('otherwise takes the largest known comparison, or nothing', () => {
-        expect(prefetchFileCount([cmp(5, 6, 3), cmp(2, 6, 9), cmp(0, 5, 4)], 6)).toBe(9);
-        expect(prefetchFileCount([], 6)).toBeNull();
+    it('otherwise counts the distinct files of every version in the summary', () => {
+        expect(prefetchFileCount(summary, [cmp(2, 3, 1)], 3)).toBe(3);
+    });
+
+    it('is unknown until the summary is loaded, whatever the size of the diffs shown', () => {
+        expect(prefetchFileCount(null, [cmp(5, 6, 3), cmp(2, 6, 9), cmp(0, 5, 4)], 6)).toBeNull();
+        expect(prefetchFileCount(null, [], 6)).toBeNull();
     });
 });

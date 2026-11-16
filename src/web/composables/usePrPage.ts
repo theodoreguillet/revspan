@@ -3,6 +3,7 @@
 import { computed, inject, nextTick, onScopeDispose, provide, reactive, watch, type InjectionKey } from 'vue';
 import type { PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
+import { PREFETCH_CONTEXT } from '../lib/prefetch.ts';
 import { useDiffNav } from './useDiffNav.ts';
 import { useDiffOptions } from './useDiffOptions.ts';
 import { useDiscussion } from './useDiscussion.ts';
@@ -24,7 +25,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     const canInlineComment = computed(() => load.compare.value?.to === range.n.value && load.detail.value.pr.state === 'OPEN');
     const files = computed(() => load.compare.value?.files ?? []);
 
-    const context = (): number => (options.fullContext.value ? FULL_CONTEXT : 3);
+    const context = (): number => (options.fullContext.value ? FULL_CONTEXT : PREFETCH_CONTEXT);
     const compareParams = () => ({ from: range.from.value, to: range.to.value, context: context() });
 
     void load.loadSummary();
@@ -37,6 +38,9 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         discussion.closeComposer();
         nav.scrollToTabsIfBelow();
     });
+    // A composer opened on the previous range's diff, still shown during the first 200 ms of a load, is not sent
+    // against the new one.
+    watch(() => (load.compare.value ? `${load.compare.value.from}-${load.compare.value.to}` : null), () => discussion.closeComposer());
     watch([range.from, range.to, options.fullContext], async () => {
         await load.loadCompare(compareParams());
         if (nav.curFile.value >= files.value.length) {
@@ -91,7 +95,8 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
 
     /** Shortcuts: j/k file, n/p thread, v seen, [ ] version, Escape closes the composer. Returns true if the key is handled. */
     function handleKey(key: string): boolean {
-        const inDiff = options.tab.value === 'diff';
+        // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it
+        const inDiff = options.tab.value === 'diff' && load.diffMode.value !== 'skeleton';
         const current = files.value[nav.curFile.value];
         switch (key) {
             case 'j':

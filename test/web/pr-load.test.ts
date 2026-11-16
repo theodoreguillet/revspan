@@ -1,14 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Comment, Comparison, DiffLine, PrDetail } from '../../src/shared/api.ts';
+import { createApp, defineComponent, nextTick } from 'vue';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import type { Comment, Comparison, DiffLine, PrDetail, Summary } from '../../src/shared/api.ts';
 import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { setHostVisible } from '../../src/web/composables/usePageVisible.ts';
 import { usePrLoad, type PrLoad } from '../../src/web/composables/usePrLoad.ts';
+import { providePrPage, type PrPage } from '../../src/web/composables/usePrPage.ts';
 import { composerTargetFor } from '../../src/web/lib/diff.ts';
 import { presets } from '../../src/web/lib/selection.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
-    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), comment: vi.fn(), approve: vi.fn() },
+    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), comment: vi.fn(), approve: vi.fn(), viewed: vi.fn() },
     showError: vi.fn(),
 }));
 vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
@@ -271,10 +274,21 @@ describe('PR page loading and prefetch', () => {
     const plan = () => ({ presets: presets(6, 2), context: 3 });
     const since = { from: 2, to: 6, context: 3 };
 
-    function prefetching(): PrLoad {
+    /** Summary of a PR touching `count` distinct files. */
+    const summaryOf = (count: number): Summary => ({
+        versions: [{
+            index: 1, kind: 'code', added: count, removed: 0, masterFiles: 0, conflicts: 0,
+            files: Array.from({ length: count }, (_, i) => ({ path: `src/F${i}.ts`, added: 1, removed: 0, category: 'code' as const })),
+        }],
+    });
+
+    /** Page data whose prefetch is started, the version summary (PR size) loaded. */
+    async function prefetching(files = 4): Promise<PrLoad> {
+        api.summary.mockResolvedValue(summaryOf(files));
         const load = usePrLoad(ref, detail);
         load.startPrefetch(plan);
         started.push(load);
+        await load.loadSummary();
         return load;
     }
 
@@ -315,7 +329,7 @@ describe('PR page loading and prefetch', () => {
         const last = deferred<Comparison>();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 5 ? last.promise : Promise.resolve(comparison(from, to))));
         setHostVisible(false);
-        const load = prefetching();
+        const load = await prefetching();
         await load.loadCompare(since);
         await settle();
         expect(api.compare).toHaveBeenCalledOnce();
@@ -355,7 +369,7 @@ describe('PR page loading and prefetch', () => {
             }
             return from === 3 ? picked.promise : Promise.resolve(comparison(from, to, `${from}-${to}`));
         });
-        const load = prefetching();
+        const load = await prefetching();
         await load.loadCompare(since);
         await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
 
@@ -383,7 +397,7 @@ describe('PR page loading and prefetch', () => {
     it('a selection of the range being prefetched waits for the same request', async () => {
         const last = deferred<Comparison>();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 5 ? last.promise : Promise.resolve(comparison(from, to))));
-        const load = prefetching();
+        const load = await prefetching();
         await load.loadCompare(since);
         await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
 
@@ -394,10 +408,9 @@ describe('PR page loading and prefetch', () => {
         expect(api.compare.mock.calls.filter(([, from]) => from === 5)).toHaveLength(1);
     });
 
-    it('does not prefetch a large PR, and stops for good', async () => {
-        const big = { ...comparison(2, 6), stats: { files: 31, added: 1, removed: 0 } };
-        api.compare.mockResolvedValueOnce(big).mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
-        const large = prefetching();
+    it('does not prefetch a large PR, even when the diff shown is small, and stops for good', async () => {
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        const large = await prefetching(31);
         await large.loadCompare(since);
         await settle();
         expect(api.compare).toHaveBeenCalledOnce();
@@ -405,11 +418,141 @@ describe('PR page loading and prefetch', () => {
         vi.clearAllMocks();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
         setHostVisible(false);
-        const left = prefetching();
+        const left = await prefetching();
         await left.loadCompare(since);
         left.stopPrefetch();
         setHostVisible(true);
         await settle();
         expect(api.compare).toHaveBeenCalledOnce();
+    });
+
+    it('waits for the PR size from the version summary', async () => {
+        const summary = deferred<Summary>();
+        api.summary.mockReturnValue(summary.promise);
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        const load = usePrLoad(ref, detail);
+        load.startPrefetch(plan);
+        started.push(load);
+        const summaryLoad = load.loadSummary();
+        await load.loadCompare(since);
+        await settle();
+        expect(api.compare).toHaveBeenCalledOnce();
+
+        summary.resolve(summaryOf(4));
+        await summaryLoad;
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(3));
+    });
+
+    it('prefetches only with the default context', async () => {
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        let context = 100000;
+        api.summary.mockResolvedValue(summaryOf(4));
+        const load = usePrLoad(ref, detail);
+        load.startPrefetch(() => ({ presets: presets(6, 2), context }));
+        started.push(load);
+        await load.loadSummary();
+        await load.loadCompare({ ...since, context });
+        await settle();
+        expect(api.compare).toHaveBeenCalledOnce();
+
+        context = 3;
+        await load.loadCompare(since);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(4));
+        context = 100000;
+        await load.loadCompare({ ...since, context });
+        await settle();
+        expect(api.compare).toHaveBeenCalledTimes(4);
+    });
+
+    it('prefetches again a preset dropped by a new inline thread', async () => {
+        const last = deferred<Comparison>();
+        let first = true;
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => {
+            if (from === 5 && first) {
+                first = false;
+                return last.promise;
+            }
+            return Promise.resolve(comparison(from, to));
+        });
+        const load = await prefetching();
+        await load.loadCompare(since);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
+
+        load.evictCompare((c) => c.to !== 6);
+        last.resolve(comparison(5, 6, 'stale'));
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(4));
+        expect(api.compare.mock.calls.filter(([, from]) => from === 5)).toHaveLength(2);
+    });
+});
+
+describe('PR page while a slow diff loads', () => {
+    let detail: PrDetail;
+    let unmount: () => void = () => undefined;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        detail = prLong().data;
+        api.summary.mockReturnValue(new Promise(() => undefined));
+        api.pr.mockReturnValue(new Promise(() => undefined));
+    });
+
+    afterEach(() => unmount());
+
+    /** The PR page state under a component, on an in-memory router, range v7 → v10 shown. */
+    async function mountPage(): Promise<PrPage> {
+        let page: PrPage | null = null;
+        // also the route's component: never rendered (no <router-view>)
+        const Root = defineComponent({
+            setup() {
+                page = providePrPage(ref, detail);
+                return () => null;
+            },
+        });
+        const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/pr/:ws/:repo/:id', name: 'pr', component: Root }] });
+        await router.push(`/pr/${ref.workspace}/${ref.repo}/${ref.id}?from=7&to=10`);
+        const app = createApp(Root).use(router);
+        app.mount(document.createElement('div'));
+        unmount = () => app.unmount();
+        if (!page) {
+            throw new Error('page not created');
+        }
+        const created: PrPage = page;
+        await vi.waitFor(() => expect(created.compare?.from).toBe(7));
+        return created;
+    }
+
+    it('ignores j, k and v under the skeleton', async () => {
+        const slow = deferred<Comparison>();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 9 ? slow.promise : Promise.resolve(comparison(from, to))));
+        const page = await mountPage();
+        page.select(9, 10);
+        await vi.waitFor(() => expect(page.diffMode).toBe('skeleton'), { timeout: 1000 });
+
+        expect(page.handleKey('j')).toBe(false);
+        expect(page.handleKey('k')).toBe(false);
+        expect(page.handleKey('v')).toBe(false);
+        expect(api.viewed).not.toHaveBeenCalled();
+        slow.resolve(comparison(9, 10));
+        await vi.waitFor(() => expect(page.diffMode).toBe('diff'));
+    });
+
+    it('closes a composer opened on the previous diff when the new one shows', async () => {
+        const slow = deferred<Comparison>();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 9 ? slow.promise : Promise.resolve(comparison(from, to))));
+        const page = await mountPage();
+        page.select(9, 10);
+        await nextTick();
+        expect(page.diffMode).toBe('progress');
+        // the previous diff is still shown: a composer opened on it
+        const target = composerTargetFor('src/A.ts', codeLine, 'both');
+        if (!target) {
+            throw new Error('no composer target');
+        }
+        page.openComposer(target);
+
+        slow.resolve(comparison(9, 10));
+        await vi.waitFor(() => expect(page.compare?.from).toBe(9));
+        await nextTick();
+        expect(page.composer).toBeNull();
     });
 });
