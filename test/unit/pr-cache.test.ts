@@ -64,6 +64,8 @@ const reads = (): { pr: number; activity: number; comments: number } => {
     };
 };
 
+const intervalMs = (): number => store.config.review.refreshMinutes * 60_000;
+
 describe('PrService in-memory cache', () => {
     it('serves compare and summary from the PR loaded by detail', async () => {
         await service.detail(ref);
@@ -87,7 +89,7 @@ describe('PrService in-memory cache', () => {
 
     it('reloads after the refresh interval', async () => {
         await service.detail(ref);
-        clock += 300_001;
+        clock += intervalMs() + 1;
         await service.compare(ref, 1, 2, 3);
         expect(reads().pr).toBe(2);
     });
@@ -140,7 +142,7 @@ describe('PrService in-memory cache', () => {
             await service.detail(ref);
             await service.compare(ref, 1, 2, 3);
             const before = fake.requests.length;
-            clock += 299_000;
+            clock += intervalMs() - 1000;
             await open();
             expect(fake.requests.length - before).toBe(0);
         });
@@ -149,7 +151,7 @@ describe('PrService in-memory cache', () => {
             await service.detail(ref);
             await service.compare(ref, 1, 2, 3);
             const before = fake.requests.length;
-            clock += 300_001;
+            clock += intervalMs() + 1;
             await open();
             expect(fake.requests.length - before).toBeGreaterThan(0);
             expect(reads().pr).toBe(2);
@@ -185,9 +187,16 @@ describe('PrService in-memory cache', () => {
             expect((await service.detail(ref, { fresh: false })).review.lastReviewed).toBe(1);
         });
 
+        it('a reviewed mark changed elsewhere makes the next open read again', async () => {
+            await service.detail(ref);
+            store.updatePrState(`${WS}/${REPO}#${ref.id}`, (state) => { state.reviewedHash = 'other-window'; });
+            await service.detail(ref, { fresh: false });
+            expect(reads().pr).toBe(2);
+        });
+
         it('freshness carries the configured interval and the load time', async () => {
             const first = await service.detail(ref);
-            expect(first.freshness).toEqual({ loadedAt: new Date(clock).toISOString(), refreshMinutes: 5 });
+            expect(first.freshness).toEqual({ loadedAt: new Date(clock).toISOString(), refreshMinutes: store.config.review.refreshMinutes });
             clock += 60_000;
             const again = await service.detail(ref, { fresh: false });
             expect(again.freshness.loadedAt).toBe(first.freshness.loadedAt);

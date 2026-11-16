@@ -41,6 +41,8 @@ const levelOf = ({ comments = true, health = false }: LoadOptions): Level =>
 interface LoadedEntry {
     at: number;
     level: Level;
+    /** The local "reviewed" mark the load was computed with: another window changing it makes the entry outdated. */
+    reviewedHash: string | undefined;
     promise: Promise<LoadedPr>;
 }
 
@@ -77,8 +79,12 @@ export class PrService {
      */
     async detail(ref: PrRef, { fresh = true }: { fresh?: boolean } = {}): Promise<PrDetail> {
         const { detail } = await this.loadCached(ref, { health: true }, { fresh });
-        // The interval is the current setting, also for a detail loaded before it changed.
-        return { ...detail, freshness: { ...detail.freshness, refreshMinutes: this.refreshMinutes() } };
+        // The interval and the seen files are current (setting and shared state.json), also for a detail loaded before they changed.
+        return {
+            ...detail,
+            review: { ...detail.review, viewed: { ...this.store.prState(prKeyOf(ref)).viewed } },
+            freshness: { ...detail.freshness, refreshMinutes: this.refreshMinutes() },
+        };
     }
 
     private refreshMinutes(): number {
@@ -240,8 +246,6 @@ export class PrService {
             state.reviewedHash = target.hash;
             state.reviewedAt = new Date().toISOString();
         });
-        // The review state (last reviewed version, new comments) is part of the loaded PR: a reopen must not show the old one.
-        this.dropLoaded(await this.session.getClient(), ref);
         return { ok: true };
     }
 
@@ -253,19 +257,7 @@ export class PrService {
                 delete state.viewed[path];
             }
         });
-        void this.patchViewed(ref);
         return { ok: true };
-    }
-
-    /** Seen files are part of the loaded PR's review: patched in place so a reopen shows them without a reload. */
-    private async patchViewed(ref: PrRef): Promise<void> {
-        const client = await this.session.getClient();
-        const entry = this.loaded.get(client)?.get(`${ref.workspace}/${ref.repo}#${ref.id}`);
-        const loaded = await entry?.promise.catch(() => null);
-        if (loaded && this.loaded.get(client)?.get(`${ref.workspace}/${ref.repo}#${ref.id}`) === entry) {
-            const { review } = loaded.detail;
-            loaded.detail = { ...loaded.detail, review: { ...review, viewed: { ...this.store.prState(prKeyOf(ref))?.viewed } } };
-        }
     }
 
     // ---------- Internal ----------
@@ -282,14 +274,22 @@ export class PrService {
         const key = `${ref.workspace}/${ref.repo}#${ref.id}`;
         const level = levelOf(options);
         const now = this.now();
+        const maxAge = this.refreshMinutes() * MINUTE_MS;
+        // Expired entries hold memoized comparisons: forgotten as soon as they are noticed.
+        for (const [otherKey, other] of entries) {
+            if (now - other.at > maxAge) {
+                entries.delete(otherKey);
+            }
+        }
         const kept = entries.get(key);
-        if (!fresh && kept && kept.level >= level && now - kept.at <= this.refreshMinutes() * MINUTE_MS) {
+        const reviewedHash = this.store.prState(prKeyOf(ref)).reviewedHash;
+        if (!fresh && kept && kept.level >= level && kept.reviewedHash === reviewedHash) {
             return kept.promise;
         }
         // The client's 15 s live data must not answer in place of a load that is meant to be fresh.
         client.invalidatePr(ref.workspace, ref.repo, ref.id);
         const promise = this.load(ref, options);
-        const entry: LoadedEntry = { at: now, level, promise };
+        const entry: LoadedEntry = { at: now, level, reviewedHash, promise };
         if (!(keepHigher && kept && kept.level > level)) {
             entries.set(key, entry);
         }

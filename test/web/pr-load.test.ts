@@ -88,6 +88,12 @@ describe('PR page writes without waiting for a reload', () => {
         await vi.waitFor(() => expect(load.refreshing.value).toBe(false));
     });
 
+    it('the background refresh asks for a fresh detail', async () => {
+        const load = usePrLoad(ref, detail);
+        await load.refreshDetail();
+        expect(api.pr).toHaveBeenCalledWith(ref, { fresh: true });
+    });
+
     it('restores the draft after a failed send', async () => {
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
         const load = usePrLoad(ref, detail);

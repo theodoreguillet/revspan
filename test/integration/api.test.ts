@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, Settings, Summary } from '../../src/shared/api.ts';
+import { DEFAULT_REVIEW_SETTINGS } from '../../src/shared/review-settings.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import {
@@ -428,7 +429,7 @@ describe('actions', () => {
         const before = fake.requests.length;
         const cached = await api<PrDetail>('GET', prPath());
         expect(fake.requests.length - before).toBe(0);
-        expect(cached.body.freshness.refreshMinutes).toBe(5);
+        expect(cached.body.freshness.refreshMinutes).toBe(DEFAULT_REVIEW_SETTINGS.refreshMinutes);
         await api('GET', `${prPath()}?fresh=1`);
         expect(fake.requests.length - before).toBeGreaterThan(0);
     });
