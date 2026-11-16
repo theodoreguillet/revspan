@@ -7,7 +7,7 @@ import { DiffDocuments } from './diff-documents.ts';
 import { withFollowed } from '../shared/follow.ts';
 import { GROUPINGS, isGrouping, type Grouping } from '../shared/home-grouping.ts';
 import { hostL10n } from './host-l10n.ts';
-import { HomeTreeProvider, type Node } from './home-tree-provider.ts';
+import { HomeTreeProvider, showLoading, type Node } from './home-tree-provider.ts';
 import { errorText } from './lib/error-text.ts';
 import { errorPayload } from '../server/errors.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
@@ -81,6 +81,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const panel = new RevspanPanel({ context, app, diffs, onWrite: () => tree.refresh() });
     const treeView = vscode.window.createTreeView('revspan.home', { treeDataProvider: tree });
 
+    const loading = showLoading(tree, treeView, vscode.window);
+
     const notifier = new Notifier({
         store: app.store,
         session: app.services.session,
@@ -92,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
     context.subscriptions.push(
         tree,
+        loading,
         notifier,
         treeView,
         // Polls may be skipped while the view is hidden (every notification off): it catches up when shown again.

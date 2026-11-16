@@ -25,6 +25,10 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
     private readonly changed = new vscode.EventEmitter<void>();
     private fresh = false;
     readonly onDidChangeTreeData = this.changed.event;
+    private readonly loading = new vscode.EventEmitter<{ loading: boolean; first: boolean }>();
+    /** Fires when a load of the root starts (loading) and ends; first: no home has been shown yet. */
+    readonly onLoading = this.loading.event;
+    private loaded = false;
 
     private readonly grouping: () => Grouping;
 
@@ -42,6 +46,7 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
 
     dispose(): void {
         this.changed.dispose();
+        this.loading.dispose();
     }
 
     getTreeItem(node: Node): vscode.TreeItem {
@@ -89,6 +94,17 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
         if (node) {
             return [];
         }
+        const first = !this.loaded;
+        this.loading.fire({ loading: true, first });
+        try {
+            return await this.loadRoot();
+        } finally {
+            this.loaded = true;
+            this.loading.fire({ loading: false, first });
+        }
+    }
+
+    private async loadRoot(): Promise<Node[]> {
         try {
             const fresh = this.fresh;
             this.fresh = false;
@@ -110,4 +126,27 @@ export class HomeTreeProvider implements vscode.TreeDataProvider<Node>, vscode.D
             return [{ kind: 'message', text: errorText(hostL10n().t, errorPayload(error)) }];
         }
     }
+}
+
+/**
+ * Shows the loading in the view: a message until the first home arrives (the tree is empty), then only the progress
+ * bar of the view, so a refresh keeps the tree on screen.
+ */
+export function showLoading(
+    provider: Pick<HomeTreeProvider, 'onLoading'>,
+    view: { message?: string | undefined },
+    window: Pick<typeof vscode.window, 'withProgress'>,
+): vscode.Disposable {
+    const waiting: Array<() => void> = [];
+    return provider.onLoading(({ loading, first }) => {
+        if (loading) {
+            if (first) {
+                view.message = vscode.l10n.t('Loading…');
+            }
+            void window.withProgress({ location: { viewId: 'revspan.home' } }, () => new Promise<void>((resolve) => waiting.push(resolve)));
+            return;
+        }
+        view.message = undefined;
+        waiting.shift()?.();
+    });
 }

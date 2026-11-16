@@ -188,6 +188,7 @@ export const recorded = {
     opened: [] as string[],
     /** Commands run by the extension (vscode.commands.executeCommand). */
     commands: [] as { command: string; args: unknown[] }[],
+    progress: [] as { options: unknown; done: boolean }[],
 };
 
 export const commands = {
@@ -287,6 +288,16 @@ export const window = {
             recorded.closedTabs.push(tab);
             return true;
         },
+    },
+    /** Progress started by the extension: one entry per call, `done` once the task settled. */
+    async withProgress<T>(options: unknown, task: () => Promise<T>): Promise<T> {
+        const entry = { options, done: false };
+        recorded.progress.push(entry);
+        try {
+            return await task();
+        } finally {
+            entry.done = true;
+        }
     },
     async showWarningMessage(message: string): Promise<undefined> {
         recorded.warnings.push(message);

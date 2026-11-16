@@ -15,7 +15,7 @@ import { createServices, type Services } from '../../src/server/services/index.t
 import { vscodeReviewSource } from '../../src/extension/app-context.ts';
 import { IN_MEMORY_HOST, callApi, isSuccessfulWrite } from '../../src/extension/lib/bridge.ts';
 import type { DiffDocuments } from '../../src/extension/diff-documents.ts';
-import { HomeTreeProvider } from '../../src/extension/home-tree-provider.ts';
+import { HomeTreeProvider, showLoading } from '../../src/extension/home-tree-provider.ts';
 import { RevspanPanel } from '../../src/extension/panel.ts';
 import { FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, startFakeBitbucket, type FakeBitbucket } from '../support/fake-bitbucket.ts';
 import { ConfigurationTarget, FakeWebviewPanel, Uri, dormantTab, env, recorded, resetFakeVscode, settingWrites, unregisteredSettings, window, workspace } from '../support/fake-vscode.ts';
@@ -525,5 +525,32 @@ describe('extension panel (simulated VS Code)', () => {
         tree.dispose();
         tree.refresh();
         expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('"My PRs" view: shows a loading message until the first home arrives', async () => {
+        const tree = new HomeTreeProvider(services.home, () => 'repository');
+        const view: { message: string | undefined } = { message: undefined };
+        showLoading(tree, view, window as never);
+        const roots = tree.getChildren();
+        expect(view.message).toBe('Loading…');
+        await roots;
+        expect(view.message).toBeUndefined();
+        await tree.getChildren();
+        expect(view.message).toBeUndefined();
+        tree.dispose();
+    });
+
+    it('"My PRs" view: shows progress without clearing the tree on refresh', async () => {
+        const tree = new HomeTreeProvider(services.home, () => 'repository');
+        const view: { message: string | undefined } = { message: undefined };
+        showLoading(tree, view, window as never);
+        await tree.getChildren();
+        recorded.progress.length = 0;
+        const roots = tree.getChildren();
+        expect(view.message).toBeUndefined();
+        expect(recorded.progress).toEqual([{ options: { location: { viewId: 'revspan.home' } }, done: false }]);
+        expect((await roots).length).toBeGreaterThan(0);
+        expect(recorded.progress[0]?.done).toBe(true);
+        tree.dispose();
     });
 });
