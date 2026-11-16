@@ -296,6 +296,9 @@ button.armed { color: var(--rv-del) !important; font-weight: 600; }
 .rv-th-h .st.open { color: var(--rv-new); } .rv-th-h .st.res { color: var(--rv-add); }
 .rv-moved { color: var(--rv-rebase); background: var(--rv-rebase-bg); border-radius: 4px; padding: 0 6px; font-weight: 600; }
 .rv-th-bar { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 10px; border: none; background: var(--bg-primary); color: var(--text-secondary); font-size: 11.5px; cursor: pointer; text-align: left; }
+.rv-th[data-resolved] { display: flex; align-items: center; background: var(--bg-primary); }
+.rv-th[data-resolved] .rv-th-bar { flex: 1; width: auto; min-width: 0; }
+.rv-th[data-resolved] > .rv-link { flex-shrink: 0; padding: 5px 10px; font-size: 11.5px; }
 .rv-th-bar:hover { color: var(--text-primary); }
 .rv-th-bar .ok { color: var(--rv-add); font-weight: 700; }
 .rv-cm { display: flex; gap: 9px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
@@ -312,6 +315,10 @@ button.armed { color: var(--rv-del) !important; font-weight: 600; }
 .rv-cm .acts { display: flex; gap: 12px; margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); align-items: center; }
 .rv-cm .acts button { border: none; background: none; padding: 0; color: var(--text-secondary); cursor: pointer; font-size: 11.5px; }
 .rv-cm .acts button:hover { color: var(--text-primary); }
+.rv-edit textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--input-border); border-radius: 6px; padding: 4px 8px; background: var(--input-bg); color: var(--input-fg); font-size: 12px; resize: vertical; min-height: 44px; line-height: 1.4; font-family: inherit; }
+.rv-edit textarea:focus { outline: none; border-color: var(--accent); }
+.rv-edit .acts { gap: 8px; }
+.rv-cm .rv-edit .acts button.rv-btn { padding: 3px 10px; font-size: 11.5px; }
 .rv-av { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; letter-spacing: .02em; user-select: none; }
 .rv-html { margin-top: 2px; overflow-wrap: anywhere; }
 .rv-html p { margin: 0 0 6px; } .rv-html p:last-child { margin-bottom: 0; }

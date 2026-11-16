@@ -19,6 +19,7 @@ Options:
 A single server for the whole script: each check sees the writes of the previous ones (order matters).
 Exits with a non-zero code if a check fails.
 """
+import base64
 import json
 import os
 import re
@@ -36,6 +37,7 @@ REQUESTS_URL = os.environ.get('REVSPAN_REQUESTS_URL')
 MAIN_PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/42')
 FAKE_PRS = json.loads(os.environ.get('REVSPAN_FAKE_PRS', '{}'))
 FAKE_TOKEN = os.environ.get('REVSPAN_FAKE_TOKEN', '')
+FAKE_EMAIL = os.environ.get('REVSPAN_FAKE_EMAIL', '')
 SHOTS = os.environ.get('REVSPAN_SHOTS_DIR') or os.path.join(tempfile.gettempdir(), 'revspan-shots')
 CHROMIUM_ARGS = ['--use-mock-keychain', '--password-store=basic']
 MINUS = '−'
@@ -124,6 +126,16 @@ class Calls:
 
 
 calls = Calls(CALLS_URL)
+
+
+def fake_delete_comment(cid):
+    """Deletes a comment directly at the fake Bitbucket (somebody else deleted it meanwhile)."""
+    ws, repo, pid = MAIN_PR.split('/')
+    base = CALLS_URL.rsplit('/__calls', 1)[0]
+    token = base64.b64encode(f'{FAKE_EMAIL}:{FAKE_TOKEN}'.encode()).decode()
+    request = urllib.request.Request(f'{base}/2.0/repositories/{ws}/{repo}/pullrequests/{pid}/comments/{cid}',
+                                     method='DELETE', headers={'Authorization': f'Basic {token}'})
+    urllib.request.urlopen(request, timeout=10).close()
 
 
 def body_of(call):
@@ -530,6 +542,48 @@ def run_checks(page):
         expect(page.locator(f'{thread_sel} .rv-cm', has_text='Merci, c\'est bon pour moi.')).to_have_count(0, timeout=10000)
     reply_and_delete(page)
 
+    @check('edit my comment: save, Escape, comment deleted meanwhile')
+    def edit_comment(page):
+        assert my_thread, 'no open thread of mine'
+        page.locator(f'{thread_sel} .rv-th-f textarea').fill('Texte à modifier')
+        page.locator(f'{thread_sel} [data-action="send-reply"]').click()
+        mine = page.locator(f'{thread_sel} .rv-cm', has_text='Texte à modifier')
+        expect(mine).to_have_count(1, timeout=10000)
+        expect(mine).not_to_have_class(re.compile(r'\bpending\b'), timeout=10000)
+        cid = int(mine.get_attribute('data-comment'))
+        item = page.locator(f'{thread_sel} .rv-cm[data-comment="{cid}"]')
+        # save with Cmd/Ctrl+Enter: the PUT carries the new text, shown without reload
+        item.locator('[data-action="edit"]').click()
+        editor = item.locator('textarea[data-edit]')
+        expect(editor).to_have_value('Texte à modifier')
+        expect(editor).to_be_focused()
+        editor.fill('Texte corrigé')
+        calls.start()
+        editor.press('ControlOrMeta+Enter')
+        call = calls.wait(lambda c: c['method'] == 'PUT' and c['path'].endswith(f'/comments/{cid}'), f'PUT comments/{cid}')
+        assert call is None or (body_of(call).get('content') or {}).get('raw') == 'Texte corrigé', call
+        expect(item).to_contain_text('Texte corrigé', timeout=10000)
+        expect(item.locator('textarea[data-edit]')).to_have_count(0)
+        # Escape cancels: the old text stays, no write
+        item.locator('[data-action="edit"]').click()
+        item.locator('textarea[data-edit]').fill('Brouillon abandonné')
+        calls.start()
+        item.locator('textarea[data-edit]').press('Escape')
+        expect(item.locator('textarea[data-edit]')).to_have_count(0)
+        expect(item).to_contain_text('Texte corrigé')
+        expect(item).not_to_contain_text('Brouillon abandonné')
+        assert not any(c['method'] == 'PUT' for c in calls.all()[calls.mark:]), 'Escape must not send anything'
+        # deleted meanwhile: error shown, the editor stays open with the text
+        fake_delete_comment(cid)
+        item.locator('[data-action="edit"]').click()
+        editor = item.locator('textarea[data-edit]')
+        editor.fill('Texte perdu ?')
+        editor.press('ControlOrMeta+Enter')
+        expect(page.locator('.rv-alert')).to_have_count(1, timeout=10000)
+        expect(editor).to_have_value('Texte perdu ?')
+        page.locator('.rv-alert button').click()
+    edit_comment(page)
+
     @check('comment on a deleted line (general comment with quote)')
     def deleted_line(page):
         target = next(((f['path'], ln['o'], ln['text']) for f in cmp['files'] for h in f['hunks'] for ln in h['lines'] if ln['t'] == '-'), None)
@@ -562,6 +616,30 @@ def run_checks(page):
         expect(page.locator(f'{thread_sel} .rv-th-bar')).to_contain_text('Fil résolu')
         page.uncheck('#show-resolved')
     resolve(page)
+
+    @check('reopen a resolved thread from its folded bar, then from the Discussions tab')
+    def reopen_folded(page):
+        assert my_thread, 'no open thread of mine'
+        page.check('#show-resolved')
+        bar = page.locator(f'{thread_sel}[data-resolved="1"]')
+        expect(bar.locator('[data-action="reopen"]')).to_be_visible()
+        calls.start()
+        bar.locator('[data-action="reopen"]').click()
+        calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{my_thread["id"]}/resolve'), f'DELETE comments/{my_thread["id"]}/resolve')
+        expect(page.locator(f'{thread_sel} [data-action="resolve"]')).to_be_visible(timeout=10000)
+        expect(page.locator(f'{thread_sel}[data-resolved="1"]')).to_have_count(0)
+        page.uncheck('#show-resolved')
+        # same from the Discussions tab (expanded thread)
+        page.locator(f'{thread_sel} [data-action="resolve"]').click()
+        expect(page.locator(thread_sel)).to_have_count(0, timeout=10000)
+        page.click('.rv-tab[data-tab="discussions"]')
+        page.locator('details[data-group="resolved"] summary').click()
+        calls.start()
+        page.locator(f'.rv-ditem[data-thread="{my_thread["id"]}"] [data-action="reopen"]').click()
+        calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{my_thread["id"]}/resolve'), f'DELETE comments/{my_thread["id"]}/resolve (Discussions)')
+        expect(page.locator(f'.rv-ditem[data-thread="{my_thread["id"]}"] [data-action="resolve"]')).to_be_visible(timeout=10000)
+        page.click('.rv-tab[data-tab="diff"]')
+    reopen_folded(page)
 
     @check('mark a file "Seen" (server local state)')
     def viewed(page):

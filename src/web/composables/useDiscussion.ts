@@ -4,18 +4,20 @@ import { reactive, ref } from 'vue';
 import type { Comment, Comparison, NewComment, PrRef, Thread } from '../../shared/api.ts';
 import { tr } from '../i18n/index.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
-import { removeComment, replaceComment, withoutPlacement, withPendingComment, withPlacement, withResolved, type PendingComment } from '../lib/optimistic.ts';
+import { removeComment, replaceComment, withEditedComment, withoutPlacement, withPendingComment, withPlacement, withResolved, type PendingComment } from '../lib/optimistic.ts';
 import { api } from '../services/api.ts';
 import type { PrLoad } from './usePrLoad.ts';
 
 export const GENERAL_DRAFT = 'general';
 export const replyDraftKey = (threadId: number): string => `reply:${threadId}`;
+export const editDraftKey = (commentId: number): string => `edit:${commentId}`;
 
 /** Keys of the discussion buttons (loading indicator on the button that started the action). */
 export const actionKey = {
     composer: (draftKey: string): string => `comment:${draftKey}`,
     reply: (threadId: number): string => `reply:${threadId}`,
     remove: (commentId: number): string => `delete:${commentId}`,
+    edit: (commentId: number): string => `edit:${commentId}`,
     resolve: (threadId: number): string => `resolve:${threadId}`,
 };
 
@@ -23,6 +25,8 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     /** Texts being typed, kept when the diff redraws. */
     const drafts = reactive(new Map<string, string>());
     const composer = ref<ComposerTarget | null>(null);
+    /** Id of the comment of mine being edited (one at a time); its text is the draft `edit:<id>`. */
+    const editing = ref<number | null>(null);
 
     function draft(key: string): string {
         return drafts.get(key) ?? '';
@@ -134,6 +138,50 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
             onDone: () => load.patchDetail((d) => removeComment(d, comment.id)),
         });
 
+    function startEdit(comment: Comment): void {
+        const key = editDraftKey(comment.id);
+        if (!drafts.has(key)) {
+            setDraft(key, comment.raw);
+        }
+        editing.value = comment.id;
+    }
+
+    function cancelEdit(): void {
+        if (editing.value !== null) {
+            drafts.delete(editDraftKey(editing.value));
+        }
+        editing.value = null;
+    }
+
+    /** Saves the new text; on failure the editor stays open with the typed text (the error is shown). */
+    async function saveEdit(comment: Comment, raw: string): Promise<boolean> {
+        const text = raw.trim();
+        if (!text) {
+            return false;
+        }
+        if (text === comment.raw.trim()) {
+            cancelEdit();
+            return true;
+        }
+        let saved: Comment | null = null;
+        const ok = await load.act(async () => {
+            saved = await api.editComment(prRef, comment.id, text);
+        }, {
+            key: actionKey.edit(comment.id),
+            onDone: () => {
+                const edited = saved;
+                if (edited) {
+                    load.patchDetail((d) => withEditedComment(d, edited));
+                }
+                drafts.delete(editDraftKey(comment.id));
+                if (editing.value === comment.id) {
+                    editing.value = null;
+                }
+            },
+        });
+        return ok;
+    }
+
     function resolve(thread: Thread, resolved: boolean): Promise<boolean> {
         const before = load.detail.value.threads.find((t) => t.id === thread.id) ?? thread;
         return load.act(() => api.resolve(prRef, thread.id, resolved), {
@@ -143,5 +191,5 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         });
     }
 
-    return { drafts, composer, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, deleteComment, resolve };
+    return { drafts, composer, editing, startEdit, cancelEdit, saveEdit, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, deleteComment, resolve };
 }

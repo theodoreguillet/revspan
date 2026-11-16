@@ -90,6 +90,17 @@ function autosize(): void {
             {{ thread.resolvedBy ? t('thread.resolvedBarBy', { name: thread.resolvedBy.displayName }) : t('thread.resolvedBar') }}
             · {{ t('common.comments', { count: thread.comments.length }) }}<template v-if="thread.anchor?.to"> · {{ t('thread.line', { line: placement?.line ?? thread.anchor.to }) }}</template>
         </button>
+        <button
+            v-if="!pending"
+            type="button"
+            :class="['rv-link', { busy: page.busy(actionKey.resolve(thread.id)) }]"
+            data-action="reopen"
+            :disabled="page.acting"
+            :aria-busy="page.busy(actionKey.resolve(thread.id))"
+            @click="page.resolve(thread, false)"
+        >
+            {{ t('thread.reopen') }}
+        </button>
     </div>
     <div v-else ref="root" :class="['rv-th', { 'file-level': fileLevel }]" :data-thread="thread.id">
         <div class="rv-th-h">

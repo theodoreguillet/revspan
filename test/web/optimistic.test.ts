@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Comment, Comparison, DiffLine, FileDiff } from '../../src/shared/api.ts';
-import { replaceComment, withPendingComment, withPlacement, withResolved } from '../../src/web/lib/optimistic.ts';
+import { replaceComment, withEditedComment, withPendingComment, withPlacement, withResolved } from '../../src/web/lib/optimistic.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const me = { uuid: '{me-uuid}', displayName: 'Thomas Girard', nickname: 'tgirard' };
@@ -61,6 +61,17 @@ describe('optimistic updates of the PR detail', () => {
         expect(rooted.threads.some((t) => t.id === -2)).toBe(false);
         expect(threadById(rooted, 502).comments).toEqual([serverComment(502, 'Why?')]);
         expect(threadById(rooted, 502).path).toBe('src/A.ts');
+    });
+
+    it('withEditedComment swaps text and HTML and keeps the rest', () => {
+        const detail = prLong().data;
+        const original = threadById(detail, 120).comments[0]!;
+        const next = withEditedComment(detail, { ...original, raw: 'Edited', html: '<p>Edited</p>', isNew: true, version: 99 });
+
+        expect(threadById(next, 120).comments[0]).toEqual({ ...original, raw: 'Edited', html: '<p>Edited</p>' });
+        expect(threadById(next, 120).comments[1]).toEqual(threadById(detail, 120).comments[1]);
+        expect(threadById(detail, 120).comments[0]).toEqual(original);
+        expect(next.threads).toHaveLength(detail.threads.length);
     });
 
     it('withResolved sets resolvedBy to me and clears it on reopen', () => {
