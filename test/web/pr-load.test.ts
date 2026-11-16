@@ -542,6 +542,17 @@ describe('PR page while a slow diff loads', () => {
         await vi.waitFor(() => expect(page.diffMode).toBe('diff'));
     });
 
+    it('Shift+V marks every file, a bare "V" (Caps Lock) does not', async () => {
+        api.viewed.mockResolvedValue({ ok: true });
+        const page = await mountPage();
+        expect(page.handleKey('V')).toBe(false);
+        expect(page.handleKey('V', { shiftKey: false })).toBe(false);
+        expect(api.viewed).not.toHaveBeenCalled();
+        expect(page.handleKey('V', { shiftKey: true })).toBe(true);
+        await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledOnce());
+        expect(api.viewed.mock.calls[0]?.[1]).toMatchObject({ viewed: true, files: expect.any(Array) });
+    });
+
     it('closes a composer opened on the previous diff when the new one shows', async () => {
         const slow = deferred<Comparison>();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 9 ? slow.promise : Promise.resolve(comparison(from, to))));

@@ -50,10 +50,22 @@ const viewedFileSchema = z.object({
     contentHash: z.string().max(128).optional(),
 });
 
-export const viewedSchema: z.ZodType<ViewedRequest> = z.union([
-    viewedFileSchema.extend({ viewed: z.boolean() }),
-    z.object({ files: z.array(viewedFileSchema).min(1).max(2000), viewed: z.boolean() }),
-]);
+const viewedOneSchema = viewedFileSchema.extend({ viewed: z.boolean() });
+const viewedManySchema = z.object({ files: z.array(viewedFileSchema).min(1).max(2000), viewed: z.boolean() });
+
+/** Branches on the shape so that a bad payload reports its own issue (a plain union only says "Invalid input"). */
+export const viewedSchema: z.ZodType<ViewedRequest> = z.any().transform((value, ctx) => {
+    const schema = typeof value === 'object' && value !== null && 'files' in value ? viewedManySchema : viewedOneSchema;
+    const result = schema.safeParse(value);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+        }
+        return z.NEVER;
+    }
+    return result.data;
+},
+) as unknown as z.ZodType<ViewedRequest>;
 
 export const reviewedSchema = z.object({ version: z.number().int().positive() });
 

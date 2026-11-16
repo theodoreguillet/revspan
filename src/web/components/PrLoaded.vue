@@ -21,7 +21,7 @@ const page = providePrPage(props.prRef, props.detail);
 // light check for news on Bitbucket while the page is seen, and the ↻ refresh
 const pulse = reactive(usePulse(page));
 
-useKeyboard((key) => page.handleKey(key));
+useKeyboard((key, event) => page.handleKey(key, event));
 
 watchEffect(() => {
     document.title = `#${page.detail.pr.id} ${page.detail.pr.title} · Revspan`;

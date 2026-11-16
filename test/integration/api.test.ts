@@ -482,7 +482,20 @@ describe('actions', () => {
 
     it('POST viewed with files rejects an empty list', async () => {
         await setup();
-        expect((await api('POST', `${prPath()}/viewed`, { files: [], viewed: true })).status).toBe(400);
+        const empty = await api<{ error: string }>('POST', `${prPath()}/viewed`, { files: [], viewed: true });
+        expect(empty.status).toBe(400);
+        expect(JSON.stringify(empty.body)).toMatch(/files/);
+        const tooMany = Array.from({ length: 2001 }, (_, i) => ({ path: `src/F${i}.ts` }));
+        expect((await api('POST', `${prPath()}/viewed`, { files: tooMany, viewed: true })).status).toBe(400);
+        expect((await api('POST', `${prPath()}/viewed`, { files: tooMany.slice(0, 2000), viewed: true })).status).toBe(200);
+    });
+
+    it('POST viewed with a bad file reports where', async () => {
+        await setup();
+        const bad = await api('POST', `${prPath()}/viewed`, { files: [{ path: 'a.ts' }, { path: '' }], viewed: true });
+        expect(bad.status).toBe(400);
+        expect(JSON.stringify(bad.body)).toMatch(/files\.1\.path/);
+        expect(JSON.stringify(bad.body)).not.toMatch(/Invalid input/);
     });
 
     it('local state: seen files and "reviewed" mark persisted', async () => {

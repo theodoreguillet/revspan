@@ -119,7 +119,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     }
 
     /** Shortcuts: j/k file, n/p thread, v seen, Shift+V all seen, [ ] version, / search, Escape closes the composer. Returns true if the key is handled. */
-    function handleKey(key: string): boolean {
+    function handleKey(key: string, event?: Pick<KeyboardEvent, 'shiftKey'>): boolean {
         // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it
         const inDiff = options.tab.value === 'diff' && load.diffMode.value !== 'skeleton';
         const current = files.value[nav.curFile.value];
@@ -142,7 +142,8 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
                 void review.setViewed(current, viewedStatus(current, load.detail.value.review.viewed) !== 'seen');
                 return true;
             case 'V':
-                if (!inDiff) {
+                // the real Shift modifier: with Caps Lock, "v" also yields "V" and must stay "this file only"
+                if (!inDiff || !event?.shiftKey) {
                     return false;
                 }
                 void markAllViewed(true);
