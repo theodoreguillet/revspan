@@ -4,6 +4,7 @@ import { reactive, ref } from 'vue';
 import type { Comment, Comparison, NewComment, PrRef, Thread } from '../../shared/api.ts';
 import { tr } from '../i18n/index.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
+import { afterOwnWrite } from '../lib/pulse.ts';
 import { removeComment, replaceComment, withEditedComment, withoutPlacement, withPendingComment, withPlacement, withResolved, type PendingComment } from '../lib/optimistic.ts';
 import { api } from '../services/api.ts';
 import type { PrLoad } from './usePrLoad.ts';
@@ -105,7 +106,7 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
                 if (!comment) {
                     return;
                 }
-                load.patchDetail((d) => replaceComment(d, tempId, comment));
+                load.patchDetail((d) => ({ ...replaceComment(d, tempId, comment), pulse: afterOwnWrite(d.pulse, 1) }));
                 if (inline) {
                     load.patchCompare(place(comment.id));
                     // the server maps the new thread into ranges ending at earlier versions: they are computed again
@@ -135,7 +136,7 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     const deleteComment = (comment: Comment): Promise<boolean> =>
         load.act(() => api.deleteComment(prRef, comment.id), {
             key: actionKey.remove(comment.id),
-            onDone: () => load.patchDetail((d) => removeComment(d, comment.id)),
+            onDone: () => load.patchDetail((d) => ({ ...removeComment(d, comment.id), pulse: afterOwnWrite(d.pulse, -1) })),
         });
 
     function startEdit(comment: Comment): void {

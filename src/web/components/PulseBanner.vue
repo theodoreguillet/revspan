@@ -19,7 +19,7 @@ const text = computed(() => (props.pulse.news ? pulseText(tr(), props.pulse.news
                 type="button"
                 :class="['rv-btn', { busy: page.refreshing }]"
                 data-action="pulse-refresh"
-                :disabled="page.refreshing"
+                :disabled="page.refreshing || page.acting"
                 :aria-busy="page.refreshing"
                 @click="pulse.refresh()"
             >

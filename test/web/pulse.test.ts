@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, reactive, type EffectScope } from 'vue';
 import type { Comment, Comparison, PrDetail, PrPulse, Thread } from '../../src/shared/api.ts';
+import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { setHostVisible } from '../../src/web/composables/usePageVisible.ts';
 import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { usePulse, type PulsePage } from '../../src/web/composables/usePulse.ts';
 import { translatorFor } from '../../src/web/i18n/index.ts';
 import {
-    hasNews, pulseIntervalMs, pulseNews, pulseText, refreshNews, refreshText, unplacedThreads, type RefreshNews,
+    afterOwnWrite, hasNews, pulseIntervalMs, pulseNews, pulseText, refreshNews, refreshText, unplacedThreads, type RefreshNews,
 } from '../../src/web/lib/pulse.ts';
-import { prLong } from './fixtures.ts';
+import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
-    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), pulse: vi.fn() },
+    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), pulse: vi.fn(), comment: vi.fn(), deleteComment: vi.fn() },
     showError: vi.fn(),
 }));
 vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
@@ -84,6 +85,15 @@ describe('pulse: what changed on Bitbucket', () => {
         const news = pulseNews(pulse(), pulse());
         expect(news).toEqual({ newVersion: false, newComments: 0, otherActivity: false });
         expect(hasNews(news)).toBe(false);
+    });
+
+    it('pulseNews does not take the updatedOn moved by my own write for news', () => {
+        const shown = afterOwnWrite(pulse(), 1);
+        expect(shown).toMatchObject({ commentCount: 5, updatedOn: '' });
+        expect(hasNews(pulseNews(shown, pulse({ commentCount: 5, updatedOn: '2026-11-16T10:05:00Z' })))).toBe(false);
+        // somebody else's comment on top of mine still counts
+        expect(pulseNews(shown, pulse({ commentCount: 6, updatedOn: '2026-11-16T10:06:00Z' })).newComments).toBe(1);
+        expect(afterOwnWrite(pulse({ commentCount: 0 }), -1).commentCount).toBe(0);
     });
 
     it('checks at the configured interval', () => {
@@ -340,6 +350,54 @@ describe('user refresh (↻)', () => {
         expect(await load.refresh()).toBeNull();
         expect(showError).toHaveBeenCalledOnce();
         expect(load.detail.value).toBe(detail);
+    });
+
+    it('a refresh during a write does not erase the written comment', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        const sent = deferred<Comment>();
+        api.comment.mockReturnValue(sent.promise);
+        const sending = discussion.reply(threadById(detail, 120), 'On it');
+
+        // ↻ while the comment is being sent: nothing is read
+        expect(await load.refresh()).toBeNull();
+        expect(api.pr).not.toHaveBeenCalled();
+        // a read sent anyway during the write (Bitbucket has not stored the comment yet)
+        const stale = deferred<PrDetail>();
+        api.pr.mockReturnValueOnce(stale.promise);
+        const reading = load.refreshDetail();
+        const mine = comment(501, 'On it', { mine: true, isNew: false });
+        const after: PrDetail = {
+            ...detail,
+            threads: detail.threads.map((t) => (t.id === 120 ? { ...t, comments: [...t.comments, mine] } : t)),
+            pulse: pulse({ commentCount: 5, updatedOn: '2026-11-16T10:02:00Z' }),
+        };
+        api.pr.mockResolvedValue(after);
+        sent.resolve(mine);
+        expect(await sending).toBe(true);
+        // the write ended first: its refresh shares the read in flight, which lands with the pre-write PR
+        stale.resolve(detail);
+        await reading;
+        expect(load.detail.value).toBe(after);
+        expect(api.pr).toHaveBeenCalledTimes(2);
+        expect(threadById(load.detail.value, 120).comments.at(-1)?.id).toBe(501);
+    });
+
+    it('my own comment moves the check baseline, even when the refresh after it fails', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        api.pr.mockRejectedValue(new Error('offline'));
+        api.comment.mockResolvedValue(comment(501, 'On it', { mine: true }));
+        expect(await discussion.reply(threadById(detail, 120), 'On it')).toBe(true);
+        await vi.waitFor(() => expect(load.refreshing.value).toBe(false));
+        expect(load.detail.value.pulse).toMatchObject({ commentCount: 5, updatedOn: '' });
+        // Bitbucket now counts my comment and moved updated_on: not news
+        expect(hasNews(pulseNews(load.detail.value.pulse, pulse({ commentCount: 5, updatedOn: '2026-11-16T10:02:00Z' })))).toBe(false);
+        expect(discussion.draft(replyDraftKey(120))).toBe('');
+
+        api.deleteComment.mockResolvedValue({ ok: true });
+        expect(await discussion.deleteComment(threadById(load.detail.value, 120).comments.at(-1)!)).toBe(true);
+        expect(load.detail.value.pulse.commentCount).toBe(4);
     });
 
     it('counts writes and refreshes for the periodic check', async () => {

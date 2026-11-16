@@ -12,8 +12,14 @@ function fixture<T>(name: string): T {
     return JSON.parse(fs.readFileSync(path.join(DIR, name), 'utf8')) as T;
 }
 
+/** The JSON fixtures predate the pulse and the freshness of the detail: neutral values are added. */
+const PULSE_DEFAULTS: Pick<PrDetail, 'pulse' | 'freshness'> = {
+    pulse: { updatedOn: '2026-11-16T10:00:00Z', head: 'head', commentCount: 0, participants: '' },
+    freshness: { loadedAt: '2026-11-16T10:00:00Z', refreshMinutes: 5 },
+};
+
 export function loadPr(id: 'long' | 'rebase'): { data: PrDetail; sums: SummaryMap } {
-    return { data: fixture<PrDetail>(`pr-${id}.json`), sums: summaryMap(fixture<Summary>(`summary-${id}.json`)) };
+    return { data: { ...PULSE_DEFAULTS, ...fixture<PrDetail>(`pr-${id}.json`) }, sums: summaryMap(fixture<Summary>(`summary-${id}.json`)) };
 }
 
 export const prLong = (): { data: PrDetail; sums: SummaryMap } => loadPr('long');

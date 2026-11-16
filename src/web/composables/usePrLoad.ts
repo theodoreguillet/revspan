@@ -5,7 +5,7 @@ import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import { diffDisplay, SKELETON_DELAY_MS } from '../lib/loading.ts';
 import { PREFETCH_CONTEXT, prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
-import { refreshNews, unplacedThreads, type RefreshNews } from '../lib/pulse.ts';
+import { afterOwnWrite, refreshNews, unplacedThreads, type RefreshNews } from '../lib/pulse.ts';
 import type { Preset, Range } from '../lib/selection.ts';
 import { t } from '../i18n/index.ts';
 import { api, ApiError } from '../services/api.ts';
@@ -111,12 +111,14 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     }
 
     /**
-     * Reads the detail; a read during which a write started is dropped, and read again unless a write is still in
-     * progress. Returns true if a fresh detail is shown.
+     * Reads the detail; a read sent while a write was in progress, or during which a write started, may predate what
+     * Bitbucket stored: it is dropped, and read again unless a write is still in progress (that write refreshes when it
+     * ends). Returns true if a fresh detail is shown.
      */
     async function readDetail(): Promise<boolean> {
         for (;;) {
             const started = writes;
+            const duringWrite = pendingAction.value !== null;
             let fresh: PrDetail;
             try {
                 fresh = await api.pr(prRef, { fresh: true });
@@ -124,7 +126,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 showError(error);
                 return false;
             }
-            if (started === writes && pendingAction.value === null) {
+            if (started === writes && !duringWrite && pendingAction.value === null) {
                 const before = detail.value.versions;
                 detail.value = fresh;
                 if (versionsChanged(before, fresh.versions)) {
@@ -137,7 +139,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 refreshWanted = true;
                 return false;
             }
-            // a write started and ended during the read: read again
+            // a write was in progress or started during the read, and has ended: read again
         }
     }
 
@@ -345,6 +347,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         } finally {
             pendingAction.value = null;
         }
+        if (ok) {
+            // Bitbucket moved the PR's updated_on: until the refresh lands (or if it fails), not news for the check
+            detail.value = { ...detail.value, pulse: afterOwnWrite(detail.value.pulse) };
+        }
         if (ok || refreshWanted) {
             void refreshDetail();
         }
@@ -380,6 +386,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
      * stays, unless it lacks a thread placed on one of its files: the ranges concerned are computed again, once.
      */
     async function refresh(): Promise<RefreshNews | null> {
+        if (pendingAction.value !== null) {
+            // the write in progress refreshes when it ends (buttons are disabled meanwhile)
+            return null;
+        }
         const before = detail.value;
         if (!(await refreshDetail())) {
             return null;

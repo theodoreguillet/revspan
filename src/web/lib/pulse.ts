@@ -23,9 +23,23 @@ export interface PulseNews {
 export function pulseNews(shown: PrPulse, now: PrPulse): PulseNews {
     const newVersion = now.head !== shown.head;
     const newComments = Math.max(0, now.commentCount - shown.commentCount);
-    // updated_on moves with every change: it only says something when nothing more precise does
-    const otherActivity = now.participants !== shown.participants || (!newVersion && newComments === 0 && now.updatedOn !== shown.updatedOn);
+    // updated_on moves with every change: it only says something when nothing more precise does (and when it is known,
+    // see afterOwnWrite)
+    const moved = shown.updatedOn !== UNKNOWN_UPDATED_ON && now.updatedOn !== shown.updatedOn;
+    const otherActivity = now.participants !== shown.participants || (!newVersion && newComments === 0 && moved);
     return { newVersion, newComments, otherActivity };
+}
+
+/** `updatedOn` of a pulse the page patched after its own write: Bitbucket's new value is not known yet. */
+const UNKNOWN_UPDATED_ON = '';
+
+/**
+ * Pulse of the detail shown after one of my writes succeeded, until the next read replaces it (even if that read
+ * fails, my own write never looks like news): `commentDelta` comments more or less, `updatedOn` unknown since Bitbucket
+ * moved it.
+ */
+export function afterOwnWrite(p: PrPulse, commentDelta = 0): PrPulse {
+    return { ...p, updatedOn: UNKNOWN_UPDATED_ON, commentCount: Math.max(0, p.commentCount + commentDelta) };
 }
 
 export const hasNews = (n: PulseNews): boolean => n.newVersion || n.newComments > 0 || n.otherActivity;

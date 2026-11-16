@@ -151,6 +151,18 @@ def bitbucket_requests():
     return http_json(REQUESTS_URL) if REQUESTS_URL else []
 
 
+def wait_fake_quiet(quiet=1.0, timeout=15.0):
+    """Waits until the fake Bitbucket received no request for `quiet` seconds (page load, summary, prefetch done)."""
+    deadline = time.time() + timeout
+    count, since = len(bitbucket_requests()), time.time()
+    while time.time() - since < quiet:
+        assert time.time() < deadline, 'the fake Bitbucket never went quiet'
+        time.sleep(0.2)
+        now = len(bitbucket_requests())
+        if now != count:
+            count, since = now, time.time()
+
+
 def fake_delay(route, ms):
     """Slows down the fake Bitbucket's requests whose path has that segment (ms=0: back to normal)."""
     base = CALLS_URL.rsplit('/__calls', 1)[0]
@@ -930,21 +942,27 @@ def run_checks(page):
                 open_pr(other, MAIN_PR)
                 fake_comment('Yann repasse sur la PR')
                 banner = other.locator('.rv-pulse[data-banner="pulse"]')
+                # the page's own loading (summary, prefetch) is over: the requests counted below are the checks' only
+                wait_fake_quiet()
+                pr_path = f'/pullrequests/{FAKE_PRS["main"]}'
                 # The check reads the PR through the server's 15 s live cache (real time): fast-forward until a check
-                # reads it after Yann's comment.
+                # reads it after Yann's comment (bounded: about 30 s, 30 checks).
                 deadline = time.time() + 30
-                while True:
+                for attempt in range(30):
                     before = len(bitbucket_requests())
-                    with other.expect_response(lambda r: r.url.endswith('/pulse')):
+                    with other.expect_response(lambda r: r.url.endswith('/pulse')) as answer:
                         other.clock.fast_forward('05:01')
+                    assert answer.value.ok, answer.value.status
                     # one GET of the PR at most (none when the live cache answers), never its comments or activity
-                    on_pr = [r for r in bitbucket_requests()[before:] if '/pullrequests/' in r['path']]
-                    assert len(on_pr) <= 1 and all(r['path'].endswith(f'/pullrequests/{FAKE_PRS["main"]}') for r in on_pr), on_pr
+                    spent = bitbucket_requests()[before:]
+                    on_pr = [r for r in spent if r['path'].endswith(pr_path)]
+                    details = [r for r in spent if f'{pr_path}/' in r['path']]
+                    assert len(on_pr) <= 1 and not details, spent
                     try:
                         expect(banner).to_be_visible(timeout=1000)
                         break
                     except AssertionError:
-                        assert time.time() < deadline, 'no banner after Yann\'s comment'
+                        assert time.time() < deadline and attempt < 29, 'no banner after Yann\'s comment'
                 log(f'      periodic check: {len(on_pr)} Bitbucket request on the PR')
                 expect(banner).to_contain_text('Du nouveau sur la PR : 1 nouveau commentaire')
                 # the page did not change by itself: the comment shows only after "Actualiser"
