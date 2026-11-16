@@ -29,6 +29,8 @@ export interface BbPullRequest {
     updated_on?: string;
     /** Comments on the PR (part of the list's default fields). */
     comment_count?: number;
+    /** Open (unresolved) tasks on the PR. */
+    task_count?: number;
     participants?: BbParticipant[];
     reviewers?: BbUser[];
     /** Draft PR (not ready for review yet). */
@@ -46,6 +48,19 @@ export interface BbComment {
     parent?: { id: number };
     inline?: { path: string; to?: number | null; from?: number | null };
     resolution?: { user?: BbUser } | null;
+}
+
+/** PR task (`pullrequest_comment_task`): `comment` when it was created under a comment. */
+export interface BbTask {
+    id: number;
+    state?: 'RESOLVED' | 'UNRESOLVED';
+    content?: { raw?: string; html?: string };
+    creator?: BbUser;
+    created_on?: string;
+    updated_on?: string;
+    resolved_on?: string | null;
+    resolved_by?: BbUser | null;
+    comment?: { id: number } | null;
 }
 
 export interface BbActivity {

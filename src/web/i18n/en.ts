@@ -239,6 +239,8 @@ export const en = {
     'tabs.new': { one: '{count} new', other: '{count} new' },
     'tabs.open': { one: '{count} open', other: '{count} open' },
     'tabs.builds': 'Builds',
+    'tabs.tasks': 'Tasks',
+    'tabs.openTasks': { one: '{count} open task', other: '{count} open tasks' },
 
     // ---------- Builds ----------
     'build.row.failed': '✗ failed',
@@ -386,6 +388,17 @@ export const en = {
     'comment.deleteQuestion': 'Delete this comment on Bitbucket?',
     'comment.sending': 'sending…',
     'comment.editLabel': 'Edit your comment',
+
+    // ---------- Tasks ----------
+    'task.empty': 'No task on this pull request',
+    'task.unavailable': 'The tasks could not be read on Bitbucket.',
+    'task.retry': 'Try again',
+    'task.new': 'New task',
+    'task.add': 'Add',
+    'task.done': 'Done',
+    'task.resolvedBy': 'done by {name}',
+    'task.showComment': 'see the comment',
+    'task.deleteQuestion': 'Delete this task on Bitbucket?',
     'composer.general': 'New general comment',
     'composer.deletedLine': 'Deleted line {line} ({from} → {to}): posted as a general comment quoting the line.',
     'composer.line': 'Line {line} of {version}',

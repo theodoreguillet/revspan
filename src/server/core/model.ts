@@ -1,9 +1,9 @@
 // PR model built from raw Bitbucket data: versions, participants, threads, last review.
 // Pure functions (network loading lives in services/).
 import type {
-    Comment, Participant, PrInfo, PrPulse, PrRef, Review, ReviewSource, Thread, User, Version,
+    Comment, Participant, PrInfo, PrPulse, PrRef, PrTask, Review, ReviewSource, Thread, User, Version,
 } from '../../shared/api.ts';
-import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../bitbucket/types.ts';
+import type { BbActivity, BbComment, BbPullRequest, BbTask, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
 
 /** Push of the PR, as read from the activity. */
@@ -309,6 +309,22 @@ export function prInfo(ref: PrRef, pr: BbPullRequest): PrInfo {
         createdOn: pr.created_on ?? '',
         updatedOn: pr.updated_on ?? '',
         url: prUrl(ref, pr),
+        taskCount: pr.task_count ?? 0,
+    };
+}
+
+/** Task as the page shows it; meUuid: null when the profile is unknown (then no task is mine). */
+export function taskOf(raw: BbTask, meUuid: string | null): PrTask {
+    return {
+        id: raw.id,
+        html: raw.content?.html ?? '',
+        raw: raw.content?.raw ?? '',
+        resolved: raw.state === 'RESOLVED',
+        creator: userOf(raw.creator),
+        createdOn: raw.created_on ?? '',
+        resolvedBy: raw.state === 'RESOLVED' ? userOf(raw.resolved_by) : null,
+        commentId: raw.comment?.id ?? null,
+        mine: meUuid !== null && raw.creator?.uuid === meUuid,
     };
 }
 

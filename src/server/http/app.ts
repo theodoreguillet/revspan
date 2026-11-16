@@ -14,8 +14,8 @@ import type { HomeService } from '../services/home-service.ts';
 import type { PrService } from '../services/pr-service.ts';
 import type { SettingsService } from '../services/settings-service.ts';
 import {
-    commentIdSchema, compareQuerySchema, editCommentSchema, newCommentSchema, parse, prRefSchema, reviewedSchema,
-    settingsUpdateSchema, viewedSchema,
+    commentIdSchema, compareQuerySchema, editCommentSchema, newCommentSchema, newTaskSchema, parse, prRefSchema, reviewedSchema,
+    settingsUpdateSchema, taskIdSchema, viewedSchema,
 } from './schemas.ts';
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -125,6 +125,11 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.delete(`${PR_ROUTE}/comments/:cid`, async (c) => c.json(await prs.deleteComment(refOf(c), parse(commentIdSchema, c.req.param('cid')))));
     app.post(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), true)));
     app.delete(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), false)));
+    app.get(`${PR_ROUTE}/tasks`, async (c) => c.json(await prs.tasks(refOf(c))));
+    app.post(`${PR_ROUTE}/tasks`, async (c) => c.json(await prs.createTask(refOf(c), parse(newTaskSchema, await jsonBody(c)))));
+    app.delete(`${PR_ROUTE}/tasks/:tid`, async (c) => c.json(await prs.deleteTask(refOf(c), parse(taskIdSchema, c.req.param('tid')))));
+    app.post(`${PR_ROUTE}/tasks/:tid/resolve`, async (c) => c.json(await prs.setTaskResolved(refOf(c), parse(taskIdSchema, c.req.param('tid')), true)));
+    app.delete(`${PR_ROUTE}/tasks/:tid/resolve`, async (c) => c.json(await prs.setTaskResolved(refOf(c), parse(taskIdSchema, c.req.param('tid')), false)));
     app.post(`${PR_ROUTE}/approve`, async (c) => c.json(await prs.approve(refOf(c), true)));
     app.delete(`${PR_ROUTE}/approve`, async (c) => c.json(await prs.approve(refOf(c), false)));
     app.post(`${PR_ROUTE}/request-changes`, async (c) => c.json(await prs.requestChanges(refOf(c), true)));

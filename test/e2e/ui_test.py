@@ -1207,6 +1207,76 @@ def run_checks(page):
             expect(page.locator('[data-builds="empty"]')).to_have_text('Aucun build rattaché à cette PR')
         builds_tab(page)
 
+        if CALLS_URL and REQUESTS_URL:
+            @check('tasks_tab: open count on the tab, list read on opening only; create, tick, delete, see the comment')
+            def tasks_tab(page):
+                open_pr(page, MAIN_PR, '?from=0&to=6')
+                wait_fake_quiet()
+                tab = page.locator('.rv-tab[data-tab="tasks"]')
+                expect(tab).to_contain_text('Tâches')
+                expect(tab.locator('.n')).to_have_text('1')
+                assert not [r for r in bitbucket_requests() if r['path'].endswith('/tasks')], 'tasks read before the tab was opened'
+                before = len(bitbucket_requests())
+                tab.click()
+                expect(tab).to_have_attribute('aria-selected', 'true')
+                rows = page.locator('.rv-task[data-task]')
+                expect(rows).to_have_count(2)
+                seeded = page.locator('.rv-task[data-state="open"]')
+                expect(seeded).to_contain_text('Ajouter un test pour archiveAll')
+                expect(seeded.locator('.who')).to_have_text('Camille Durand')
+                expect(seeded.locator('[data-action="delete-task"]')).to_have_count(0)  # not mine
+                done = page.locator('.rv-task[data-state="resolved"]')
+                expect(done).to_contain_text('Mettre à jour le changelog')
+                expect(done).to_contain_text('faite par Camille Durand')
+                expect(done.locator('[data-action="resolve-task"]')).to_be_checked()
+                reads = [r for r in bitbucket_requests()[before:] if r['path'].endswith('/tasks')]
+                assert len(reads) == 1, reads
+                os.makedirs(SHOTS, exist_ok=True)
+                page.screenshot(path=os.path.join(SHOTS, 'pr-tasks.png'))
+                # create: Enter in the input; listed at once, then Bitbucket's task; the count follows
+                box = page.locator('input[data-new-task]')
+                expect(box).to_have_attribute('placeholder', 'Nouvelle tâche')
+                box.fill('Renommer archiveAll')
+                calls.start()
+                box.press('Enter')
+                call = calls.wait(lambda c: c['method'] == 'POST' and c['path'].endswith('/tasks'), 'POST tasks')
+                assert call is None or body_of(call) == {'content': {'raw': 'Renommer archiveAll'}}, call
+                created = page.locator('.rv-task', has_text='Renommer archiveAll')
+                expect(created).to_have_count(1, timeout=10000)
+                expect(created).not_to_have_class(re.compile(r'\bpending\b'), timeout=10000)
+                expect(box).to_have_value('')
+                expect(tab.locator('.n')).to_have_text('2', timeout=10000)
+                tid = int(created.get_attribute('data-task'))
+                assert tid > 0, tid
+                # tick: resolved, count back to 1
+                calls.start()
+                created.locator('[data-action="resolve-task"]').check()
+                call = calls.wait(lambda c: c['method'] == 'PUT' and c['path'].endswith(f'/tasks/{tid}'), f'PUT tasks/{tid}')
+                assert call is None or body_of(call) == {'state': 'RESOLVED'}, call
+                expect(created).to_have_attribute('data-state', 'resolved')
+                expect(created).to_contain_text('faite par Thomas Girard', timeout=10000)
+                expect(tab.locator('.n')).to_have_text('1', timeout=10000)
+                # ↻ with the tab open reads the list again (once)
+                before = len(bitbucket_requests())
+                page.locator('.rv-head [data-action="refresh"]').click()
+                expect(page.locator('.rv-head .rv-refresh-status[role="status"]')).not_to_have_text('', timeout=10000)
+                wait_fake_quiet()
+                reads = [r for r in bitbucket_requests()[before:] if r['path'].endswith('/tasks')]
+                assert len(reads) == 1, reads
+                # delete my task (confirm() accepted by the dialog handler)
+                calls.start()
+                page.locator(f'.rv-task[data-task="{tid}"] [data-action="delete-task"]').click()
+                calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/tasks/{tid}'), f'DELETE tasks/{tid}')
+                expect(page.locator(f'.rv-task[data-task="{tid}"]')).to_have_count(0, timeout=10000)
+                expect(rows).to_have_count(2)
+                expect(tab.locator('.n')).to_have_text('1')
+                # the seeded task was created under my comment: "voir le commentaire" goes to its thread in the diff
+                cid = api(pr_api(MAIN_PR) + '/tasks')[0]['commentId']
+                seeded.locator('[data-action="show-comment"]').click()
+                expect(page.locator('.rv-tab.on[data-tab="diff"]')).to_be_visible()
+                expect(page.locator(f'.rv-diff .rv-th[data-thread="{cid}"]')).to_be_visible()
+            tasks_tab(page)
+
         @check('PR page: follow toggle on the author; my PR shows "needs rebase" and its running build')
         def follow_header(page):
             open_pr(page, fake_ref('neverReviewed'))

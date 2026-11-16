@@ -12,6 +12,7 @@ import PrHeader from './PrHeader.vue';
 import PrTabs from './PrTabs.vue';
 import PulseBanner from './PulseBanner.vue';
 import ResumeBanner from './ResumeBanner.vue';
+import TasksTab from './TasksTab.vue';
 import Timeline from './Timeline.vue';
 import VersionsTab from './VersionsTab.vue';
 
@@ -54,6 +55,7 @@ onBeforeUnmount(() => {
         <DiffTab v-if="page.tab === 'diff'" />
         <DiscussionsTab v-else-if="page.tab === 'discussions'" />
         <VersionsTab v-else-if="page.tab === 'versions'" />
+        <TasksTab v-else-if="page.tab === 'tasks'" />
         <BuildChecks v-else />
     </div>
 </template>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../../src/server/bitbucket/types.ts';
+import type { BbActivity, BbComment, BbPullRequest, BbTask, BbUser } from '../../src/server/bitbucket/types.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, previousAvailable, versionAt,
+    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, previousAvailable, prInfo, taskOf, versionAt,
 } from '../../src/server/core/model.ts';
 
 const ME = '{me}';
@@ -142,5 +142,28 @@ describe('buildThreads', () => {
         expect(inline).toMatchObject({ path: 'src/CreateRecord.ts', anchor: { to: 40, from: null }, version: 3, resolved: true });
         // A "thumbs up" reply is a reply like any other (the Bitbucket API exposes no reactions).
         expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false], [12, false, true], [13, true, false]]);
+    });
+});
+
+describe('tasks', () => {
+    const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
+
+    it('prInfo carries the open task count of the PR object (0 when absent)', () => {
+        expect(prInfo(ref, { ...pr, task_count: 2 }).taskCount).toBe(2);
+        expect(prInfo(ref, pr).taskCount).toBe(0);
+    });
+
+    it('taskOf maps a Bitbucket task: text, state, creator, resolver, comment, mine', () => {
+        const raw: BbTask = {
+            id: 31, state: 'RESOLVED', content: { raw: 'Add a test', html: '<p>Add a test</p>' }, creator: user(ME, 'Moi'),
+            created_on: '2026-11-10T09:00:00Z', updated_on: '2026-11-11T09:00:00Z', resolved_by: user(CAM, 'Camille'), comment: { id: 120 },
+        };
+        expect(taskOf(raw, ME)).toEqual({
+            id: 31, raw: 'Add a test', html: '<p>Add a test</p>', resolved: true, creator: { uuid: ME, displayName: 'Moi', nickname: 'Moi' },
+            createdOn: '2026-11-10T09:00:00Z', resolvedBy: { uuid: CAM, displayName: 'Camille', nickname: 'Camille' }, commentId: 120, mine: true,
+        });
+        const open = taskOf({ id: 32, state: 'UNRESOLVED', content: { raw: 'x' }, creator: user(YAN, 'Yann'), created_on: '2026-11-10T09:00:00Z' }, ME);
+        expect(open).toMatchObject({ resolved: false, resolvedBy: null, commentId: null, mine: false, html: '' });
+        expect(taskOf({ id: 33, state: 'UNRESOLVED', content: { raw: 'x' }, creator: user(ME, 'Moi') }, null).mine).toBe(false);
     });
 });

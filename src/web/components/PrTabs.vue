@@ -11,6 +11,7 @@ const freshCount = computed(() => threadGroups(page.detail.threads).fresh.length
 const openCount = computed(() => page.detail.threads.filter((t) => !t.resolved).length);
 const diffCount = computed(() => (page.compare && !page.compareLoading ? String(page.compare.files.length) : '…'));
 const buildCount = computed(() => page.detail.build?.length ?? 0);
+const taskCount = computed(() => page.detail.pr.taskCount ?? 0);
 const buildFailed = computed(() => !!page.detail.build?.some((c) => c.state === 'failed' || c.state === 'stopped'));
 
 function pick(tab: PrTab): void {
@@ -37,6 +38,9 @@ onBeforeUnmount(() => page.registerTabs(null));
         </button>
         <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'builds' }]" data-tab="builds" :aria-selected="page.tab === 'builds'" @click="pick('builds')">
             {{ t('tabs.builds') }} <span v-if="buildCount" :class="['n', { red: buildFailed }]">{{ buildCount }}</span>
+        </button>
+        <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'tasks' }]" data-tab="tasks" :aria-selected="page.tab === 'tasks'" @click="pick('tasks')">
+            {{ t('tabs.tasks') }} <span v-if="taskCount" class="n" :title="t('tabs.openTasks', { count: taskCount })">{{ taskCount }}</span>
         </button>
     </div>
 </template>

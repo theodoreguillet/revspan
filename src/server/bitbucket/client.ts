@@ -8,7 +8,7 @@ import { toBuildChecks } from '../core/build.ts';
 import type { CompareSource, DiffstatEntry, FileContent } from '../core/compare.ts';
 import { userOf } from '../core/model.ts';
 import type {
-    BbActivity, BbBranch, BbComment, BbCommit, BbDiffstatEntry, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbStatus, BbUser,
+    BbActivity, BbBranch, BbComment, BbCommit, BbDiffstatEntry, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbStatus, BbTask, BbUser,
 } from './types.ts';
 
 export const DEFAULT_BASE_URL = 'https://api.bitbucket.org/2.0';
@@ -302,6 +302,12 @@ export class BitbucketClient {
             () => this.getAllPages<BbComment>(`${this.prPath(ws, repo, id)}/comments`, { pagelen: 100 }));
     }
 
+    /** Tasks of the PR, every page (100 per page, Bitbucket's maximum). */
+    tasks(ws: string, repo: string, id: number): Promise<BbTask[]> {
+        return this.cache.getLive(`live:${ws}/${repo}#${id}:tasks`, LIVE_TTL_MS,
+            () => this.getAllPages<BbTask>(`${this.prPath(ws, repo, id)}/tasks`, { pagelen: 100 }));
+    }
+
     /**
      * Build checks of the PR's head commit. Once the head was pushed (pushedAt) more than an hour ago and every check is
      * settled (success, failed or stopped), or there is none at all, they are kept on disk for that head and never asked
@@ -501,6 +507,27 @@ export class BitbucketClient {
 
     async resolveComment(ws: string, repo: string, id: number, commentId: number, resolved: boolean): Promise<void> {
         await this.json(resolved ? 'POST' : 'DELETE', `${this.prPath(ws, repo, id)}/comments/${commentId}/resolve`);
+    }
+
+    async createTask(ws: string, repo: string, id: number, raw: string): Promise<BbTask> {
+        const created = await this.json<BbTask>('POST', `${this.prPath(ws, repo, id)}/tasks`, { body: { content: { raw } } });
+        if (!created) {
+            throw errorFor(502, 'tasks', 'empty response');
+        }
+        return created;
+    }
+
+    async deleteTask(ws: string, repo: string, id: number, taskId: number): Promise<void> {
+        await this.json('DELETE', `${this.prPath(ws, repo, id)}/tasks/${taskId}`);
+    }
+
+    /** Ticks (RESOLVED) or reopens (UNRESOLVED) a task; the text is left as it is. */
+    async setTaskResolved(ws: string, repo: string, id: number, taskId: number, resolved: boolean): Promise<BbTask> {
+        const updated = await this.json<BbTask>('PUT', `${this.prPath(ws, repo, id)}/tasks/${taskId}`, { body: { state: resolved ? 'RESOLVED' : 'UNRESOLVED' } });
+        if (!updated) {
+            throw errorFor(502, 'tasks', 'empty response');
+        }
+        return updated;
     }
 
     async approve(ws: string, repo: string, id: number, on: boolean): Promise<BbParticipant | null> {

@@ -41,6 +41,10 @@ Common rules:
 | PUT | `/api/pr/:ws/:repo/:id/comments/:cid` | `EditComment` | `Comment` (404 if the comment was deleted meanwhile) |
 | DELETE | `/api/pr/:ws/:repo/:id/comments/:cid` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/comments/:cid/resolve` | — | `Ok` |
+| GET | `/api/pr/:ws/:repo/:id/tasks` | — | `PrTask[]` (one paginated Bitbucket read; not part of `PrDetail`, whose `pr.taskCount` is the open count) |
+| POST | `/api/pr/:ws/:repo/:id/tasks` | `NewTask` | `PrTask` (400 if the text is empty) |
+| DELETE | `/api/pr/:ws/:repo/:id/tasks/:tid` | — | `Ok` |
+| POST / DELETE | `/api/pr/:ws/:repo/:id/tasks/:tid/resolve` | — | `PrTask` (ticked / reopened) |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/approve` | — | `Ok` (POST re-approves if needed) |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/request-changes` | — | `Ok` |
 | POST | `/api/pr/:ws/:repo/:id/reviewed` | `{ version }` | `Ok` (local "reviewed" mark) |

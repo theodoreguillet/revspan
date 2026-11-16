@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, PrTask, Settings, Summary } from '../../src/shared/api.ts';
 import { DEFAULT_REVIEW_SETTINGS } from '../../src/shared/review-settings.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
@@ -508,6 +508,71 @@ describe('actions', () => {
         await api('POST', `${prPath()}/viewed`, { path: 'src/Action.ts', viewed: false });
         expect((await detail()).review.viewed).toEqual({});
         expect((await api('POST', `${prPath()}/reviewed`, { version: 99 })).status).toBe(400);
+    });
+});
+
+describe('tasks', () => {
+    it('the detail carries the open task count, with no task request', async () => {
+        const { fake } = await setup();
+        const body = await detail();
+        expect(body.pr.taskCount).toBe(1);
+        expect(fake.requests.filter((r) => r.path.endsWith('/tasks'))).toEqual([]);
+    });
+
+    it('GET tasks maps the fields (one paginated read)', async () => {
+        const { fake } = await setup();
+        const before = fake.requests.length;
+        const { status, body } = await api<PrTask[]>('GET', `${prPath()}/tasks`);
+        expect(status).toBe(200);
+        expect(fake.requests.length - before).toBe(1);
+        const mine = (await detail()).threads.flatMap((t) => t.comments).find((c) => c.mine && !c.deleted);
+        expect(body).toEqual([
+            {
+                id: 1, raw: 'Ajouter un test pour archiveAll', html: '<p>Ajouter un test pour archiveAll</p>', resolved: false,
+                creator: { uuid: '{cam}', displayName: 'Camille Durand', nickname: 'cdurand' }, createdOn: '2026-10-20T10:35:00Z',
+                resolvedBy: null, commentId: mine?.id, mine: false,
+            },
+            {
+                id: 2, raw: 'Mettre à jour le changelog', html: '<p>Mettre à jour le changelog</p>', resolved: true,
+                creator: { uuid: '{me}', displayName: 'Thomas Girard', nickname: 'tgirard' }, createdOn: '2026-10-02T12:10:00Z',
+                resolvedBy: { uuid: '{cam}', displayName: 'Camille Durand', nickname: 'cdurand' }, commentId: null, mine: true,
+            },
+        ]);
+    });
+
+    it('POST tasks creates a task of mine; the count follows', async () => {
+        const { fake } = await setup();
+        await detail();
+        const created = await api<PrTask>('POST', `${prPath()}/tasks`, { raw: '  Renommer archiveAll  ' });
+        expect(created.status).toBe(200);
+        expect(created.body).toMatchObject({ raw: 'Renommer archiveAll', resolved: false, mine: true, commentId: null });
+        expect(fake.calls.map(shortCall)).toEqual(['POST /tasks']);
+        expect(fake.calls[0]?.body).toEqual({ content: { raw: 'Renommer archiveAll' } });
+        // the write dropped the loaded PR: the next detail is read again, with the new count
+        expect((await detail()).pr.taskCount).toBe(2);
+    });
+
+    it('POST tasks validates an empty text (400), nothing sent', async () => {
+        const { fake } = await setup();
+        expect((await api('POST', `${prPath()}/tasks`, { raw: '   ' })).status).toBe(400);
+        expect((await api('POST', `${prPath()}/tasks`, {})).status).toBe(400);
+        expect(fake.calls).toEqual([]);
+    });
+
+    it('DELETE tasks/:tid and resolve reach the fake', async () => {
+        const { fake } = await setup();
+        const resolved = await api<PrTask>('POST', `${prPath()}/tasks/1/resolve`);
+        expect(resolved.status).toBe(200);
+        expect(resolved.body).toMatchObject({ id: 1, resolved: true, resolvedBy: { uuid: '{me}' } });
+        expect((await detail()).pr.taskCount).toBe(0);
+        const reopened = await api<PrTask>('DELETE', `${prPath()}/tasks/1/resolve`);
+        expect(reopened.body).toMatchObject({ id: 1, resolved: false, resolvedBy: null });
+        expect((await api('DELETE', `${prPath()}/tasks/2`)).body).toEqual({ ok: true });
+        expect((await api<PrTask[]>('GET', `${prPath()}/tasks`)).body.map((t) => t.id)).toEqual([1]);
+        expect(fake.calls.map(shortCall)).toEqual(['PUT /tasks/1', 'PUT /tasks/1', 'DELETE /tasks/2']);
+        expect(fake.calls.map((c) => c.body)).toEqual([{ state: 'RESOLVED' }, { state: 'UNRESOLVED' }, null]);
+        expect((await api('DELETE', `${prPath()}/tasks/99`)).status).toBe(404);
+        expect((await api('DELETE', `${prPath()}/tasks/abc`)).status).toBe(400);
     });
 });
 

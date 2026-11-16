@@ -14,6 +14,7 @@ import {
     type PrDetail,
     type PrPulse,
     type PrRef,
+    type PrTask,
     type Settings,
     type SettingsUpdate,
     type Summary,
@@ -112,6 +113,10 @@ export const api = {
     deleteComment: (ref: PrRef, id: number) => request<Ok>('DELETE', `${prPath(ref)}/comments/${id}`),
     resolve: (ref: PrRef, threadId: number, resolved: boolean) =>
         request<Ok>(resolved ? 'POST' : 'DELETE', `${prPath(ref)}/comments/${threadId}/resolve`),
+    tasks: (ref: PrRef) => request<PrTask[]>('GET', `${prPath(ref)}/tasks`),
+    createTask: (ref: PrRef, raw: string) => request<PrTask>('POST', `${prPath(ref)}/tasks`, { raw }),
+    deleteTask: (ref: PrRef, id: number) => request<Ok>('DELETE', `${prPath(ref)}/tasks/${id}`),
+    resolveTask: (ref: PrRef, id: number, resolved: boolean) => request<PrTask>(resolved ? 'POST' : 'DELETE', `${prPath(ref)}/tasks/${id}/resolve`),
     approve: (ref: PrRef, approved: boolean) => request<Ok>(approved ? 'POST' : 'DELETE', `${prPath(ref)}/approve`),
     requestChanges: (ref: PrRef, on: boolean) => request<Ok>(on ? 'POST' : 'DELETE', `${prPath(ref)}/request-changes`),
     reviewed: (ref: PrRef, version: number) => request<Ok>('POST', `${prPath(ref)}/reviewed`, { version }),

@@ -85,6 +85,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const refreshing = ref(false);
     /** Refreshes started so far (with `writes`: a check sent before one of them compares with an outdated detail). */
     let refreshes = 0;
+    /** Run once a user refresh (↻) read a fresh detail: data read apart from it (the Tasks tab's list). */
+    const refreshHooks = new Set<() => void>();
 
     async function loadSummary(): Promise<void> {
         const request = ++summaryRequest;
@@ -394,6 +396,9 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         if (!(await refreshDetail())) {
             return null;
         }
+        for (const hook of refreshHooks) {
+            hook();
+        }
         const after = detail.value;
         const params = shownParams;
         if (params) {
@@ -406,6 +411,12 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             }
         }
         return refreshNews(before, after);
+    }
+
+    /** Registers a hook run by each user refresh (↻) once its fresh detail is read; returns its removal. */
+    function onRefresh(hook: () => void): () => void {
+        refreshHooks.add(hook);
+        return () => refreshHooks.delete(hook);
     }
 
     /** Local update of the detail (optimistic write, comment returned by the server). */
@@ -456,7 +467,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     return {
         detail, summary, sums, compare, compareLoading, compareError, diffMode, pendingAction, acting, busy, refreshing,
-        loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, refresh, syncSeq, act, patchDetail,
+        loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, refresh, onRefresh, syncSeq, act, patchDetail,
         patchCompare, evictCompare, patchReview,
     };
 }

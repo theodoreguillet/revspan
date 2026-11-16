@@ -198,6 +198,7 @@ Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one rep
 | A repository fails (rate limit, outage), second window within 60 s | **0**: the failed home is shared for 60 s |
 | Reopening a PR within the refresh interval (tab closed and reopened, same comparisons) | **0**: the loaded PR and its comparisons are kept for `review.refreshMinutes`; a write, ↻ or a later open reads again |
 | Opening a PR of ≤ 30 files: up to 3 extra comparisons in the background (prefetch), none for larger PRs or hidden tabs | **+1** on the main PR (48 → 49, cold caches): 2 comparisons, the third preset being the diff shown, mostly reuse what the version summaries already read |
+| Tasks tab | **0** until it is opened (the open count comes from the PR already read); opening it: **1** paginated read (100 tasks per page), again on ↻ while it is open |
 
 Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only
 one window computes) and `home.drop` (a counter bumped on every write, so a result computed before a write is not
@@ -223,6 +224,9 @@ one request per interval even once finished (see "Build status").
   seen file opens), Esc clears. All in the page: no request to Bitbucket.
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution;
   comment on a line of the latest version.
+- **Tasks** (tab after Builds, with the open count): the PR's Bitbucket tasks, read when the tab is opened. Tick or
+  reopen a task, delete yours, add one with the input at the bottom; a task created under a comment links to its
+  thread ("see the comment").
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
   An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve.
 

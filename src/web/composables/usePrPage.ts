@@ -4,6 +4,7 @@ import { computed, inject, nextTick, onScopeDispose, provide, reactive, watch, t
 import type { PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
 import { PREFETCH_CONTEXT } from '../lib/prefetch.ts';
+import { commentThreadId } from '../lib/tasks.ts';
 import { useDiffNav } from './useDiffNav.ts';
 import { useDiffOptions } from './useDiffOptions.ts';
 import { useDiffSearch } from './useDiffSearch.ts';
@@ -11,6 +12,7 @@ import { useDiscussion } from './useDiscussion.ts';
 import { usePrLoad } from './usePrLoad.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
 import { useReviewActions } from './useReviewActions.ts';
+import { useTasks } from './useTasks.ts';
 
 const FULL_CONTEXT = 100000;
 
@@ -21,6 +23,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     const nav = useDiffNav();
     const discussion = useDiscussion(prRef, load);
     const review = useReviewActions(prRef, load, options, nav.keepFileInView);
+    const tasks = useTasks(prRef, load);
 
     const threadsById = computed(() => new Map(load.detail.value.threads.map((t) => [t.id, t])));
     const canInlineComment = computed(() => load.compare.value?.to === range.n.value && load.detail.value.pr.state === 'OPEN');
@@ -34,6 +37,18 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     // presets computed in the background with the current context, so that a click on one shows it at once
     load.startPrefetch(() => ({ presets: range.presets.value, context: context() }));
     onScopeDispose(load.stopPrefetch);
+
+    // the task list is read when its tab opens, and again on ↻ while it is open
+    watch(options.tab, (tab) => {
+        if (tab === 'tasks') {
+            void tasks.loadTasks();
+        }
+    });
+    onScopeDispose(load.onRefresh(() => {
+        if (options.tab.value === 'tasks') {
+            void tasks.loadTasks();
+        }
+    }));
 
     watch([range.from, range.to], () => {
         discussion.closeComposer();
@@ -109,6 +124,16 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         nav.revealThread(threadId);
     }
 
+    /** "See the comment" of a task: its thread in the diff when placed there, otherwise the Discussions tab. */
+    async function showComment(commentId: number): Promise<void> {
+        const threadId = commentThreadId(load.detail.value.threads, commentId);
+        if (threadId !== null && placementOf(threadId)) {
+            await showInDiff(threadId);
+            return;
+        }
+        options.tab.value = 'discussions';
+    }
+
     /** Files the "mark all" button applies to: the listed ones (all, or the filtered ones while searching). */
     const listedFiles = computed(() => files.value.filter((_, idx) => search.listed(idx)));
 
@@ -172,8 +197,8 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     // reactive(): components read page.from, page.detail... without .value (the shallowRefs stay shallow).
     return reactive({
         ref: prRef,
-        ...load, ...range, ...options, ...nav, ...discussion, ...review,
-        search, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, handleKey,
+        ...load, ...range, ...options, ...nav, ...discussion, ...review, ...tasks,
+        search, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, showComment, handleKey,
     });
 }
 

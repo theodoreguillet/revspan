@@ -1,6 +1,6 @@
 // Validation of HTTP inputs (zod). The produced types match the src/shared/api.ts contract.
 import { z } from 'zod';
-import type { EditComment, NewComment, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
+import type { EditComment, NewComment, NewTask, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
 import { badRequest } from '../errors.ts';
 
 const NAME = /^[A-Za-z0-9._-]+$/;
@@ -33,7 +33,9 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     }).partial().optional(),
 });
 
-const commentRawSchema = z.string().trim().min(1, 'The comment is empty.').max(32000);
+/** Text typed in Markdown: trimmed, not empty, at most 32000 characters (comments and tasks). */
+const rawSchema = (what: string) => z.string().trim().min(1, `The ${what} is empty.`).max(32000);
+const commentRawSchema = rawSchema('comment');
 
 export const newCommentSchema: z.ZodType<NewComment> = z.object({
     raw: commentRawSchema,
@@ -43,6 +45,10 @@ export const newCommentSchema: z.ZodType<NewComment> = z.object({
 
 export const editCommentSchema: z.ZodType<EditComment> = z.object({
     raw: commentRawSchema,
+});
+
+export const newTaskSchema: z.ZodType<NewTask> = z.object({
+    raw: rawSchema('task'),
 });
 
 const viewedFileSchema = z.object({
@@ -70,6 +76,8 @@ export const viewedSchema: z.ZodType<ViewedRequest> = z.any().transform((value, 
 export const reviewedSchema = z.object({ version: z.number().int().positive() });
 
 export const commentIdSchema = z.coerce.number().int().positive();
+
+export const taskIdSchema = z.coerce.number().int().positive();
 
 /** Validates an input; readable message on failure (400). */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {

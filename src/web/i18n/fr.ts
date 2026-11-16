@@ -238,6 +238,8 @@ export const fr: Catalog = {
     'tabs.new': { one: '{count} nouveau', other: '{count} nouveaux' },
     'tabs.open': { one: '{count} ouvert', other: '{count} ouverts' },
     'tabs.builds': 'Builds',
+    'tabs.tasks': 'Tâches',
+    'tabs.openTasks': { one: '{count} tâche ouverte', other: '{count} tâches ouvertes' },
 
     // ---------- Builds ----------
     'build.row.failed': '✗ échec',
@@ -385,6 +387,17 @@ export const fr: Catalog = {
     'comment.deleteQuestion': 'Supprimer ce commentaire sur Bitbucket ?',
     'comment.sending': 'envoi…',
     'comment.editLabel': 'Modifier ton commentaire',
+
+    // ---------- Tasks ----------
+    'task.empty': 'Aucune tâche sur cette PR',
+    'task.unavailable': 'Les tâches n’ont pas pu être lues sur Bitbucket.',
+    'task.retry': 'Réessayer',
+    'task.new': 'Nouvelle tâche',
+    'task.add': 'Ajouter',
+    'task.done': 'Faite',
+    'task.resolvedBy': 'faite par {name}',
+    'task.showComment': 'voir le commentaire',
+    'task.deleteQuestion': 'Supprimer cette tâche sur Bitbucket ?',
     'composer.general': 'Nouveau commentaire général',
     'composer.deletedLine': 'Ligne {line} supprimée ({from} → {to}) : publié comme commentaire général qui cite la ligne.',
     'composer.line': 'Ligne {line} de {version}',

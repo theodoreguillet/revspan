@@ -199,6 +199,8 @@ export interface PrInfo extends PrRef {
     createdOn: string;
     updatedOn: string;
     url: string;
+    /** Open (unresolved) tasks, from the PR object (no extra request). */
+    taskCount: number;
 }
 
 export interface Version {
@@ -255,6 +257,24 @@ export interface Comment {
     raw: string;
     isNew: boolean;
     deleted: boolean;
+    mine: boolean;
+    /** Page only (never set by the server): shown before the server answers, with a negative temporary id. */
+    pending?: true;
+}
+
+/** Bitbucket task of the PR (Tasks tab). */
+export interface PrTask {
+    id: number;
+    /** HTML rendered by Bitbucket: untrusted, to be sanitized on the page side. */
+    html: string;
+    raw: string;
+    resolved: boolean;
+    creator: User | null;
+    createdOn: string;
+    resolvedBy: User | null;
+    /** Comment the task was created under (null: a task of the PR itself). */
+    commentId: number | null;
+    /** Created by me (only my tasks offer the delete button). */
     mine: boolean;
     /** Page only (never set by the server): shown before the server answers, with a negative temporary id. */
     pending?: true;
@@ -393,6 +413,10 @@ export interface NewComment {
 }
 
 export interface EditComment {
+    raw: string;
+}
+
+export interface NewTask {
     raw: string;
 }
 

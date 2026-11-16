@@ -411,3 +411,52 @@ describe('BitbucketClient: build statuses and branch heads', () => {
         await expect(makeClient(fetchImpl).branchHead('acme', 'records-api', 'old')).resolves.toBeNull();
     });
 });
+
+describe('BitbucketClient: tasks', () => {
+    const TASKS = `${BASE}/repositories/acme/records-api/pullrequests/7/tasks`;
+    const task = (id: number, state = 'UNRESOLVED'): Record<string, unknown> => ({ id, state, content: { raw: `t${id}` } });
+
+    it('lists tasks across pages (page length 100)', async () => {
+        const fetchImpl = mockFetch(
+            jsonResponse(200, { values: [task(1), task(2, 'RESOLVED')], next: `${TASKS}?page=2` }),
+            jsonResponse(200, { values: [task(3)] }),
+        );
+        const tasks = await makeClient(fetchImpl).tasks('acme', 'records-api', 7);
+        expect(tasks.map((t) => t.id)).toEqual([1, 2, 3]);
+        const first = new URL(String(fetchImpl.mock.calls[0]?.[0]));
+        expect(first.pathname).toBe('/2.0/repositories/acme/records-api/pullrequests/7/tasks');
+        expect(first.searchParams.get('pagelen')).toBe('100');
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates / deletes / resolves a task (method, path, body)', async () => {
+        const fetchImpl = mockFetch(
+            jsonResponse(201, task(9)),
+            new Response(null, { status: 204 }),
+            jsonResponse(200, task(9, 'RESOLVED')),
+            jsonResponse(200, task(9)),
+        );
+        const client = makeClient(fetchImpl);
+        expect((await client.createTask('acme', 'records-api', 7, 'Add a test')).id).toBe(9);
+        await client.deleteTask('acme', 'records-api', 7, 8);
+        expect((await client.setTaskResolved('acme', 'records-api', 7, 9, true)).state).toBe('RESOLVED');
+        expect((await client.setTaskResolved('acme', 'records-api', 7, 9, false)).state).toBe('UNRESOLVED');
+        const sent = fetchImpl.mock.calls.map(([url, init]) => ({
+            method: init?.method,
+            url: String(url),
+            body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) as unknown,
+        }));
+        expect(sent).toEqual([
+            { method: 'POST', url: TASKS, body: { content: { raw: 'Add a test' } } },
+            { method: 'DELETE', url: `${TASKS}/8`, body: undefined },
+            { method: 'PUT', url: `${TASKS}/9`, body: { state: 'RESOLVED' } },
+            { method: 'PUT', url: `${TASKS}/9`, body: { state: 'UNRESOLVED' } },
+        ]);
+    });
+
+    it('does not resend a task creation that gets a 502', async () => {
+        const fetchImpl = mockFetch(new Response('bad gateway', { status: 502 }), jsonResponse(201, task(1)));
+        await expect(makeClient(fetchImpl).createTask('acme', 'records-api', 7, 'x')).rejects.toMatchObject({ code: 'BB_ERROR' });
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+});

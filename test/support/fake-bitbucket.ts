@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import type { BbActivity, BbComment, BbParticipant, BbPullRequest, BbStatus, BbUser } from '../../src/server/bitbucket/types.ts';
+import type { BbActivity, BbComment, BbParticipant, BbPullRequest, BbStatus, BbTask, BbUser } from '../../src/server/bitbucket/types.ts';
 import { FakeRepo, scenario } from './fake-repo.ts';
 
 export const FAKE_EMAIL = 'me@example.test';
@@ -54,6 +54,8 @@ export interface FakePr {
     pr: FakePullRequest;
     activity: BbActivity[];
     comments: BbComment[];
+    /** Tasks of the PR (`task_count` = the unresolved ones). */
+    tasks: BbTask[];
 }
 
 export interface FakeData {
@@ -70,6 +72,8 @@ export interface FakeData {
     /** Branch name -> full head hash. master moved past the base of every PR but #44 (see buildFakeData). */
     branchHeads: Map<string, string>;
     nextId(): number;
+    /** Task ids: their own sequence (as on Bitbucket), so comment ids stay what they were. */
+    nextTaskId(): number;
 }
 
 /** A request the fake Bitbucket answered (reads included), to count what a computation costs. */
@@ -98,6 +102,7 @@ interface PlanStep {
     date: string;
 }
 
+const openTasks = (tasks: readonly BbTask[]): number => tasks.filter((t) => t.state !== 'RESOLVED').length;
 const hex = (name: string): string => createHash('sha1').update(name).digest('hex');
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const lines = (list: readonly string[]): string => `${list.join('\n')}\n`;
@@ -109,8 +114,10 @@ class FakeBuilder {
     readonly mergeBases = new Map<string, string>();
     readonly prs = new Map<number, FakePr>();
     private id = 1000;
+    private taskId = 1;
 
     nextId = (): number => this.id++;
+    nextTaskId = (): number => this.taskId++;
 
     commit(name: string, files: Record<string, string>, parent: string | null = null, message = 'DEMO-1 - feat(x): do it'): void {
         this.repo.commit(hex(name), files, parent ? hex(parent) : null, message);
@@ -132,13 +139,18 @@ class FakeBuilder {
         return { id: this.nextId(), created_on: date, updated_on: date, user, content: { raw, html: `<p>${escapeHtml(raw)}</p>` }, deleted: false, ...extra };
     }
 
-    pr(id: number, { title, author, participants, plan, events = [], comments = [] }: {
+    task(creator: BbUser, date: string, raw: string, extra: Partial<BbTask> = {}): BbTask {
+        return { id: this.nextTaskId(), state: 'UNRESOLVED', creator, created_on: date, updated_on: date, content: { raw, html: `<p>${escapeHtml(raw)}</p>` }, ...extra };
+    }
+
+    pr(id: number, { title, author, participants, plan, events = [], comments = [], tasks = [] }: {
         title: string;
         author: BbUser;
         participants: BbParticipant[];
         plan: PlanStep[];
         events?: BbActivity[];
         comments?: BbComment[];
+        tasks?: BbTask[];
     }): void {
         const first = plan[0];
         const last = plan[plan.length - 1];
@@ -160,6 +172,7 @@ class FakeBuilder {
                 created_on: first.date,
                 updated_on: last.date,
                 comment_count: comments.length,
+                task_count: openTasks(tasks),
                 participants,
                 // Like Bitbucket, the designated reviewers are the participants with the REVIEWER role.
                 reviewers: participants.flatMap((p) => (p.role === 'REVIEWER' && p.user ? [p.user] : [])),
@@ -178,6 +191,7 @@ class FakeBuilder {
                 ...comments.map((comment): BbActivity => ({ comment })),
             ],
             comments,
+            tasks,
         });
     }
 }
@@ -197,6 +211,11 @@ function mainPr(b: FakeBuilder): void {
     // My comment on v2, line 7 (return this.save(id) -> modified in v5).
     const mine = b.comment(ME, '2026-10-02T12:00:00Z', 'Utilise le repository pour sauver.', { inline: { path: 'src/Action.ts', to: 7, from: null } });
     const reply = b.comment(CAM, '2026-10-20T10:30:00Z', 'Fait dans la dernière version.', { parent: { id: mine.id } });
+    // One open task (Camille's, under my comment) and one resolved (mine, ticked by Camille).
+    const tasks = [
+        b.task(CAM, '2026-10-20T10:35:00Z', 'Ajouter un test pour archiveAll', { comment: { id: mine.id } }),
+        b.task(ME, '2026-10-02T12:10:00Z', 'Mettre à jour le changelog', { state: 'RESOLVED', resolved_by: CAM, resolved_on: '2026-10-20T10:40:00Z', updated_on: '2026-10-20T10:40:00Z' }),
+    ];
     b.pr(FAKE_PRS.main, {
         title: 'DEMO-1 - feat(records): archive records in bulk',
         author: CAM,
@@ -218,6 +237,7 @@ function mainPr(b: FakeBuilder): void {
             b.comment(YAN, '2026-10-20T11:05:00Z', 'Pourquoi une RC ici ?', { inline: { path: 'package-lock.json', to: 5, from: null } }),
             b.comment(AI, '2026-10-01T10:06:00Z', 'critical: missing check', { inline: { path: 'src/Action.ts', to: 4, from: null }, resolution: { user: CAM } }),
         ],
+        tasks,
     });
 }
 
@@ -388,7 +408,7 @@ export function buildFakeData(): FakeData {
             b.mergeBases.set(`${head}..${hex('rebase:m1')}`, base);
         }
     }
-    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, nextId: b.nextId };
+    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, nextId: b.nextId, nextTaskId: b.nextTaskId };
 }
 
 function send(res: ServerResponse, status: number, value: unknown, type = 'application/json'): void {
@@ -629,6 +649,47 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             }
             target.resolution = req.method === 'POST' ? { user: ME } : null;
             return send(res, 200, target.resolution ?? {});
+        }
+        if (sub === '/tasks' && req.method === 'GET') {
+            return send(res, 200, page(req, fake.tasks, 100));
+        }
+        if (sub === '/tasks' && req.method === 'POST') {
+            const raw = String((body?.content as { raw?: string } | undefined)?.raw ?? '').trim();
+            if (!raw) {
+                return send(res, 400, { error: { message: 'The task content is blank.' } });
+            }
+            const comment = body?.comment as { id: number } | undefined;
+            const created: BbTask = {
+                id: data.nextTaskId(), state: 'UNRESOLVED', creator: ME, created_on: now, updated_on: now,
+                content: { raw, html: `<p>${escapeHtml(raw)}</p>` }, ...(comment ? { comment: { id: comment.id } } : {}),
+            };
+            fake.tasks.push(created);
+            fake.pr.task_count = openTasks(fake.tasks);
+            return send(res, 201, created);
+        }
+        if ((m = /^\/tasks\/(\d+)$/.exec(sub)) && (req.method === 'PUT' || req.method === 'DELETE')) {
+            const index = fake.tasks.findIndex((t) => t.id === Number(m?.[1]));
+            const target = fake.tasks[index];
+            if (!target) {
+                return send(res, 404, { error: { message: 'no task' } });
+            }
+            if (req.method === 'DELETE') {
+                fake.tasks.splice(index, 1);
+                fake.pr.task_count = openTasks(fake.tasks);
+                return send(res, 204, '', 'text/plain');
+            }
+            const raw = (body?.content as { raw?: string } | undefined)?.raw;
+            if (raw !== undefined) {
+                target.content = { raw, html: `<p>${escapeHtml(raw)}</p>` };
+            }
+            if (body?.state === 'RESOLVED' || body?.state === 'UNRESOLVED') {
+                target.state = body.state;
+                target.resolved_by = body.state === 'RESOLVED' ? ME : null;
+                target.resolved_on = body.state === 'RESOLVED' ? now : null;
+            }
+            target.updated_on = now;
+            fake.pr.task_count = openTasks(fake.tasks);
+            return send(res, 200, target);
         }
         if (sub === '/approve') {
             const me = participant();

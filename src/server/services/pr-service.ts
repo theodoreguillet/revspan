@@ -1,12 +1,12 @@
 // One PR: versions, comparisons, summaries, and actions (comments, resolution, approval).
 import type {
-    Comment, Comparison, EditComment, NewComment, Ok, PrDetail, PrPulse, PrRef, Summary, Thread, Version, VersionKind, VersionSummary, ViewedRequest,
+    Comment, Comparison, EditComment, NewComment, NewTask, Ok, PrDetail, PrPulse, PrRef, PrTask, Summary, Thread, Version, VersionKind, VersionSummary, ViewedRequest,
 } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
-import type { BbComment } from '../bitbucket/types.ts';
+import type { BbComment, BbTask } from '../bitbucket/types.ts';
 import { compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource } from '../core/compare.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, pulseOf, extractUpdates, isReadable, previousAvailable, prInfo, userOf, versionsAfter, type PushUpdate,
+    buildParticipants, buildThreads, buildVersions, computeReview, pulseOf, extractUpdates, isReadable, previousAvailable, prInfo, taskOf, userOf, versionsAfter, type PushUpdate,
 } from '../core/model.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -210,6 +210,35 @@ export class PrService {
     async resolve(ref: PrRef, commentId: number, resolved: boolean): Promise<Ok> {
         await this.write(ref, (client) => client.resolveComment(ref.workspace, ref.repo, ref.id, commentId, resolved));
         return { ok: true };
+    }
+
+    /** Tasks of the PR: one paginated read (the client's live cache applies), not part of the detail. */
+    async tasks(ref: PrRef): Promise<PrTask[]> {
+        const client = await this.session.getClient();
+        const [raw, meUuid] = await Promise.all([client.tasks(ref.workspace, ref.repo, ref.id), this.meUuid()]);
+        return raw.map((task) => taskOf(task, meUuid));
+    }
+
+    async createTask(ref: PrRef, { raw }: NewTask): Promise<PrTask> {
+        return this.taskWritten(await this.write(ref, (client) => client.createTask(ref.workspace, ref.repo, ref.id, raw)), raw);
+    }
+
+    async deleteTask(ref: PrRef, taskId: number): Promise<Ok> {
+        await this.write(ref, (client) => client.deleteTask(ref.workspace, ref.repo, ref.id, taskId));
+        return { ok: true };
+    }
+
+    async setTaskResolved(ref: PrRef, taskId: number, resolved: boolean): Promise<PrTask> {
+        return this.taskWritten(await this.write(ref, (client) => client.setTaskResolved(ref.workspace, ref.repo, ref.id, taskId, resolved)));
+    }
+
+    private async meUuid(): Promise<string | null> {
+        return (await this.session.me().catch(() => null))?.uuid ?? null;
+    }
+
+    private async taskWritten(written: BbTask, fallbackRaw?: string): Promise<PrTask> {
+        const task = taskOf(written, await this.meUuid());
+        return fallbackRaw !== undefined && !task.raw ? { ...task, raw: fallbackRaw } : task;
     }
 
     /**
