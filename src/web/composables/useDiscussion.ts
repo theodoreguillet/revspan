@@ -104,6 +104,8 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
                 load.patchDetail((d) => replaceComment(d, tempId, comment));
                 if (inline) {
                     load.patchCompare(place(comment.id));
+                    // the server maps the new thread into ranges ending at earlier versions: they are computed again
+                    load.evictCompare((c) => c.to !== version);
                 }
             },
         });

@@ -35,6 +35,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const inflight = new Map<string, Promise<Comparison>>();
     /** Latest diff request: only its answer is shown (fast range clicks, late answers). */
     let compareRequest = 0;
+    /** Bumped when the comparisons known so far go stale (new inline thread): an answer requested before is not kept. */
+    let compareEpoch = 0;
     /** Latest summary request: only its response is kept. */
     let summaryRequest = 0;
     /** Versions a comparison found erased (410) that already triggered a detail reload: at most once each, no loop. */
@@ -124,10 +126,34 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     function fetchCompare(params: CompareParams, key: string): Promise<Comparison> {
         let request = inflight.get(key);
         if (!request) {
-            request = api.compare(prRef, params.from, params.to, params.context).finally(() => inflight.delete(key));
+            const started: Promise<Comparison> = api.compare(prRef, params.from, params.to, params.context).finally(() => {
+                // a stale request (see evictCompare) may have been replaced by a newer one for the same key
+                if (inflight.get(key) === started) {
+                    inflight.delete(key);
+                }
+            });
+            request = started;
             inflight.set(key, request);
         }
         return request;
+    }
+
+    /**
+     * Computes a comparison into the cache, without touching the shown diff. Returns the cached entry, or null when
+     * the comparisons went stale while it was computed (it is then not kept).
+     */
+    async function fetchIntoCache(params: CompareParams): Promise<Comparison | null> {
+        const key = keyOf(params);
+        const epoch = compareEpoch;
+        const result = await fetchCompare(params, key);
+        if (epoch !== compareEpoch) {
+            return null;
+        }
+        // a second wait for the same answer keeps the entry stored (and maybe patched) by the first one
+        if (!cache.has(key)) {
+            cache.set(key, result);
+        }
+        return cache.get(key) ?? result;
     }
 
     async function loadCompare(params: CompareParams): Promise<void> {
@@ -142,13 +168,16 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
         compareLoading.value = true;
         try {
-            const result = await fetchCompare(params, key);
-            // a second wait for the same answer keeps the entry stored (and maybe patched) by the first one
-            if (!cache.has(key)) {
-                cache.set(key, result);
+            const result = await fetchIntoCache(params);
+            if (result === null) {
+                // computed before a new inline thread: the range still selected is computed again
+                if (request === compareRequest) {
+                    await loadCompare(params);
+                }
+                return;
             }
             if (request === compareRequest) {
-                compare.value = cache.get(key) ?? result;
+                compare.value = result;
                 compareError.value = null;
             }
         } catch (error) {
@@ -188,14 +217,15 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             optimistic?.();
             await write();
             ok = true;
+            onDone?.();
         } catch (error) {
-            rollback?.();
+            // an error of onDone comes after a successful write: nothing to roll back
+            if (!ok) {
+                rollback?.();
+            }
             showError(error);
         } finally {
             pendingAction.value = null;
-        }
-        if (ok) {
-            onDone?.();
         }
         if (ok || refreshWanted) {
             void refreshDetail();
@@ -230,6 +260,20 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
     }
 
+    /**
+     * Forgets the cached comparisons `pred` selects, and marks every comparison being computed as stale (not kept when
+     * it lands): after a new inline thread, the server places it in ranges the page cannot place it in itself.
+     */
+    function evictCompare(pred: (c: Comparison) => boolean): void {
+        compareEpoch++;
+        inflight.clear();
+        for (const [key, cmp] of cache) {
+            if (pred(cmp)) {
+                cache.delete(key);
+            }
+        }
+    }
+
     /** Local (optimistic) update of the review state. */
     function patchReview(review: Review): void {
         detail.value = { ...detail.value, review };
@@ -237,7 +281,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     return {
         detail, summary, sums, compare, compareLoading, compareError, pendingAction, acting, busy, refreshing,
-        loadSummary, loadCompare, refreshDetail, act, patchDetail, patchCompare, patchReview,
+        loadSummary, loadCompare, fetchIntoCache, refreshDetail, act, patchDetail, patchCompare, evictCompare, patchReview,
     };
 }
 

@@ -192,4 +192,72 @@ describe('PR page writes without waiting for a reload', () => {
         expect(load.compareLoading.value).toBe(false);
         expect(api.compare).toHaveBeenCalledTimes(2);
     });
+
+    it('computes again a cached range that ends before the last version after an inline comment', async () => {
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        api.comment.mockResolvedValue(serverComment(502, 'Rename this'));
+        api.pr.mockReturnValue(new Promise(() => undefined));
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        await load.loadCompare({ from: 7, to: 9, context: 3 });
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        const target = composerTargetFor('src/A.ts', codeLine, 'both');
+        if (!target) {
+            throw new Error('no composer target');
+        }
+
+        expect(await discussion.submitComposer(target, 'Rename this')).toBe(true);
+        // the server maps the new thread into every range: the cached v7 → v9 lacks it
+        await load.loadCompare({ from: 7, to: 9, context: 3 });
+        expect(api.compare).toHaveBeenCalledTimes(3);
+        expect(api.compare).toHaveBeenLastCalledWith(ref, 7, 9, 3);
+        // the range ending at the last version keeps its local placement, without a new computation
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        expect(api.compare).toHaveBeenCalledTimes(3);
+        expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 502, line: 12, moved: false, outOfHunks: false }]);
+    });
+
+    it('does not keep a diff computed before a new inline thread', async () => {
+        const stale = deferred<Comparison>();
+        const placed = comparison(9, 10, 'with the new thread');
+        api.compare
+            .mockResolvedValueOnce(comparison(7, 10))
+            .mockReturnValueOnce(stale.promise)
+            .mockResolvedValueOnce(placed);
+        api.comment.mockResolvedValue(serverComment(502, 'Rename this'));
+        api.pr.mockReturnValue(new Promise(() => undefined));
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        await load.loadCompare({ from: 7, to: 10, context: 3 });
+        const target = composerTargetFor('src/A.ts', codeLine, 'both');
+        if (!target) {
+            throw new Error('no composer target');
+        }
+
+        const loading = load.loadCompare({ from: 9, to: 10, context: 3 });
+        expect(await discussion.submitComposer(target, 'Rename this')).toBe(true);
+        stale.resolve(comparison(9, 10, 'before the comment'));
+        await loading;
+
+        expect(load.compare.value).toBe(placed);
+        expect(load.compareLoading.value).toBe(false);
+        expect(api.compare).toHaveBeenCalledTimes(3);
+        await load.loadCompare({ from: 9, to: 10, context: 3 });
+        expect(load.compare.value).toBe(placed);
+        expect(api.compare).toHaveBeenCalledTimes(3);
+    });
+
+    it('shows an error thrown after a successful write and still refreshes', async () => {
+        const load = usePrLoad(ref, detail);
+        const ok = await load.act(() => Promise.resolve(), {
+            onDone: () => {
+                throw new Error('local update failed');
+            },
+        });
+
+        expect(ok).toBe(true);
+        expect(showError).toHaveBeenCalledWith(expect.objectContaining({ message: 'local update failed' }));
+        expect(load.pendingAction.value).toBeNull();
+        expect(api.pr).toHaveBeenCalledOnce();
+    });
 });
