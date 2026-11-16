@@ -219,7 +219,7 @@ one request per interval even once finished (see "Build status").
 
 - **Version timeline**: one symbol per push, grouped by day: a round dot with a **C** = a commit (code pushed), an
   orange diamond with an **R** = a rebase, a dashed outline = unavailable version (erased by Bitbucket), a small blue
-  dot = new to you, a green bar = your last review. Under each symbol, what the author changed
+  dot = new to you. Under each symbol, what the author changed
   (`+35 −14`, `deps` = only package.json / lockfile / submodule, `rebase only`, `message`).
   Hovering a symbol shows two short lines: what the version is (`v6 · rebase + code (+3 −1)`), then its date and flags.
   Click = what this version changed; Shift+click = extend the range; "master" = full version.

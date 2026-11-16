@@ -216,7 +216,6 @@ export const en = {
     'timeline.legendNew': 'new to you',
     'timeline.legendCommit': 'commit',
     'timeline.legendGone': 'unavailable',
-    'timeline.legendReviewed': 'your review',
     'timeline.version': 'Version {version}',
     'timeline.versionUnavailable': 'Version {version} (unavailable)',
     'timeline.reviewedByYou': 'reviewed by you',

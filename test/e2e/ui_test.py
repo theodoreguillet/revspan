@@ -297,6 +297,23 @@ def screenshots(browser, fixed_time):
                 page.screenshot(path=os.path.join(SHOTS, f'pr-split-{scheme}-{width}.png'), full_page=True)
                 page.locator('.rv-seg button[data-seg="unified"]').click()
             context.close()
+    for scheme in ('light', 'dark'):  # zoomed symbols (x3) to check the letters' optical centering
+        context = browser.new_context(viewport={'width': 1440, 'height': 900}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=3)
+        page = context.new_page()
+        if fixed_time:
+            page.clock.set_fixed_time(fixed_time)
+        if FAKE_PRS:
+            for name, key, nodes in (('long', 'long', (27, 28)), ('purged', 'purged', (1, 2))):
+                page.goto(url(f'pr/{fake_ref(key)}'))
+                wait_pr_ready(page)
+                for i in nodes:
+                    page.locator(f'.rv-v[data-i="{i}"] .rv-dot').screenshot(path=os.path.join(SHOTS, f'symbol-{name}-v{i}-{scheme}.png'))
+                if name == 'long':
+                    box = page.evaluate('() => { const r = e => document.querySelector(e).getBoundingClientRect(); return {legendRight: r("[data-legend]").right, tlRight: r(".rv-tl").right, foot: r(".rv-tl-foot").height}; }')
+                    log(f'      timeline footer at 1440: {box}')
+                    assert box['legendRight'] <= box['tlRight'] - 15 and box['foot'] < 40, box
+                    page.locator('[data-legend]').screenshot(path=os.path.join(SHOTS, f'legend-{scheme}.png'))
+        context.close()
     log(f'      screenshots in {SHOTS}')
 
 

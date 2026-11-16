@@ -215,7 +215,6 @@ export const fr: Catalog = {
     'timeline.legendNew': 'nouveau pour toi',
     'timeline.legendCommit': 'commit',
     'timeline.legendGone': 'indisponible',
-    'timeline.legendReviewed': 'ta relecture',
     'timeline.version': 'Version {version}',
     'timeline.versionUnavailable': 'Version {version} indisponible',
     'timeline.reviewedByYou': 'relue par toi',

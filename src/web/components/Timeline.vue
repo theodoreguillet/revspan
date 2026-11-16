@@ -137,9 +137,8 @@ onBeforeUnmount(() => {
                 <span class="rv-legend" data-legend>
                     <span><TimelineSymbol /> {{ t('timeline.legendCommit') }}</span>
                     <span><TimelineSymbol rebase /> {{ t('timeline.legendRebase') }}</span>
-                    <span><TimelineSymbol gone /> {{ t('timeline.legendGone') }}</span>
+                    <span class="opt"><TimelineSymbol gone /> {{ t('timeline.legendGone') }}</span>
                     <span><i class="new" /> {{ t('timeline.legendNew') }}</span>
-                    <span><i class="seen" /> {{ t('timeline.legendReviewed') }}</span>
                 </span>
             </span>
         </div>

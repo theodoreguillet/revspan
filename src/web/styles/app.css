@@ -124,7 +124,7 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 /* Version symbol: round = commit (C), diamond = rebase (R). The shape is ::before, so the letter stays upright. */
 .rv-dot { position: relative; display: inline-grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0; vertical-align: middle; }
 .rv-dot::before { content: ''; box-sizing: border-box; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--text-secondary); }
-.rv-dot i { position: relative; font-style: normal; font-weight: 700; font-size: 9px; line-height: 1; color: var(--bg-primary); transform: translateY(.5px); }
+.rv-dot i { position: relative; font-style: normal; font-weight: 700; font-size: 9px; line-height: 1; color: var(--bg-primary); transform: translateY(-.5px); }
 .rv-dot.reb::before { width: 11.5px; height: 11.5px; border-radius: 2px; transform: rotate(45deg); background: var(--rv-rebase); }
 .rv-dot.reb i { font-size: 8.5px; }
 .rv-v.base .rv-dot::before { width: 11px; height: 11px; background: transparent; box-shadow: inset 0 0 0 2px var(--text-secondary); }
@@ -171,12 +171,12 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-preset { border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; background: var(--bg-secondary); cursor: pointer; color: var(--text-primary); }
 .rv-preset:hover { border-color: var(--text-secondary); }
 .rv-preset.on { background: var(--accent-bg); border-color: var(--accent-bg); color: var(--accent-fg); }
-.rv-hint { margin-left: auto; font-size: 11px; color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
-.rv-hint label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
-.rv-legend { display: inline-flex; gap: 4px 8px; align-items: center; flex-wrap: wrap; }
+/* the checkbox and the legend are items of the footer row (they wrap on their own), the checkbox is pushed right */
+.rv-hint { display: contents; font-size: 11px; color: var(--text-secondary); }
+.rv-hint label { margin-left: auto; font-size: 11px; color: var(--text-secondary); display: flex; gap: 4px; align-items: center; cursor: pointer; }
+.rv-legend { font-size: 11px; color: var(--text-secondary); display: inline-flex; gap: 4px 8px; align-items: center; flex-wrap: wrap; }
 .rv-legend > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .rv-legend .new { width: 6px; height: 6px; border-radius: 50%; background: var(--rv-new); margin: 0 2px; }
-.rv-legend .seen { width: 2px; height: 12px; border-radius: 1px; background: var(--rv-add); margin: 0 3px; }
 
 /* ---------- Resume banner ---------- */
 .rv-banner { margin: 12px 16px 0; border: 1px solid var(--border); border-left: 3px solid var(--rv-new); border-radius: 6px; padding: 10px 12px; display: flex; gap: 10px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -563,7 +563,7 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
     .rv-th, .rv-comp { margin-left: 12px; margin-right: 8px; }
     .rv-split-right .rv-th, .rv-split-right .rv-comp { margin-left: 12px; }
     .rv-split-left .rv-comp { margin-right: 12px; }
-    .rv-hint { margin-left: 0; }
+    .rv-hint label { margin-left: 0; }
 }
 
 /* ---------- VS Code panel: colors and fonts of the editor theme ---------- */
@@ -606,3 +606,6 @@ body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
 body.vscode-dark, body.vscode-high-contrast:not(.vscode-high-contrast-light) { color-scheme: dark; }
 body.vscode-high-contrast { --border: var(--vscode-contrastBorder, var(--vscode-panel-border)); }
 body.vscode-light :focus-visible, body.vscode-dark :focus-visible, body.vscode-high-contrast :focus-visible { outline-color: var(--vscode-focusBorder); }
+
+/* the footer row is full below this width: keep the common legend entries */
+@media (max-width: 1600px) { .rv-legend .opt { display: none; } }
