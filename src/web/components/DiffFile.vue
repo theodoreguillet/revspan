@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
+import { useNearViewport } from '../composables/useNearViewport.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { FILE_STATUS_TAGS, fileThreadCount, firstChangedLine, lastTouched, placeFileThreads, viewedStatus } from '../lib/diff.ts';
 import { t } from '../i18n/index.ts';
@@ -12,6 +13,8 @@ import ThreadCard from './ThreadCard.vue';
 const props = defineProps<{ file: FileDiff; idx: number }>();
 const page = usePrPage();
 const root = ref<HTMLElement | null>(null);
+// syntax colors are computed only for the files near the viewport
+const near = useNearViewport(root);
 
 const vstat = computed(() => viewedStatus(props.file, page.detail.review.viewed));
 const collapsed = computed(() => page.isCollapsed(props.file));
@@ -91,7 +94,7 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                 {{ file.status === 'renamed' ? t('file.renamedOnly') : t('file.noLines') }}
             </div>
             <template v-else>
-                <DiffHunk v-for="(hunk, k) in file.hunks" :key="k" :path="file.path" :hunk="hunk" :by-line="placed.byLine" />
+                <DiffHunk v-for="(hunk, k) in file.hunks" :key="k" :path="file.path" :hunk="hunk" :by-line="placed.byLine" :near="near" />
             </template>
         </template>
     </section>

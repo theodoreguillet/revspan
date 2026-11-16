@@ -12,6 +12,8 @@ export default defineConfig({
     build: {
         outDir: '../../dist/web',
         emptyOutDir: true,
+        // Syntax grammars are lazy chunks loaded for their language only; Ruby embeds C++ (heredocs) and weighs ~1 MB.
+        chunkSizeWarningLimit: 1000,
     },
     server: {
         host: '127.0.0.1',

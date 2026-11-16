@@ -131,6 +131,10 @@ def run() -> None:
               language['browser'].lower().startswith('fr') and language['page'] == 'en',
               f'{language}')
         frame.wait_for_selector('.rv-file', timeout=30000)
+        # no scrolling: the first file sits below the panel, within the 600 px margin that starts the highlighting
+        colored = wait_until(lambda: frame.locator('.rv-l .c span[style*="color"]').count() > 0, 30)
+        check('panel: syntax colors under the webview CSP (lazy grammar chunks, JS regex engine)', bool(colored),
+              frame.evaluate('document.body.className'))
         tabs = [t for t in tab_titles(page) if t]
         check('panel: tab titled "PR #42"', any('PR #42' in t for t in tabs), str(tabs))
         widths = frame.evaluate('[document.documentElement.scrollWidth, window.innerWidth]')

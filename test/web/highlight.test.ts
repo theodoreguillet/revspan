@@ -1,0 +1,175 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createHighlighterCore } from 'shiki/core';
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import type { DiffLine } from '../../src/shared/api.ts';
+import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, partStyle, tokenizeHunk } from '../../src/web/lib/highlight.ts';
+import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../../src/web/services/highlighter.ts';
+
+const line = (t: DiffLine['t'], text: string, hl: [number, number][] = []): DiffLine => ({ t, o: null, n: null, text, hl });
+
+const COMMENT = '#6A9955';
+const KEYWORD = '#569CD6';
+
+describe('mergeTokens', () => {
+    it('mergeTokens keeps token colors and splits at hl ranges', () => {
+        const tokens = [{ content: 'const', color: KEYWORD }, { content: ' a = ' }, { content: 'b', color: '#9CDCFE', fontStyle: 1 }, { content: ';' }];
+        expect(mergeTokens('const a = b;', tokens, [[2, 4]])).toEqual([
+            { text: 'co', color: KEYWORD, hl: false },
+            { text: 'ns', color: KEYWORD, hl: true },
+            { text: 't', color: KEYWORD, hl: false },
+            { text: ' a = ', hl: false },
+            { text: 'b', color: '#9CDCFE', italic: true, hl: false },
+            { text: ';', hl: false },
+        ]);
+    });
+
+    it('mergeTokens handles hl spanning two tokens', () => {
+        const tokens = [{ content: 'foo', color: '#111111' }, { content: '.' }, { content: 'bar', color: '#222222', fontStyle: 2 }];
+        expect(mergeTokens('foo.bar', tokens, [[1, 6]])).toEqual([
+            { text: 'f', color: '#111111', hl: false },
+            { text: 'oo', color: '#111111', hl: true },
+            { text: '.', hl: true },
+            { text: 'ba', color: '#222222', bold: true, hl: true },
+            { text: 'r', color: '#222222', bold: true, hl: false },
+        ]);
+    });
+
+    it('mergeTokens plain text without tokens', () => {
+        expect(mergeTokens('abc', [], [])).toEqual([{ text: 'abc', hl: false }]);
+        expect(mergeTokens('abc', [], [[1, 99]])).toEqual([{ text: 'a', hl: false }, { text: 'bc', hl: true }]);
+        expect(mergeTokens('', [], [])).toEqual([]);
+    });
+
+    it('mergeTokens keeps a text the tokens do not cover (trailing \\r) and ignores tokens that do not match', () => {
+        expect(mergeTokens('a;\r', [{ content: 'a', color: '#111111' }, { content: ';' }], [])).toEqual([
+            { text: 'a', color: '#111111', hl: false }, { text: ';', hl: false }, { text: '\r', hl: false },
+        ]);
+        expect(mergeTokens('abc', [{ content: 'xyz', color: '#111111' }], [[0, 1]])).toEqual([{ text: 'a', hl: true }, { text: 'bc', hl: false }]);
+    });
+
+    it('partStyle writes the inline style of a colored part, nothing for plain text', () => {
+        expect(partStyle({ text: 'a', hl: false })).toBeUndefined();
+        expect(partStyle({ text: 'a', color: '#123456', italic: true, bold: true, hl: true })).toBe('color:#123456;font-style:italic;font-weight:bold');
+    });
+});
+
+describe('languageOf', () => {
+    it('languageOf maps extensions and special names, unknown → null', () => {
+        expect(languageOf('src/web/App.ts')).toBe('typescript');
+        expect(languageOf('src/web/App.TSX')).toBe('tsx');
+        expect(languageOf('bin/revspan.mjs')).toBe('javascript');
+        expect(languageOf('a/b.cjs')).toBe('javascript');
+        expect(languageOf('src/web/components/DiffCode.vue')).toBe('vue');
+        expect(languageOf('config.yml')).toBe('yaml');
+        expect(languageOf('README.md')).toBe('markdown');
+        expect(languageOf('scripts/run.sh')).toBe('shellscript');
+        expect(languageOf('Program.cs')).toBe('csharp');
+        expect(languageOf('main.rs')).toBe('rust');
+        expect(languageOf('deploy/Dockerfile')).toBe('docker');
+        expect(languageOf('Makefile')).toBe('make');
+        expect(languageOf('notes.txt')).toBeNull();
+        expect(languageOf('LICENSE')).toBeNull();
+        expect(languageOf('.gitignore')).toBeNull();
+    });
+});
+
+describe('codeThemeFor', () => {
+    const classes = (...names: string[]): Pick<DOMTokenList, 'contains'> => ({ contains: (c: string) => names.includes(c) });
+
+    it('follows the VS Code body class, else the browser color scheme', () => {
+        expect(codeThemeFor(classes('vscode-dark'), false)).toBe('dark-plus');
+        expect(codeThemeFor(classes('vscode-high-contrast'), false)).toBe('dark-plus');
+        expect(codeThemeFor(classes('vscode-light'), true)).toBe('light-plus');
+        expect(codeThemeFor(classes('vscode-high-contrast', 'vscode-high-contrast-light'), true)).toBe('light-plus');
+        expect(codeThemeFor(classes(), true)).toBe('dark-plus');
+        expect(codeThemeFor(classes(), false)).toBe('light-plus');
+    });
+});
+
+describe('useCodeTheme', () => {
+    it('follows the theme changes of VS Code on the body class', async () => {
+        const theme = useCodeTheme();
+        expect(theme.value).toBe('light-plus');
+        document.body.classList.add('vscode-dark');
+        await vi.waitFor(() => expect(theme.value).toBe('dark-plus'));
+        document.body.classList.replace('vscode-dark', 'vscode-light');
+        await vi.waitFor(() => expect(theme.value).toBe('light-plus'));
+        document.body.classList.remove('vscode-light');
+    });
+});
+
+describe('tokenizeHunk', () => {
+    it('tokenizeHunk maps a multi-line comment back to its lines', async () => {
+        const highlighter = await createHighlighterCore({
+            themes: [import('shiki/themes/dark-plus.mjs')],
+            langs: [import('shiki/langs/typescript.mjs')],
+            engine: createJavaScriptRegexEngine(),
+        });
+        const lines = [
+            line(' ', '/* start'),
+            line('-', 'removed'),
+            line('+', 'added'),
+            line(' ', 'end */'),
+            line('+', 'const x = 1;'),
+            line('-', 'let y;'),
+        ];
+        const tokens = await tokenizeHunk(lines, async (code) => highlighter.codeToTokens(code.join('\n'), { lang: 'typescript', theme: 'dark-plus' }).tokens);
+        const colors = (index: number, side: 'old' | 'new'): (string | undefined)[] => (lineTokens(tokens, index, side) ?? []).map((t) => t.color);
+
+        expect(colors(1, 'old')).toEqual([COMMENT]);
+        expect(colors(2, 'new')).toEqual([COMMENT]);
+        expect(colors(3, 'old')).toEqual([COMMENT]);
+        expect(colors(3, 'new')).toEqual([COMMENT]);
+        expect(lineTokens(tokens, 4, 'new')?.[0]).toMatchObject({ content: 'const', color: KEYWORD });
+        // old side: "let y;" comes after "end */", outside the comment
+        expect(lineTokens(tokens, 5, 'old')?.[0]).toMatchObject({ content: 'let', color: KEYWORD });
+        // a line only exists on its own side
+        expect(lineTokens(tokens, 1, 'new')).toBeUndefined();
+        expect(lineTokens(tokens, 2, 'old')).toBeUndefined();
+        expect(lineTokens(null, 0, 'new')).toBeUndefined();
+    });
+});
+
+describe('nextChunkSize', () => {
+    it('grows the chunks while they stay quick, shrinks them when one is slow', () => {
+        expect(nextChunkSize(4, 1)).toBe(8);
+        expect(nextChunkSize(128, 1)).toBe(128);
+        expect(nextChunkSize(16, 10)).toBe(16);
+        expect(nextChunkSize(16, 40)).toBe(8);
+        expect(nextChunkSize(1, 90)).toBe(1);
+    });
+});
+
+describe('highlighter service', () => {
+    it('colors a TypeScript hunk with the theme, without the default text color, then serves it from the cache', async () => {
+        const lines = [line(' ', '// note'), line('+', 'const label = "a";\r')];
+        expect(cachedHunkTokens(lines, 'typescript', 'light-plus')).toBeUndefined();
+        const tokens = await highlightHunk(lines, 'typescript', 'light-plus');
+        expect(lineTokens(tokens, 0, 'new')?.[0]?.color).toBe('#008000');
+        const added = lineTokens(tokens, 1, 'new') ?? [];
+        expect(added[0]).toMatchObject({ content: 'const', color: '#0000FF' });
+        // the default text of the theme takes the page color
+        expect(added.find((t) => t.content.includes('='))?.color).toBeUndefined();
+        expect(mergeTokens(lines[1]!.text, added, []).map((p) => p.text).join('')).toBe(lines[1]!.text);
+        expect(cachedHunkTokens(lines, 'typescript', 'light-plus')).toBe(tokens);
+        expect(cachedHunkTokens(lines, 'typescript', 'dark-plus')).toBeUndefined();
+    });
+
+    it('carries a multi-line comment across chunks of a long hunk', async () => {
+        const lines = [line('+', '/*'), ...Array.from({ length: 300 }, (_, k) => line('+', `comment ${k}`)), line('+', '*/'), line('+', 'let z;')];
+        const tokens = await highlightHunk(lines, 'typescript', 'dark-plus');
+        expect(lineTokens(tokens, 250, 'new')?.[0]?.color).toBe(COMMENT);
+        expect(lineTokens(tokens, 302, 'new')?.[0]).toMatchObject({ content: 'let', color: KEYWORD });
+    });
+
+    it('leaves very large hunks plain', async () => {
+        const lines = Array.from({ length: 2001 }, (_, k) => line('+', `const a${k} = ${k};`));
+        expect(await highlightHunk(lines, 'typescript', 'dark-plus')).toBeNull();
+    });
+
+    it('stops when the request is aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        expect(await highlightHunk([line('+', 'const b = 2;')], 'typescript', 'dark-plus', controller.signal)).toBeNull();
+    });
+});

@@ -268,6 +268,11 @@ def screenshots(browser, fixed_time):
                 if name.startswith('pr'):
                     wait_pr_ready(page)
                     page.wait_for_timeout(300)
+                    if name == 'pr':  # syntax colors arrive after the first render
+                        try:
+                            page.wait_for_selector('.rv-l .c span[style*="color"]', state='attached', timeout=5000)
+                        except Exception:  # noqa: BLE001
+                            pass
                 else:
                     page.wait_for_timeout(800)
                 page.screenshot(path=os.path.join(SHOTS, f'{name}-{scheme}-{width}.png'))
@@ -554,6 +559,26 @@ def run_checks(page):
             expect(page.locator('.rv-msgdiff')).to_contain_text('Message du commit modifié')
         expect(page.locator('.rv-prog')).to_contain_text(f'0 / {len(cmp["files"])} vus')
     diff_view(page)
+
+    @check('diff: syntax colors on a .ts file, change emphasis kept, theme followed')
+    def syntax_colors(page):
+        ts_file = next(f for f in cmp['files'] if f['path'].endswith('.ts') and any(ln['hl'] for h in f['hunks'] for ln in h['lines']))
+        changed = next(ln for h in ts_file['hunks'] for ln in h['lines'] if ln['hl'] and ln['t'] == '+' and not ln.get('noEol'))
+        block = page.locator(f'.rv-file[data-path="{ts_file["path"]}"]')
+        block.scroll_into_view_if_needed()
+        colored = block.locator('.rv-l .c span[style*="color"]')
+        expect(colored.first).to_be_attached(timeout=10000)
+        code = block.locator(f'.rv-l.a[data-n="{changed["n"]}"] .c')
+        expect(code.locator('em').first).to_be_attached()
+        expect(code).to_have_text(changed['text'])  # colors never change the text
+        light = colored.first.evaluate('e => getComputedStyle(e).color')
+        page.emulate_media(color_scheme='dark')
+        try:
+            page.wait_for_function('c => { const e = document.querySelector(\'.rv-l .c span[style*="color"]\'); return e && getComputedStyle(e).color !== c; }', arg=light, timeout=10000)
+        finally:
+            page.emulate_media(color_scheme='light')
+        page.wait_for_function('c => { const e = document.querySelector(\'.rv-l .c span[style*="color"]\'); return e && getComputedStyle(e).color === c; }', arg=light, timeout=10000)
+    syntax_colors(page)
 
     @check('"whole file" context then 3 lines')
     def full_context(page):

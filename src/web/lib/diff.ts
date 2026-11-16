@@ -77,7 +77,7 @@ export interface TextPart {
 }
 
 /** Splits a line's text according to the [start, end[ ranges to highlight. */
-export function highlightParts(text: string, ranges: [number, number][] | undefined): TextPart[] {
+export function highlightParts(text: string, ranges: readonly [number, number][] | undefined): TextPart[] {
     if (!ranges?.length) {
         return [{ text, hl: false }];
     }

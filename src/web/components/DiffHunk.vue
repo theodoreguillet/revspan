@@ -1,21 +1,29 @@
 <script setup lang="ts">
 // A hunk in unified or side-by-side view, with the threads and composer inserted under their line.
 import { computed } from 'vue';
-import type { Hunk } from '../../shared/api.ts';
+import type { DiffLine, Hunk } from '../../shared/api.ts';
+import { useHunkTokens } from '../composables/useHunkTokens.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { t } from '../i18n/index.ts';
 import { hunkRange, lineSign, sideBySideRows, unifiedRows, type ComposerTarget, type PlacedThread } from '../lib/diff.ts';
+import { languageOf, lineTokens } from '../lib/highlight.ts';
 import { isVsCode, openLocalFile } from '../services/host.ts';
 import Composer from './Composer.vue';
 import DiffCode from './DiffCode.vue';
 import ThreadCard from './ThreadCard.vue';
 
-const props = defineProps<{ path: string; hunk: Hunk; byLine: Map<number, PlacedThread[]> }>();
+const props = defineProps<{ path: string; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean }>();
 const page = usePrPage();
 
 const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
 const rows = computed(() => (page.view === 'unified' ? unifiedRows(input.value) : []));
 const splitRows = computed(() => (page.view === 'split' ? sideBySideRows(input.value) : []));
+
+// syntax colors arrive after the first render; a side-by-side cell finds its tokens by its index in the hunk
+const lang = computed(() => languageOf(props.path));
+const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near);
+const lineIndex = computed(() => (tokens.value && page.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
+const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, lineIndex.value?.get(line) ?? -1, side);
 
 const lineClass = (t: string): string => (t === '+' ? 'rv-l a' : t === '-' ? 'rv-l r' : 'rv-l');
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
@@ -30,7 +38,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
             <span class="n">{{ row.line.o ?? '' }}</span>
             <span class="n">{{ row.line.n ?? '' }}</span>
             <span class="s">{{ lineSign(row.line.t) }}</span>
-            <DiffCode :line="row.line" />
+            <DiffCode :line="row.line" :tokens="lineTokens(tokens, k, row.line.t === '-' ? 'old' : 'new')" />
             <button
                 v-if="isVsCode && row.line.n != null"
                 type="button"
@@ -69,7 +77,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                 >
                     <span class="n">{{ (cell.side === 'old' ? cell.line.o : cell.line.n) ?? '' }}</span>
                     <span class="s">{{ cell.line.t !== ' ' ? lineSign(cell.line.t) : '' }}</span>
-                    <DiffCode :line="cell.line" />
+                    <DiffCode :line="cell.line" :tokens="splitTokens(cell.line, cell.side)" />
                     <button
                         v-if="isVsCode && cell.side === 'new' && cell.line.n != null"
                         type="button"

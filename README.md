@@ -214,6 +214,9 @@ one request per interval even once finished (see "Build status").
 - **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed"),
   a banner with what moved since, blue dots on the new versions.
 - **Diff**: unified or side by side, "seen" files (the tick is dropped if the file changes), files coming from master hidden.
+  Syntax highlighting with the VS Code themes (Dark+ / Light+, following the VS Code or browser theme), for the
+  common languages (TypeScript, JavaScript, Vue, JSON, YAML, Markdown, CSS, HTML, Python, Java, Go, Rust, shell, PHP,
+  Ruby, Kotlin, C#, SQL, XML, Dockerfile, Makefile).
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution;
   comment on a line of the latest version.
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
