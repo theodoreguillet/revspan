@@ -28,6 +28,22 @@ interface LoadOptions {
 /** The versions only (summary, version types, "reviewed" mark). */
 const VERSIONS_ONLY: LoadOptions = { comments: false };
 
+/** Freshness limit of a loaded PR kept in memory (a write or a detail read replaces it sooner). */
+const LOADED_MAX_AGE_MS = 5 * 60 * 1000;
+
+/** What a loaded PR holds, from least to most: versions only, plus comments, plus build checks and needs-rebase. */
+const LEVELS = { versions: 0, comments: 1, health: 2 } as const;
+type Level = (typeof LEVELS)[keyof typeof LEVELS];
+
+const levelOf = ({ comments = true, health = false }: LoadOptions): Level =>
+    health ? LEVELS.health : comments ? LEVELS.comments : LEVELS.versions;
+
+interface LoadedEntry {
+    at: number;
+    level: Level;
+    promise: Promise<LoadedPr>;
+}
+
 interface LoadedPr {
     client: BitbucketClient;
     /** Pushes read from the activity: updates[i] is version i + 1. */
@@ -40,17 +56,21 @@ export class PrService {
     private readonly session: BitbucketSession;
     private readonly store: Store;
     private readonly cache: Cache;
+    private readonly now: () => number;
+    /** Loaded PRs per client instance (the session builds a new client on an account or token change), by PR. */
+    private readonly loaded = new WeakMap<BitbucketClient, Map<string, LoadedEntry>>();
 
-    constructor({ session, store, cache }: { session: BitbucketSession; store: Store; cache: Cache }) {
+    constructor({ session, store, cache, now = Date.now }: { session: BitbucketSession; store: Store; cache: Cache; now?: () => number }) {
         this.session = session;
         this.store = store;
         this.cache = cache;
+        this.now = now;
     }
 
     // ---------- Reading ----------
 
     async detail(ref: PrRef): Promise<PrDetail> {
-        return (await this.load(ref, { health: true })).detail;
+        return (await this.loadCached(ref, { health: true }, { fresh: true })).detail;
     }
 
     async summary(ref: PrRef): Promise<Summary> {
@@ -64,7 +84,7 @@ export class PrService {
      * others have kind null. Each version summary is kept on disk, so a version is computed once.
      */
     async versionKinds(ref: PrRef, sinceHead?: string): Promise<{ hash: string; kind: VersionKind | null }[]> {
-        const { versions, results } = await this.summarize(ref, sinceHead);
+        const { versions, results } = await this.summarize(ref, sinceHead, { fresh: true });
         return versions.map((version, i) => ({ hash: version.hash, kind: results[i]?.kind ?? null }));
     }
 
@@ -72,7 +92,7 @@ export class PrService {
      * Summaries of every version, or of those after sinceHead (null for the others), remembered as version types for the
      * home.
      */
-    private async summarize(ref: PrRef, sinceHead?: string): Promise<{ versions: Version[]; results: (VersionSummary | null)[] }> {
+    private async summarize(ref: PrRef, sinceHead?: string, { fresh = false } = {}): Promise<{ versions: Version[]; results: (VersionSummary | null)[] }> {
         const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => {
             const wanted = new Set(sinceHead === undefined ? versions : versionsAfter(versions, sinceHead));
             return {
@@ -87,7 +107,7 @@ export class PrService {
                         : summarizeVersion(src, versions, v.index);
                 })),
             };
-        }, VERSIONS_ONLY);
+        }, VERSIONS_ONLY, fresh ? { fresh, keepHigher: true } : {});
         // Remembers the type of each version for the home page (no recomputation there).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
@@ -169,7 +189,7 @@ export class PrService {
     }
 
     async markReviewed(ref: PrRef, version: number): Promise<Ok> {
-        const { versions } = await this.load(ref, VERSIONS_ONLY);
+        const { versions } = await this.loadCached(ref, VERSIONS_ONLY);
         const target = versions[version - 1];
         if (!target) {
             throw badRequest(`Unknown version: ${version}`);
@@ -193,6 +213,42 @@ export class PrService {
     }
 
     // ---------- Internal ----------
+
+    /**
+     * The loaded PR kept in memory when fresh (under 5 minutes) and complete enough for the read, otherwise loaded and
+     * kept. Concurrent reads share one load. fresh: always loads and replaces the entry, except with keepHigher, which
+     * leaves a higher-level entry alone (the notifier's version check must not downgrade what the page loaded).
+     */
+    private async loadCached(ref: PrRef, options: LoadOptions, { fresh = false, keepHigher = false }: { fresh?: boolean; keepHigher?: boolean } = {}): Promise<LoadedPr> {
+        const client = await this.session.getClient();
+        const entries = this.loaded.get(client) ?? new Map<string, LoadedEntry>();
+        this.loaded.set(client, entries);
+        const key = `${ref.workspace}/${ref.repo}#${ref.id}`;
+        const level = levelOf(options);
+        const now = this.now();
+        const kept = entries.get(key);
+        if (!fresh && kept && kept.level >= level && now - kept.at <= LOADED_MAX_AGE_MS) {
+            return kept.promise;
+        }
+        // The client's 15 s live data must not answer in place of a load that is meant to be fresh.
+        client.invalidatePr(ref.workspace, ref.repo, ref.id);
+        const promise = this.load(ref, options);
+        const entry: LoadedEntry = { at: now, level, promise };
+        if (!(keepHigher && kept && kept.level > level)) {
+            entries.set(key, entry);
+        }
+        promise.catch(() => {
+            if (entries.get(key) === entry) {
+                entries.delete(key);
+            }
+        });
+        return promise;
+    }
+
+    /** Drops the loaded PR (after a write: what it holds is outdated). */
+    private dropLoaded(client: BitbucketClient, ref: PrRef): void {
+        this.loaded.get(client)?.delete(`${ref.workspace}/${ref.repo}#${ref.id}`);
+    }
 
     private async load(ref: PrRef, { comments: withComments = true, health = false }: LoadOptions = {}): Promise<LoadedPr> {
         const client = await this.session.getClient();
@@ -236,8 +292,8 @@ export class PrService {
      * Computation over the PR's versions. A commit cached then erased by Bitbucket only shows up here (404 on its
      * contents): it is forgotten along with what depends on it, the PR reloaded (the version becomes unavailable) and the computation resumed.
      */
-    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>, options: LoadOptions = {}): Promise<T> {
-        let loaded = await this.load(ref, options);
+    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>, options: LoadOptions = {}, load: { fresh?: boolean; keepHigher?: boolean } = {}): Promise<T> {
+        let loaded = await this.loadCached(ref, options, load);
         const purged = new Set<string>();
         for (;;) {
             try {
@@ -250,7 +306,7 @@ export class PrService {
                 const { hash } = error.version;
                 purged.add(hash);
                 this.forgetVersion(ref, loaded, error.version);
-                loaded = await this.load(ref, options);
+                loaded = await this.loadCached(ref, options, { fresh: true });
                 // If Bitbucket still reads that commit (contents 404), stop here (410) instead of looping.
                 if (loaded.versions.some((v) => v.hash === hash && isReadable(v))) {
                     throw error;
@@ -278,6 +334,7 @@ export class PrService {
             return await action(client);
         } finally {
             client.invalidatePr(ref.workspace, ref.repo, ref.id);
+            this.dropLoaded(client, ref);
             this.store.dropHomeSnapshot();
         }
     }
