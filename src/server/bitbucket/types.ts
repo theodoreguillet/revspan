@@ -90,6 +90,14 @@ export interface BbDiffstatEntry {
     lines_removed?: number;
 }
 
+/** File in conflict for a merge (GET .../pullrequests/{id}/conflicts, redirected to .../file-conflicts/{spec}). */
+export interface BbFileConflict {
+    path?: string;
+    /** delete_modify, content, binary, rename_delete... */
+    scenario?: string;
+    message?: string;
+}
+
 export interface BbPage<T> {
     values?: T[];
     next?: string;

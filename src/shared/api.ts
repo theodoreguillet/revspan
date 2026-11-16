@@ -302,8 +302,13 @@ export interface PrDetail {
     threads: Thread[];
     /** Checks of the head commit ([]: no build attached; null: statuses unreadable). */
     build: BuildCheck[] | null;
-    /** Destination branch moved since the PR's base; null: not mine, or not computable. */
+    /** Destination branch moved since the PR's base (any open PR); null: not open, or not computable. */
     needsRebase: boolean | null;
+    /**
+     * Paths Bitbucket reports in conflict when merging into the destination ([]: none). Read only when needsRebase is
+     * true (a PR on the destination's head cannot conflict); null otherwise, or when unreadable.
+     */
+    mergeConflicts: string[] | null;
     /** Snapshot of the PR as read for this detail (the page compares it to later pulses). */
     pulse: PrPulse;
     /** When the PR was read from Bitbucket (a cached detail keeps its time) and the configured check interval. */

@@ -1,4 +1,5 @@
-// Build state and "needs rebase" of a PR, read from Bitbucket (statuses, branch head, merge base). Never throws.
+// Build state, "needs rebase" and merge conflicts of a PR, read from Bitbucket (statuses, branch head, merge base,
+// conflicts). Never throws.
 import type { BuildCheck, PrRef } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 
@@ -42,5 +43,30 @@ export async function loadNeedsRebase(
         return base ? !sameCommit(base, destHead) : null;
     } catch {
         return null;
+    }
+}
+
+/** Rebase state of an open PR on its page. */
+export interface RebaseState {
+    needsRebase: boolean | null;
+    /** Paths in conflict with the destination; null when not read (not behind, or unknown) or unreadable. */
+    mergeConflicts: string[] | null;
+}
+
+export const NO_REBASE_STATE: RebaseState = { needsRebase: null, mergeConflicts: null };
+
+/**
+ * Needs-rebase, then the merge conflicts only when the PR is behind its destination: a PR based on the destination's
+ * head cannot conflict, so an up-to-date PR costs no conflicts read.
+ */
+export async function loadRebaseState(client: BitbucketClient, ref: PrRef, headHash: string, destBranch: string): Promise<RebaseState> {
+    const needsRebase = await loadNeedsRebase(client, ref, headHash, destBranch);
+    if (needsRebase !== true) {
+        return { needsRebase, mergeConflicts: null };
+    }
+    try {
+        return { needsRebase, mergeConflicts: await client.mergeConflicts(ref.workspace, ref.repo, ref.id) };
+    } catch {
+        return { needsRebase, mergeConflicts: null };
     }
 }

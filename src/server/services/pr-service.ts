@@ -11,7 +11,7 @@ import {
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
-import { loadBuildChecks, loadNeedsRebase } from './pr-health.ts';
+import { loadBuildChecks, loadRebaseState, NO_REBASE_STATE } from './pr-health.ts';
 import type { BitbucketSession } from './session.ts';
 
 /** To increment if the summary computation changes (invalidates the disk cache). */
@@ -19,7 +19,8 @@ const SUMMARY_VERSION = 4;
 
 /**
  * What a read needs besides the versions. comments: false for the reads that only use the versions (summary, version types,
- * "reviewed" mark); their review and threads are then incomplete. health: build checks and needs-rebase (PR page only).
+ * "reviewed" mark); their review and threads are then incomplete. health: build checks, needs-rebase and merge conflicts
+ * (PR page only).
  */
 interface LoadOptions {
     comments?: boolean;
@@ -31,7 +32,7 @@ const VERSIONS_ONLY: LoadOptions = { comments: false };
 
 const MINUTE_MS = 60 * 1000;
 
-/** What a loaded PR holds, from least to most: versions only, plus comments, plus build checks and needs-rebase. */
+/** What a loaded PR holds, from least to most: versions only, plus comments, plus build checks and rebase state. */
 const LEVELS = { versions: 0, comments: 1, health: 2 } as const;
 type Level = (typeof LEVELS)[keyof typeof LEVELS];
 
@@ -357,23 +358,24 @@ export class PrService {
         const threads: Thread[] = buildThreads(comments, versions, { meUuid, sinceDate: review.lastReviewedAt });
         const info = prInfo(ref, pr);
         const head = pr.source?.commit?.hash ?? versions[versions.length - 1]?.hash ?? '';
-        const isMine = meUuid !== null && pr.author?.uuid === meUuid;
-        // A merged or declined PR is never rebased again: no flag, no read.
-        const rebaseApplies = isMine && info.state === 'OPEN';
+        // Any open PR, whoever the author (the home keeps it for mine); a merged or declined PR is never rebased again:
+        // no flag, no read.
+        const rebaseApplies = info.state === 'OPEN';
         // The PR page reads the checks even when settled (a re-run shows there, and the home learns it).
-        const [build, needsRebase] = health
+        const [build, { needsRebase, mergeConflicts }] = health
             ? await Promise.all([
                 loadBuildChecks(client, ref, head, { recheck: true, pushedAt: versions[versions.length - 1]?.pushedAt ?? '' }),
-                rebaseApplies ? loadNeedsRebase(client, ref, head, info.destBranch) : null,
+                rebaseApplies ? loadRebaseState(client, ref, head, info.destBranch) : NO_REBASE_STATE,
             ])
-            : [null, null];
+            : [null, NO_REBASE_STATE];
         return {
             client,
             updates,
             versions,
             comparisons: new Map(),
             detail: {
-                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase, pulse: pulseOf(pr),
+                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase, mergeConflicts,
+                pulse: pulseOf(pr),
                 freshness: { loadedAt: new Date(loadedAt).toISOString(), refreshMinutes: this.refreshMinutes() },
             },
         };

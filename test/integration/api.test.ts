@@ -731,15 +731,59 @@ describe('home', () => {
         expect(cardOf(body, FAKE_PRS.mine)?.needsRebase).toBe(true);
     });
 
-    it('PR detail carries the build checks and needs-rebase (mine only)', async () => {
+    it('PR detail carries the build checks and needs-rebase', async () => {
         await setup();
         const mine = await detail(FAKE_PRS.mine);
         expect(mine.needsRebase).toBe(true);
         expect(mine.build?.map((c) => c.state).sort()).toEqual(['running', 'success']);
         const failed = await detail(42);
-        expect(failed.needsRebase).toBeNull();
+        expect(failed.needsRebase).toBe(true);
         expect(failed.build?.map((c) => c.state).sort()).toEqual(['failed', 'success']);
         expect((await detail(FAKE_PRS.others)).build).toEqual([]);
+    });
+
+    describe('rebase and merge conflicts on the PR page', () => {
+        const conflictReads = (fake: FakeBitbucket): RecordedRequest[] => fake.requests.filter((r) => r.path.endsWith('/conflicts'));
+
+        it('needsRebase on a colleague\'s PR (the home keeps it for my own PRs only)', async () => {
+            await setup();
+            expect((await detail(FAKE_PRS.others)).needsRebase).toBe(true);
+            expect((await detail(FAKE_PRS.neverReviewed)).needsRebase).toBe(true);
+            expect((await detail(FAKE_PRS.rebaseOnly)).needsRebase).toBe(false);
+            const home = (await api<Home>('GET', '/api/home')).body;
+            expect(cardOf(home, FAKE_PRS.others)?.needsRebase).toBeNull();
+            expect(groupsOf(home)[FAKE_PRS.mine]).toBe('to-rebase');
+        });
+
+        it('mergeConflicts read only when behind: one conflicts read, none when the PR is reopened within the interval', async () => {
+            const { fake } = await setup();
+            const others = await detail(FAKE_PRS.others);
+            expect(others.mergeConflicts).toEqual(['src/others.ts']);
+            expect(conflictReads(fake).map((r) => r.path)).toEqual([`/2.0/repositories/${WS}/${REPO}/pullrequests/${FAKE_PRS.others}/conflicts`]);
+            expect((await detail(FAKE_PRS.mine)).mergeConflicts).toEqual([]);
+            expect(conflictReads(fake)).toHaveLength(2);
+            const before = fake.requests.length;
+            const reopened = (await api<PrDetail>('GET', prPath(FAKE_PRS.others))).body;
+            expect(reopened.mergeConflicts).toEqual(['src/others.ts']);
+            expect(fake.requests.length - before).toBe(0);
+        });
+
+        it('no conflicts read for an up-to-date PR', async () => {
+            const { fake } = await setup();
+            const body = await detail(FAKE_PRS.rebaseOnly);
+            expect(body.needsRebase).toBe(false);
+            expect(body.mergeConflicts).toBeNull();
+            expect(conflictReads(fake)).toEqual([]);
+        });
+
+        it('unreadable conflicts: mergeConflicts null, the page and needsRebase still load', async () => {
+            const { fake } = await setup();
+            fake.data.conflictsFailure = 403;
+            const { status, body } = await api<PrDetail>('GET', prPath(FAKE_PRS.others));
+            expect(status).toBe(200);
+            expect(body.needsRebase).toBe(true);
+            expect(body.mergeConflicts).toBeNull();
+        });
     });
 
     it('M1: "needs rebase" only on an open PR: a merged PR of mine gets null, with no branch-head read', async () => {
@@ -748,7 +792,8 @@ describe('home', () => {
         const body = await detail(FAKE_PRS.mine);
         expect(body.pr.state).toBe('MERGED');
         expect(body.needsRebase).toBeNull();
-        expect(fake.requests.filter((r) => r.path.includes('/refs/branches/'))).toEqual([]);
+        expect(body.mergeConflicts).toBeNull();
+        expect(fake.requests.filter((r) => r.path.includes('/refs/branches/') || r.path.endsWith('/conflicts'))).toEqual([]);
         // The home asks for open PRs only; a closed one in the answer is not flagged either.
         expect(cardOf((await api<Home>('GET', '/api/home')).body, FAKE_PRS.mine)?.needsRebase).toBeNull();
     });

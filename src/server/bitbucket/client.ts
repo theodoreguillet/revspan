@@ -8,7 +8,7 @@ import { toBuildChecks } from '../core/build.ts';
 import type { CompareSource, DiffstatEntry, FileContent } from '../core/compare.ts';
 import { userOf } from '../core/model.ts';
 import type {
-    BbActivity, BbBranch, BbComment, BbCommit, BbDiffstatEntry, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbStatus, BbTask, BbUser,
+    BbActivity, BbBranch, BbComment, BbCommit, BbDiffstatEntry, BbFileConflict, BbPage, BbParticipant, BbPullRequest, BbSrcMeta, BbStatus, BbTask, BbUser,
 } from './types.ts';
 
 export const DEFAULT_BASE_URL = 'https://api.bitbucket.org/2.0';
@@ -306,6 +306,17 @@ export class BitbucketClient {
     tasks(ws: string, repo: string, id: number): Promise<BbTask[]> {
         return this.cache.getLive(`live:${ws}/${repo}#${id}:tasks`, LIVE_TTL_MS,
             () => this.getAllPages<BbTask>(`${this.prPath(ws, repo, id)}/tasks`, { pagelen: 100 }));
+    }
+
+    /**
+     * Paths Bitbucket reports in conflict when merging the PR into its destination (every page, each path once).
+     * Bitbucket redirects the route to the repository's file-conflicts of the PR's revspec.
+     */
+    mergeConflicts(ws: string, repo: string, id: number): Promise<string[]> {
+        return this.cache.getLive(`live:${ws}/${repo}#${id}:conflicts`, LIVE_TTL_MS, async () => {
+            const values = await this.getAllPages<BbFileConflict>(`${this.prPath(ws, repo, id)}/conflicts`, { pagelen: 100 }, 10);
+            return [...new Set(values.map((v) => v.path).filter((path): path is string => !!path))];
+        });
     }
 
     /**

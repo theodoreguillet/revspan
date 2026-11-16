@@ -230,6 +230,7 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-d .ck { font-family: var(--rv-font); font-size: 11px; flex-shrink: 0; color: var(--rv-add); }
 .rv-f .cm { font-family: var(--rv-font); font-size: 10.5px; color: var(--rv-new); flex-shrink: 0; }
 .rv-f .cf { font-family: var(--rv-font); font-size: 10.5px; color: var(--rv-rebase); flex-shrink: 0; }
+.rv-f .cf.mc { color: var(--rv-del); }
 .rv-f .ad { color: var(--rv-add); flex-shrink: 0; } .rv-f .dl { color: var(--rv-del); flex-shrink: 0; }
 /* search box at the top of the file list, match counts */
 /* sticky over the scrolling list: the box and « 3 / 17 » stay visible while Enter walks the matches */
@@ -446,6 +447,9 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
 .rv-nb.grey { background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500; }
 .rv-nb.green { background: var(--rv-add-bg); color: var(--rv-add); }
 .rv-nb.orange { background: var(--rv-rebase-bg); color: var(--rv-rebase); }
+.rv-nb.red { background: var(--rv-del-bg); color: var(--rv-del); }
+.rv-nb-btn { border: 1px solid transparent; font-family: inherit; line-height: inherit; cursor: pointer; }
+.rv-nb-btn:hover { border-color: currentColor; }
 .rv-lgrp .desc { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-tertiary); }
 .rv-home-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: -4px 0 10px; font-size: 12px; color: var(--text-secondary); }
 .rv-sg { padding: 5px 16px; font-size: 11.5px; font-weight: 600; color: var(--text-secondary); background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }

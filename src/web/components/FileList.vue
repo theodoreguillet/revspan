@@ -8,6 +8,7 @@ import { useResizableWidth } from '../composables/useResizableWidth.ts';
 import { fileThreadCount, viewedStatus, type ViewedStatus } from '../lib/diff.ts';
 import { t } from '../i18n/index.ts';
 import { basename, MINUS } from '../lib/format.ts';
+import { isMergeConflict } from '../lib/merge-conflicts.ts';
 import { splitMatch } from '../lib/search.ts';
 import DiffSearch from './DiffSearch.vue';
 
@@ -41,6 +42,9 @@ const markAll = computed(() => {
     const key = `${unmark ? 'un' : ''}mark${filtered ? 'Listed' : 'All'}` as 'markAll' | 'unmarkAll' | 'markListed' | 'unmarkListed';
     return { unmark, label: t(`files.${key}`, { count }), title: t(`files.${key}Title`) };
 });
+/** Files Bitbucket reports in conflict with the destination (distinct from the rebase heuristic `file.conflict`). */
+const mergeConflicts = computed(() => new Set(page.detail.mergeConflicts ?? []));
+const mergeConflict = (file: FileDiff): boolean => isMergeConflict(file, mergeConflicts.value);
 const groupOf = (file: FileDiff): GroupKey => (file.category === 'deps' ? 'deps' : 'code');
 /** Collapsed folders, as "group:path" (a folder may exist in both groups). */
 const collapsed = ref(new Set<string>());
@@ -180,7 +184,8 @@ watch(() => page.curFile, async (idx) => {
                                 <span data-hits aria-hidden="true">{{ hitCount(row.item.idx) }}</span>
                                 <span class="rv-sr-only">{{ t('search.count', { count: hitCount(row.item.idx) }) }}</span>
                             </span>
-                            <span v-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
+                            <span v-if="mergeConflict(row.item.file)" class="cf mc" data-merge-conflict :title="t('files.mergeConflictTitle', { branch: page.detail.pr.destBranch })">⚠</span>
+                            <span v-else-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
                             <span v-if="threads(row.item.file)" class="cm" :title="t('common.threads', { count: threads(row.item.file) })">💬{{ threads(row.item.file) }}</span>
                             <span class="ad">+{{ row.item.file.added }}</span>
                             <span class="dl">{{ MINUS }}{{ row.item.file.removed }}</span>

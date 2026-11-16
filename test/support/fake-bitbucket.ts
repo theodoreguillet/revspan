@@ -26,7 +26,10 @@ export const FAKE_PRS = {
     mine: 45,
     /** I am a reviewer but did nothing (2 versions). */
     neverReviewed: 46,
-    /** Does not concern me (author Yann, 1 version), already approved by Camille and the bot: minimum reached. */
+    /**
+     * Does not concern me (author Yann, 1 version), already approved by Camille and the bot: minimum reached. Behind
+     * master, with a merge conflict on src/others.ts.
+     */
     others: 47,
     /** v1 erased by Bitbucket (commit not found), v2 and v3 readable; my comment dates from v1. */
     purged: 48,
@@ -71,6 +74,10 @@ export interface FakeData {
     holdList?: Promise<void>;
     /** Branch name -> full head hash. master moved past the base of every PR but #44 (see buildFakeData). */
     branchHeads: Map<string, string>;
+    /** PR id -> paths in conflict with its destination (GET .../pullrequests/{id}/conflicts; none when absent). */
+    conflicts: Map<number, string[]>;
+    /** HTTP status the conflicts route answers instead of the list. */
+    conflictsFailure?: number;
     nextId(): number;
     /** Task ids: their own sequence (as on Bitbucket), so comment ids stay what they were. */
     nextTaskId(): number;
@@ -408,7 +415,9 @@ export function buildFakeData(): FakeData {
             b.mergeBases.set(`${head}..${hex('rebase:m1')}`, base);
         }
     }
-    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, nextId: b.nextId, nextTaskId: b.nextTaskId };
+    // #47 is behind master and cannot be merged without resolving its only file.
+    const conflicts = new Map<number, string[]>([[FAKE_PRS.others, ['src/others.ts']]]);
+    return { repo: b.repo, mergeBases: b.mergeBases, prs: b.prs, statuses, branchHeads, conflicts, nextId: b.nextId, nextTaskId: b.nextTaskId };
 }
 
 function send(res: ServerResponse, status: number, value: unknown, type = 'application/json'): void {
@@ -601,6 +610,14 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
         let m: RegExpExecArray | null;
         if (sub === '' && req.method === 'GET') {
             return send(res, 200, fake.pr);
+        }
+        if (sub === '/conflicts' && req.method === 'GET') {
+            // Bitbucket redirects to the repository's file-conflicts; answered here directly.
+            if (data.conflictsFailure) {
+                return send(res, data.conflictsFailure, { error: { message: 'conflicts unavailable' } });
+            }
+            const paths = data.conflicts.get(fake.pr.id) ?? [];
+            return send(res, 200, page(req, paths.map((path) => ({ type: 'file_conflict', path, scenario: 'content', message: 'File modified in both source and destination' })), 100));
         }
         if (sub === '/activity') {
             return send(res, 200, page(req, [...fake.activity].reverse(), 3));

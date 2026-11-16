@@ -177,11 +177,18 @@ Known trade-offs:
 - a CI that posts its first status more than 1 hour after the push is treated as "no CI" for that commit on the home
   page (the PR page still shows it).
 
-### Needs rebase
+### Needs rebase and merge conflicts
 
 On your own open PRs, a flag appears when the destination branch head differs from the PR's merge base, meaning the
 destination moved since the base (never on a merged or declined PR); these PRs are listed in "To rebase" instead of "My
 PRs". The destination head is read **once per repository and per interval**.
+
+The PR page shows the same state for any open PR, yours or a colleague's: an orange « À rebaser sur master » chip when
+the PR is behind its destination, and a red « ⚠ Conflits avec master · 3 fichiers » chip when Bitbucket reports merge
+conflicts (`GET .../pullrequests/{id}/conflicts`). Its tooltip lists the files, and a click opens the first one shown
+in the diff, where the file list marks it ⚠ « Conflit de merge avec master » (the ⚠ of the rebase heuristic keeps its
+own title). Conflicts are read only for a PR that is behind: a PR based on the destination's head cannot conflict. An
+up-to-date PR shows nothing.
 
 ### Request budget
 
@@ -198,6 +205,7 @@ Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one rep
 | A repository fails (rate limit, outage), second window within 60 s | **0**: the failed home is shared for 60 s |
 | Reopening a PR within the refresh interval (tab closed and reopened, same comparisons) | **0**: the loaded PR and its comparisons are kept for `review.refreshMinutes`; a write, ↻ or a later open reads again |
 | Opening a PR of ≤ 30 files: up to 3 extra comparisons in the background (prefetch), none for larger PRs or hidden tabs | **+1** on the main PR (48 → 49, cold caches): 2 comparisons, the third preset being the diff shown, mostly reuse what the version summaries already read |
+| Opening a PR: rebase state (any open PR) | up to date with its destination: no conflicts read (only the destination head, cached 60 s and shared with the home, and the merge base, kept on disk); behind it: **+1** paginated conflicts read (100 files per page). Kept with the loaded PR: reopening within the interval reads nothing |
 | Tasks tab | **0** until it is opened (the open count comes from the PR already read); opening it: **1** paginated read (100 tasks per page), again on ↻ while it is open |
 
 Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only

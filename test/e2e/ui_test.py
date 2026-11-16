@@ -1291,11 +1291,35 @@ def run_checks(page):
             expect(toggle).to_have_text('☆ Suivre')
             wait_api(lambda: followed_uuids() == [], 'author removed from review.followed')
             open_pr(page, fake_ref('mine'))
-            expect(page.locator('.rv-head [data-chip="needs-rebase"]')).to_have_text('à rebaser')
-            expect(page.locator('.rv-head')).to_contain_text('master a avancé depuis la base de la PR')
+            chip = page.locator('.rv-head [data-chip="needs-rebase"]')
+            expect(chip).to_have_text('À rebaser sur master')
+            expect(chip).to_have_attribute('title', 'master a avancé depuis la base de la PR : la PR est à rebaser')
+            expect(page.locator('.rv-head [data-chip="merge-conflicts"]')).to_have_count(0)  # behind, no conflict
             expect(page.locator('.rv-head .rv-bbadge')).to_have_text('build en cours')
             expect(page.locator('.rv-head [data-action="follow"]')).to_have_count(0)
         follow_header(page)
+
+        @check('PR page: rebase and merge-conflict chips on a colleague\'s PR, click opens the conflicting file')
+        def rebase_conflict_chips(page):
+            open_pr(page, fake_ref('rebaseOnly'))  # based on master's head: no chip at all
+            expect(page.locator('.rv-head [data-chip]')).to_have_count(0)
+            open_pr(page, fake_ref('others'))
+            head = page.locator('.rv-head')
+            expect(head.locator('[data-chip="needs-rebase"]')).to_have_text('À rebaser sur master')
+            conflicts = head.locator('[data-chip="merge-conflicts"]')
+            expect(conflicts).to_have_text('⚠ Conflit avec master · 1 fichier')
+            title = conflicts.get_attribute('title') or ''
+            assert title.split('\n') == ['Bitbucket signale des conflits de merge avec master dans :', 'src/others.ts',
+                                          'Clic : ouvrir le premier fichier en conflit dans le diff'], title
+            marker = page.locator('.rv-f[data-path="src/others.ts"] [data-merge-conflict]')
+            expect(marker).to_have_attribute('title', 'Conflit de merge avec master')
+            os.makedirs(SHOTS, exist_ok=True)
+            head.screenshot(path=os.path.join(SHOTS, 'pr-header-rebase-conflicts.png'))
+            page.click('.rv-tab[data-tab="versions"]')
+            conflicts.click()
+            expect(page.locator('.rv-tab.on[data-tab="diff"]')).to_be_visible()
+            expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', 'src/others.ts')
+        rebase_conflict_chips(page)
 
         @check('never reviewed: "First review" then "Mark vN as reviewed"')
         def never_reviewed(page):

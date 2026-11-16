@@ -72,7 +72,11 @@ Common rules:
   VS Code tree each translate the key. The old keys `to-review`, `rebase-only` and `up-to-date` are gone.
 - `PrDetail.build: BuildCheck[] | null`: the checks of the head commit (`key`, `name`, `state` of `success`, `failed`,
   `running` or `stopped`, `url`, `updatedOn`). `[]` means no build is attached, `null` means the statuses could not be
-  read. `PrDetail.needsRebase: boolean | null` follows the same rule as the card.
+  read. `PrDetail.needsRebase: boolean | null` is computed like the card's, but for any open PR, mine or not (`null` on
+  a merged or declined PR, or when it cannot be told). `PrDetail.mergeConflicts: string[] | null`: the paths Bitbucket
+  reports in conflict when merging into the destination (`GET .../pullrequests/{id}/conflicts`, `[]` for none), read
+  only when `needsRebase === true` (a PR based on the destination's head cannot conflict); `null` otherwise or when
+  unreadable.
 - `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `hideUnfollowed`,
   `notifications`, `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
   by key); an invalid value is replaced by its default.

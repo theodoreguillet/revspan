@@ -9,6 +9,7 @@ import { usePrPage } from '../composables/usePrPage.ts';
 import { t, tr } from '../i18n/index.ts';
 import { approvalItems, myActions } from '../lib/approvals.ts';
 import { displayName, openedSince } from '../lib/format.ts';
+import { conflictChip, firstConflictIndex, rebaseChip } from '../lib/merge-conflicts.ts';
 import { api } from '../services/api.ts';
 import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 import type { PulseView } from '../composables/usePulse.ts';
@@ -32,6 +33,17 @@ const mine = computed(() => myActions(page.detail, page.sums, !!page.summary));
 const hasMe = computed(() => !!page.detail.me);
 const build = computed(() => (page.detail.build ? summarizeBuild(page.detail.build) : null));
 const refreshStatus = computed(() => (props.pulse.status ? refreshText(tr(), props.pulse.status) : ''));
+// Same chips on every open PR, mine or a colleague's: behind its destination, and the files Bitbucket cannot merge.
+const rebase = computed(() => rebaseChip(tr(), pr.value, page.detail.needsRebase));
+const conflictPaths = computed(() => new Set(page.detail.mergeConflicts ?? []));
+const conflictTarget = computed(() => firstConflictIndex(page.compare?.files ?? [], conflictPaths.value));
+const conflicts = computed(() => conflictChip(tr(), pr.value, page.detail.mergeConflicts, conflictTarget.value));
+
+/** Opens the first conflicting file of the shown comparison in the diff. */
+function gotoConflict(): void {
+    page.tab = 'diff';
+    void page.gotoFile(conflictTarget.value, { expand: true });
+}
 
 // Followed contributors, read from the settings: until they are known, the follow toggle stays hidden.
 const followed = shallowRef<FollowedUser[] | null>(null);
@@ -78,9 +90,22 @@ onMounted(async () => {
                 <span class="rv-mono">{{ pr.sourceBranch }}</span> → <span class="rv-mono">{{ pr.destBranch }}</span> ·
                 <span>{{ openedSince(tr(), pr.createdOn) }}</span> ·
                 <a :href="pr.url" target="_blank" rel="noopener noreferrer">{{ t('pr.onBitbucket') }}</a>
-                <template v-if="page.detail.needsRebase">
-                    · <span class="rv-nb orange" data-chip="needs-rebase">{{ t('home.needsRebase') }}</span>
-                    <span>{{ t('home.needsRebaseTitle', { branch: pr.destBranch }) }}</span>
+                <template v-if="rebase">
+                    · <span class="rv-nb orange" data-chip="needs-rebase" :title="rebase.title">{{ rebase.label }}</span>
+                </template>
+                <template v-if="conflicts">
+                    ·
+                    <button
+                        v-if="conflictTarget >= 0"
+                        type="button"
+                        class="rv-nb red rv-nb-btn"
+                        data-chip="merge-conflicts"
+                        :title="conflicts.title"
+                        @click="gotoConflict"
+                    >
+                        {{ conflicts.label }}
+                    </button>
+                    <span v-else class="rv-nb red" data-chip="merge-conflicts" :title="conflicts.title">{{ conflicts.label }}</span>
                 </template>
                 <BuildBadge v-if="build" :build="build" variant="header" @open="page.tab = 'builds'" />
             </div>

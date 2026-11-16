@@ -460,3 +460,35 @@ describe('BitbucketClient: tasks', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('BitbucketClient: merge conflicts of a PR', () => {
+    const conflictsUrl = `${BASE}/repositories/acme/records-api/pullrequests/7/conflicts`;
+    const fileConflicts = `${BASE}/repositories/acme/records-api/file-conflicts/abc123..def456`;
+    const entry = (path: string, scenario = 'content'): unknown => ({ type: 'file_conflict', path, scenario, message: 'File modified in both source and destination' });
+
+    it('reads every page of the PR conflicts route (Bitbucket redirects it to file-conflicts) and keeps each path once', async () => {
+        const fetchImpl = mockFetch(
+            new Response(null, { status: 302, headers: { location: `${fileConflicts}?pagelen=100` } }),
+            jsonResponse(200, { values: [entry('src/App.ts'), entry('README.md', 'delete_modify')], next: `${fileConflicts}?pagelen=100&page=2` }),
+            jsonResponse(200, { values: [entry('src/App.ts', 'binary'), entry('docs/old.md', 'rename_delete')] }),
+        );
+        expect(await makeClient(fetchImpl).mergeConflicts('acme', 'records-api', 7)).toEqual(['src/App.ts', 'README.md', 'docs/old.md']);
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+        expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(`${conflictsUrl}?pagelen=100`);
+    });
+
+    it('no conflict: an empty list; a nameless entry is ignored', async () => {
+        expect(await makeClient(mockFetch(jsonResponse(200, { values: [] }))).mergeConflicts('acme', 'records-api', 7)).toEqual([]);
+        expect(await makeClient(mockFetch(jsonResponse(200, { values: [{ type: 'file_conflict' }, entry('a.ts')] }))).mergeConflicts('acme', 'records-api', 7)).toEqual(['a.ts']);
+    });
+
+    it('kept a few seconds (one read for concurrent or close calls), forgotten with the PR\'s live data', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { values: [entry('a.ts')] }), jsonResponse(200, { values: [] }));
+        const client = makeClient(fetchImpl);
+        await Promise.all([client.mergeConflicts('acme', 'records-api', 7), client.mergeConflicts('acme', 'records-api', 7)]);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        client.invalidatePr('acme', 'records-api', 7);
+        expect(await client.mergeConflicts('acme', 'records-api', 7)).toEqual([]);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+});
