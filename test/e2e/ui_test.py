@@ -312,6 +312,9 @@ def screenshots(browser, fixed_time):
                     box = page.evaluate('() => { const r = e => document.querySelector(e).getBoundingClientRect(); return {legendRight: r("[data-legend]").right, tlRight: r(".rv-tl").right, foot: r(".rv-tl-foot").height}; }')
                     log(f'      timeline footer at 1440: {box}')
                     assert box['legendRight'] <= box['tlRight'] - 15 and box['foot'] < 40, box
+                    assert page.locator('[data-legend-gone]').count() == 0, 'no unavailable version: no legend entry'
+                else:
+                    assert page.locator('[data-legend-gone]').count() == 1, 'unavailable version: legend entry shown'
                     page.locator('[data-legend]').screenshot(path=os.path.join(SHOTS, f'legend-{scheme}.png'))
         context.close()
     log(f'      screenshots in {SHOTS}')
