@@ -138,6 +138,19 @@ def fake_delete_comment(cid):
     urllib.request.urlopen(request, timeout=10).close()
 
 
+def fake_comment(raw):
+    """Adds a general comment by Yann Bernard on the main PR directly at the fake Bitbucket (written meanwhile)."""
+    base = CALLS_URL.rsplit('/__calls', 1)[0]
+    request = urllib.request.Request(f'{base}/__comment', data=json.dumps({'raw': raw}).encode(), method='POST',
+                                     headers={'Content-Type': 'application/json'})
+    urllib.request.urlopen(request, timeout=10).close()
+
+
+def bitbucket_requests():
+    """Requests the fake Bitbucket received so far (reads included)."""
+    return http_json(REQUESTS_URL) if REQUESTS_URL else []
+
+
 def fake_delay(route, ms):
     """Slows down the fake Bitbucket's requests whose path has that segment (ms=0: back to normal)."""
     base = CALLS_URL.rsplit('/__calls', 1)[0]
@@ -881,6 +894,81 @@ def run_checks(page):
         expect(page).to_have_url(re.compile(f'#/pr/{ws}/{repo}/{pid}'))
         wait_pr_ready(page)
     url_paste(page)
+
+    if FAKE_PRS and CALLS_URL:
+        @check('refresh_button: ↻ shows a comment written meanwhile on Bitbucket and says what is new')
+        def refresh_button(page):
+            open_pr(page, MAIN_PR)
+            fake_comment('Yann a commenté pendant ta relecture')
+            before = len(bitbucket_requests())
+            button = page.locator('.rv-head [data-action="refresh"]')
+            button.click()
+            status = page.locator('.rv-head .rv-refresh-status[role="status"]')
+            expect(status).to_have_text('1 nouveau commentaire', timeout=10000)
+            expect(button).not_to_have_attribute('aria-busy', 'true')
+            spent = bitbucket_requests()[before:]
+            per_path = {}
+            for r in spent:
+                key = r['path'].rsplit('/pullrequests/', 1)[-1]
+                per_path[key] = per_path.get(key, 0) + 1
+            log(f'      ↻: {len(spent)} Bitbucket requests (fake pages of 3 activities, 4 comments): {per_path}')
+            page.click('.rv-tab[data-tab="discussions"]')
+            expect(page.locator('.rv-ditem', has_text='Yann a commenté pendant ta relecture')).to_be_visible()
+            # nothing new since: "À jour", then the text goes away by itself
+            button.click()
+            expect(status).to_have_text('À jour', timeout=10000)
+            expect(status).to_have_text('', timeout=8000)
+            page.click('.rv-tab[data-tab="diff"]')
+        refresh_button(page)
+
+        @check('pulse_banner: news found by the periodic check, never for my own comment')
+        def pulse_banner(page):
+            other = page.context.new_page()
+            try:
+                # fake clock installed before the page loads: the check interval (5 min by default) is fast-forwarded
+                other.clock.install()
+                open_pr(other, MAIN_PR)
+                fake_comment('Yann repasse sur la PR')
+                banner = other.locator('.rv-pulse[data-banner="pulse"]')
+                # The check reads the PR through the server's 15 s live cache (real time): fast-forward until a check
+                # reads it after Yann's comment.
+                deadline = time.time() + 30
+                while True:
+                    before = len(bitbucket_requests())
+                    with other.expect_response(lambda r: r.url.endswith('/pulse')):
+                        other.clock.fast_forward('05:01')
+                    # one GET of the PR at most (none when the live cache answers), never its comments or activity
+                    on_pr = [r for r in bitbucket_requests()[before:] if '/pullrequests/' in r['path']]
+                    assert len(on_pr) <= 1 and all(r['path'].endswith(f'/pullrequests/{FAKE_PRS["main"]}') for r in on_pr), on_pr
+                    try:
+                        expect(banner).to_be_visible(timeout=1000)
+                        break
+                    except AssertionError:
+                        assert time.time() < deadline, 'no banner after Yann\'s comment'
+                log(f'      periodic check: {len(on_pr)} Bitbucket request on the PR')
+                expect(banner).to_contain_text('Du nouveau sur la PR : 1 nouveau commentaire')
+                # the page did not change by itself: the comment shows only after "Actualiser"
+                other.click('.rv-tab[data-tab="discussions"]')
+                expect(other.locator('.rv-ditem', has_text='Yann repasse sur la PR')).to_have_count(0)
+                banner.locator('[data-action="pulse-refresh"]').click()
+                expect(banner).to_have_count(0)
+                expect(other.locator('.rv-ditem', has_text='Yann repasse sur la PR')).to_be_visible(timeout=10000)
+                expect(other.locator('.rv-head .rv-refresh-status')).to_have_text('1 nouveau commentaire')
+                # my own comment from the page: the following checks find nothing new
+                other.fill('.rv-disc .rv-comp textarea', 'Mon commentaire, pas une nouveauté')
+                other.click('[data-action="send-general"]')
+                mine = other.locator('.rv-ditem', has_text='Mon commentaire, pas une nouveauté')
+                expect(mine).to_be_visible(timeout=10000)
+                expect(mine.locator('.rv-cm.pending')).to_have_count(0, timeout=10000)
+                expect(other.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true')
+                for _ in range(2):
+                    with other.expect_response(lambda r: r.url.endswith('/pulse')):
+                        other.clock.fast_forward('05:01')
+                    other.wait_for_timeout(300)
+                    expect(banner).to_have_count(0)
+            finally:
+                other.close()
+        pulse_banner(page)
 
     if FAKE_PRS:
         @check('long PR: automatic folding, stale approval, unfolding')

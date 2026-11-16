@@ -130,6 +130,19 @@ export const en = {
     'pr.reapprove': '✓ Re-approve v{version}',
     'pr.follow': '☆ Follow',
     'pr.following': '★ Following',
+    'pr.refresh': '↻ Refresh',
+    'pr.refreshTitle': 'Read the PR again from Bitbucket: comments, approvals, versions',
+
+    // ---------- What changed on Bitbucket (periodic check, refresh) ----------
+    'pulse.news': 'New on this PR: {list}',
+    'pulse.activity': 'New on this PR',
+    'pulse.newComments': { one: '{count} new comment', other: '{count} new comments' },
+    'pulse.newVersion': 'a new version',
+    'pulse.newVersions': { one: '{count} new version', other: '{count} new versions' },
+    'pulse.refresh': 'Refresh',
+    'pulse.dismiss': 'Hide until there is more',
+    'pulse.upToDate': 'Up to date',
+    'pulse.updated': 'Updated',
 
     // ---------- Approvals ----------
     'approval.codeChanged': 'code changed in {versions}',

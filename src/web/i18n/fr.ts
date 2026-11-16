@@ -129,6 +129,19 @@ export const fr: Catalog = {
     'pr.reapprove': '✓ Réapprouver v{version}',
     'pr.follow': '☆ Suivre',
     'pr.following': '★ Suivi',
+    'pr.refresh': '↻ Actualiser',
+    'pr.refreshTitle': 'Relire la PR sur Bitbucket : commentaires, approbations, versions',
+
+    // ---------- What changed on Bitbucket (periodic check, refresh) ----------
+    'pulse.news': 'Du nouveau sur la PR : {list}',
+    'pulse.activity': 'Du nouveau sur la PR',
+    'pulse.newComments': { one: '{count} nouveau commentaire', other: '{count} nouveaux commentaires' },
+    'pulse.newVersion': 'une nouvelle version',
+    'pulse.newVersions': { one: '{count} nouvelle version', other: '{count} nouvelles versions' },
+    'pulse.refresh': 'Actualiser',
+    'pulse.dismiss': 'Masquer jusqu’à la prochaine nouveauté',
+    'pulse.upToDate': 'À jour',
+    'pulse.updated': 'Mis à jour',
 
     // ---------- Approvals ----------
     'approval.codeChanged': 'code modifié en {versions}',

@@ -1,7 +1,8 @@
 // In-memory fake Bitbucket Cloud (API 2.0) for integration tests, the UI and development.
 // Repository acme/demo-repo, several PRs covering the page's cases (see FAKE_PRS). Writes are
 // recorded (GET /__calls), so are all requests (GET /__requests). GET /__delay?route=diffstat&ms=1500 slows down every
-// request whose path has that segment (ms=0 removes it). Manual launch: node test/support/fake-bitbucket.ts [port]
+// request whose path has that segment (ms=0 removes it). POST /__comment {"raw", "pr"?, "parent"?, "inline"?: {path, to}}
+// adds a comment by Yann Bernard (somebody else commenting meanwhile). Manual launch: node test/support/fake-bitbucket.ts [port]
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -447,6 +448,27 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
                 delays.delete(route);
             }
             return send(res, 200, { ok: true });
+        }
+        if (path === '/__comment' && req.method === 'POST') {
+            const input = await readBody(req) ?? {};
+            const fake = data.prs.get(Number(input.pr ?? FAKE_PRS.main));
+            if (!fake) {
+                return send(res, 404, { error: { message: 'no pr' } });
+            }
+            const now = new Date(Math.max(Date.now(), Date.parse(fake.pr.updated_on ?? '') + 1 || 0)).toISOString();
+            const parent = typeof input.parent === 'number' ? input.parent : undefined;
+            const inline = input.inline as { path: string; to: number } | undefined;
+            const created: BbComment = {
+                id: data.nextId(), created_on: now, updated_on: now, user: YAN, deleted: false,
+                content: { raw: String(input.raw ?? ''), html: `<p>${escapeHtml(String(input.raw ?? ''))}</p>` },
+                ...(parent ? { parent: { id: parent } } : {}),
+                ...(inline ? { inline: { path: inline.path, to: inline.to, from: null } } : {}),
+            };
+            fake.comments.push(created);
+            fake.activity.push({ comment: created });
+            fake.pr.comment_count = fake.comments.filter((c) => !c.deleted).length;
+            fake.pr.updated_on = now;
+            return send(res, 201, created);
         }
         if (req.headers.authorization !== auth) {
             return send(res, 401, { type: 'error', error: { message: 'Unauthorized' } });

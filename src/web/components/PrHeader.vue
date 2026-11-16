@@ -11,7 +11,11 @@ import { approvalItems, myActions } from '../lib/approvals.ts';
 import { displayName, openedSince } from '../lib/format.ts';
 import { api } from '../services/api.ts';
 import { ACTION_KEYS } from '../composables/useReviewActions.ts';
+import type { PulseView } from '../composables/usePulse.ts';
+import { refreshText } from '../lib/pulse.ts';
 import BuildBadge from './BuildBadge.vue';
+
+const props = defineProps<{ pulse: PulseView }>();
 
 const STATE_LABELS = {
     OPEN: 'pr.state.open',
@@ -27,6 +31,7 @@ const approvals = computed(() => approvalItems(tr(), page.detail, page.sums, !!p
 const mine = computed(() => myActions(page.detail, page.sums, !!page.summary));
 const hasMe = computed(() => !!page.detail.me);
 const build = computed(() => (page.detail.build ? summarizeBuild(page.detail.build) : null));
+const refreshStatus = computed(() => (props.pulse.status ? refreshText(tr(), props.pulse.status) : ''));
 
 // Followed contributors, read from the settings: until they are known, the follow toggle stays hidden.
 const followed = shallowRef<FollowedUser[] | null>(null);
@@ -93,6 +98,18 @@ onMounted(async () => {
             </div>
         </div>
         <div class="acts">
+            <span class="rv-refresh-status" role="status">{{ refreshStatus }}</span>
+            <button
+                type="button"
+                :class="['rv-btn', { busy: page.refreshing }]"
+                data-action="refresh"
+                :disabled="page.refreshing"
+                :aria-busy="page.refreshing"
+                :title="t('pr.refreshTitle')"
+                @click="pulse.refresh()"
+            >
+                {{ t('pr.refresh') }}
+            </button>
             <span v-if="mine.mine" class="own">{{ t('pr.yourPr') }}</span>
             <template v-else-if="hasMe">
                 <button

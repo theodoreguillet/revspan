@@ -5,6 +5,7 @@ import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import { diffDisplay, SKELETON_DELAY_MS } from '../lib/loading.ts';
 import { PREFETCH_CONTEXT, prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
+import { refreshNews, unplacedThreads, type RefreshNews } from '../lib/pulse.ts';
 import type { Preset, Range } from '../lib/selection.ts';
 import { t } from '../i18n/index.ts';
 import { api, ApiError } from '../services/api.ts';
@@ -52,6 +53,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const inflight = new Map<string, Promise<Comparison>>();
     /** Latest diff request: only its answer is shown (fast range clicks, late answers). */
     let compareRequest = 0;
+    /** Range of the latest diff request (the range shown, or about to be). */
+    let shownParams: CompareParams | null = null;
     /** Bumped when the comparisons known so far go stale (new inline thread): an answer requested before is not kept. */
     let compareEpoch = 0;
     /** Latest summary request: only its response is kept. */
@@ -78,8 +81,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     let writes = 0;
     /** A refresh was dropped while a write was in progress: refresh when that write ends, even if it fails. */
     let refreshWanted = false;
-    let running: Promise<void> | null = null;
+    let running: Promise<boolean> | null = null;
     const refreshing = ref(false);
+    /** Refreshes started so far (with `writes`: a check sent before one of them compares with an outdated detail). */
+    let refreshes = 0;
 
     async function loadSummary(): Promise<void> {
         const request = ++summaryRequest;
@@ -105,8 +110,11 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
     }
 
-    /** Reads the detail; a read during which a write started is dropped, and read again unless a write is still in progress. */
-    async function readDetail(): Promise<void> {
+    /**
+     * Reads the detail; a read during which a write started is dropped, and read again unless a write is still in
+     * progress. Returns true if a fresh detail is shown.
+     */
+    async function readDetail(): Promise<boolean> {
         for (;;) {
             const started = writes;
             let fresh: PrDetail;
@@ -114,7 +122,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 fresh = await api.pr(prRef, { fresh: true });
             } catch (error) {
                 showError(error);
-                return;
+                return false;
             }
             if (started === writes && pendingAction.value === null) {
                 const before = detail.value.versions;
@@ -122,12 +130,12 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 if (versionsChanged(before, fresh.versions)) {
                     void loadSummary();
                 }
-                return;
+                return true;
             }
             if (pendingAction.value !== null) {
                 // the write in progress refreshes when it ends
                 refreshWanted = true;
-                return;
+                return false;
             }
             // a write started and ended during the read: read again
         }
@@ -136,13 +144,14 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     /**
      * Reloads the detail in the background, and the summary if the version list changed (version pushed while
      * reading). A read that started before a write is dropped, so it never erases the write's local update.
-     * Calls during a refresh share it.
+     * Calls during a refresh share it. Resolves to true if a fresh detail is shown.
      */
-    function refreshDetail(): Promise<void> {
+    function refreshDetail(): Promise<boolean> {
         if (running) {
             return running;
         }
         refreshWanted = false;
+        refreshes++;
         refreshing.value = true;
         running = readDetail().finally(() => {
             running = null;
@@ -211,6 +220,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     async function loadCompare(params: CompareParams): Promise<void> {
         const request = ++compareRequest;
+        shownParams = params;
         const key = keyOf(params);
         const cached = cache.get(key);
         if (cached) {
@@ -341,6 +351,53 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         return ok;
     }
 
+    /** Writes and refreshes started so far: changes when the detail shown may no longer match Bitbucket's PR. */
+    const syncSeq = (): number => writes + refreshes;
+
+    /**
+     * Computes the shown range again into the cache, the current diff staying on screen meanwhile (no skeleton), and
+     * shows it unless another range was asked for in between.
+     */
+    async function recomputeShown(params: CompareParams): Promise<void> {
+        const request = compareRequest;
+        let result: Comparison | null;
+        try {
+            result = await fetchIntoCache(params);
+        } catch (error) {
+            if (request === compareRequest) {
+                showError(error);
+            }
+            return;
+        }
+        if (result && request === compareRequest) {
+            showCompare(result);
+        }
+    }
+
+    /**
+     * User refresh (↻): reads a fresh detail and says what it brought (null if it was not read: failure, write in
+     * progress). New versions: the summary (see readDetail) and the shown range are computed again. Otherwise the diff
+     * stays, unless it lacks a thread placed on one of its files: the ranges concerned are computed again, once.
+     */
+    async function refresh(): Promise<RefreshNews | null> {
+        const before = detail.value;
+        if (!(await refreshDetail())) {
+            return null;
+        }
+        const after = detail.value;
+        const params = shownParams;
+        if (params) {
+            if (versionsChanged(before.versions, after.versions)) {
+                evictCompare(() => true);
+                await recomputeShown(params);
+            } else if (compare.value && unplacedThreads(compare.value, after.threads).length) {
+                evictCompare((c) => unplacedThreads(c, after.threads).length > 0);
+                await recomputeShown(params);
+            }
+        }
+        return refreshNews(before, after);
+    }
+
     /** Local update of the detail (optimistic write, comment returned by the server). */
     function patchDetail(fn: (d: PrDetail) => PrDetail): void {
         detail.value = fn(detail.value);
@@ -389,8 +446,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     return {
         detail, summary, sums, compare, compareLoading, compareError, diffMode, pendingAction, acting, busy, refreshing,
-        loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, act, patchDetail, patchCompare,
-        evictCompare, patchReview,
+        loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, refresh, syncSeq, act, patchDetail,
+        patchCompare, evictCompare, patchReview,
     };
 }
 
