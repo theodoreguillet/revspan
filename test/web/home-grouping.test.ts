@@ -51,18 +51,47 @@ describe('groupCards', () => {
 
         const groups = groupCards([cam1, yan1, jul1, cam2, yan2], 'contributor');
 
-        // Jules (10-09) before Camille (10-08) before Yann (10-03): following someone does not change the order.
-        expect(groups.map((g) => g.label)).toEqual(['Jules Mercier', 'Camille Durand', 'Yann Bernard']);
-        expect(groups.map((g) => g.key)).toEqual(['{jul}', '{cam}', '{yan}']);
-        expect(groups.map((g) => ids(g.cards))).toEqual([[jul1.id], [cam2.id, cam1.id], [yan2.id, yan1.id]]);
+        // Camille, Jules, Yann: alphabetical, whatever the push dates or who is followed.
+        expect(groups.map((g) => g.label)).toEqual(['Camille Durand', 'Jules Mercier', 'Yann Bernard']);
+        expect(groups.map((g) => g.key)).toEqual(['{cam}', '{jul}', '{yan}']);
+        expect(groups.map((g) => ids(g.cards))).toEqual([[cam2.id, cam1.id], [jul1.id], [yan2.id, yan1.id]]);
     });
 
-    it('by contributor: a card without author has its own group with an empty label, ordered by date too', () => {
+    it('by contributor: subgroups are alphabetical whatever the push dates', () => {
+        const yan = card({ author: YAN, lastPushAt: '2026-10-20T09:00:00Z' });
+        const cam = card({ author: CAM, lastPushAt: '2026-10-01T09:00:00Z' });
+        const jul = card({ author: JUL, lastPushAt: '2026-10-10T09:00:00Z' });
+        expect(groupCards([yan, cam, jul], 'contributor').map((g) => g.label)).toEqual([
+            'Camille Durand', 'Jules Mercier', 'Yann Bernard',
+        ]);
+        // Pushing on Camille's PR later does not move her group.
+        const camLater = card({ author: CAM, lastPushAt: '2026-10-30T09:00:00Z' });
+        expect(groupCards([yan, cam, jul, camLater], 'contributor').map((g) => g.label)).toEqual([
+            'Camille Durand', 'Jules Mercier', 'Yann Bernard',
+        ]);
+    });
+
+    it('by contributor: names compare case-insensitively and without accents (élodie before Yann)', () => {
+        const elodie: User = { uuid: '{elo}', displayName: 'élodie Roux' };
+        const yan = card({ author: YAN, lastPushAt: '2026-10-20T09:00:00Z' });
+        const elo = card({ author: elodie, lastPushAt: '2026-10-01T09:00:00Z' });
+        expect(groupCards([yan, elo], 'contributor').map((g) => g.label)).toEqual(['élodie Roux', 'Yann Bernard']);
+    });
+
+    it('by contributor: the same name on two accounts is ordered by key', () => {
+        const twinA: User = { uuid: '{twin-a}', displayName: 'Camille Durand' };
+        const twinB: User = { uuid: '{twin-b}', displayName: 'Camille Durand' };
+        const b = card({ author: twinB, lastPushAt: '2026-10-20T09:00:00Z' });
+        const a = card({ author: twinA, lastPushAt: '2026-10-01T09:00:00Z' });
+        expect(groupCards([b, a], 'contributor').map((g) => g.key)).toEqual(['{twin-a}', '{twin-b}']);
+    });
+
+    it('by contributor: the unknown author group comes last, whatever its push date', () => {
         const anonymous = card({ author: null, lastPushAt: '2026-10-09T09:00:00Z' });
         const cam1 = card({ author: CAM, lastPushAt: '2026-10-01T09:00:00Z' });
-        const groups = groupCards([cam1, anonymous], 'contributor');
-        expect(groups.map((g) => g.label)).toEqual(['', 'Camille Durand']);
-        expect(groups[0]?.cards).toEqual([anonymous]);
+        const groups = groupCards([anonymous, cam1], 'contributor');
+        expect(groups.map((g) => g.label)).toEqual(['Camille Durand', '']);
+        expect(groups[1]?.cards).toEqual([anonymous]);
     });
 
     it('by repository: subgroups ordered by their most recent PR, PRs newest first inside each', () => {
@@ -76,6 +105,14 @@ describe('groupCards', () => {
         expect(groups.map((g) => g.label)).toEqual(['acme/records-api', 'acme/billing-ui', 'acme/records-export']);
         expect(groups.map((g) => g.key)).toEqual(['acme/records-api', 'acme/billing-ui', 'acme/records-export']);
         expect(ids(groups[0]?.cards ?? [])).toEqual([api1.id, api2.id]);
+    });
+
+    it('repository subgroups keep the most recent push first', () => {
+        const old = card({ repo: 'records-api', lastPushAt: '2026-10-01T09:00:00Z' });
+        const recent = card({ repo: 'records-export', lastPushAt: '2026-10-09T09:00:00Z' });
+        expect(groupCards([old, recent], 'repository').map((g) => g.label)).toEqual(['acme/records-export', 'acme/records-api']);
+        const pushedAgain = card({ repo: 'records-api', lastPushAt: '2026-10-20T09:00:00Z' });
+        expect(groupCards([old, recent, pushedAgain], 'repository').map((g) => g.label)).toEqual(['acme/records-api', 'acme/records-export']);
     });
 
     it('subgroups whose most recent PRs have the same date: by name', () => {

@@ -519,15 +519,15 @@ describe('"My PRs" tree', () => {
             ...extra,
         }, en, grouping);
 
-        it('contributor grouping: subnodes in to-do and others, newest subgroup first, none in waiting, mine by repository', () => {
+        it('contributor grouping: subnodes in to-do and others, alphabetical, none in waiting, mine by repository', () => {
             const tree = queue('contributor');
             expect(tree.map((g) => [g.key, g.prs.length, g.subgroups.map((s) => s.label)])).toEqual([
-                ['to-do', 0, ['★ Yann (2)', 'Camille (1)']],
+                ['to-do', 0, ['Camille (1)', '★ Yann (2)']],
                 ['mine', 0, ['acme/records-api (1)']],
                 ['waiting', 1, []],
                 ['others', 0, ['Unknown author (1)']],
             ]);
-            expect(tree[0]?.subgroups[0]?.prs.map((p) => p.ref.id)).toEqual([6, 7]);
+            expect(tree[0]?.subgroups[1]?.prs.map((p) => p.ref.id)).toEqual([6, 7]);
         });
 
         it('repository grouping and no grouping', () => {

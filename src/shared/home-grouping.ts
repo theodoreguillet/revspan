@@ -46,9 +46,16 @@ function keyOf(card: PrCard, grouping: Grouping): { key: string; label: string }
     return { key: card.author?.uuid ?? '', label: card.author?.displayName ?? '' };
 }
 
-/** Subgroups by their most recent PR (cards are already sorted newest first), then by name. */
-function bySubgroupRecency(a: CardGroup, b: CardGroup): number {
+/** Repositories by their most recent PR (cards are already sorted newest first), then by name. */
+function byRepositoryRecency(a: CardGroup, b: CardGroup): number {
     return (b.cards[0]?.lastPushAt ?? '').localeCompare(a.cards[0]?.lastPushAt ?? '') || a.label.localeCompare(b.label);
+}
+
+/** Contributors by display name, case and accents ignored, ties by key; the unknown author (empty label) last. */
+function byContributorName(a: CardGroup, b: CardGroup): number {
+    return Number(a.label === '') - Number(b.label === '')
+        || a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+        || a.key.localeCompare(b.key);
 }
 
 export function groupCards(cards: readonly PrCard[], grouping: Grouping): CardGroup[] {
@@ -72,5 +79,5 @@ export function groupCards(cards: readonly PrCard[], grouping: Grouping): CardGr
     for (const group of list) {
         group.cards.sort(byLastPush);
     }
-    return list.sort(bySubgroupRecency);
+    return list.sort(grouping === 'contributor' ? byContributorName : byRepositoryRecency);
 }
