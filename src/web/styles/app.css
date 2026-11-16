@@ -306,6 +306,9 @@ button.armed { color: var(--rv-del) !important; font-weight: 600; }
 .rv-cm .vtag { font-size: 10.5px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
 .rv-cm .newtag { font-size: 10.5px; color: var(--rv-new); font-weight: 600; margin-left: 6px; }
 .rv-cm .deleted { color: var(--text-tertiary); font-style: italic; }
+.rv-cm.pending { opacity: .6; }
+.rv-cm .sending { font-size: 10.5px; color: var(--text-secondary); font-style: italic; margin-left: 6px; }
+.rv-cm .raw { margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rv-cm .acts { display: flex; gap: 12px; margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); align-items: center; }
 .rv-cm .acts button { border: none; background: none; padding: 0; color: var(--text-secondary); cursor: pointer; font-size: 11.5px; }
 .rv-cm .acts button:hover { color: var(--text-primary); }

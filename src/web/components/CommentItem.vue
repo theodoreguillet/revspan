@@ -17,7 +17,7 @@ const name = computed(() => displayName(props.comment.user));
 </script>
 
 <template>
-    <div :class="['rv-cm', { new: comment.isNew }]" :data-comment="comment.id">
+    <div :class="['rv-cm', { new: comment.isNew, pending: comment.pending }]" :data-comment="comment.id">
         <span class="rv-av" :style="{ background: `hsl(${avatarHue(comment.user)} 52% 42%)` }" :title="name" aria-hidden="true">{{ initials(name) }}</span>
         <div class="body">
             <div>
@@ -25,10 +25,13 @@ const name = computed(() => displayName(props.comment.user));
                 <span class="when" :title="fmtFull(tr(), comment.createdOn)">{{ relTime(tr(), comment.createdOn) }}</span>
                 <span v-if="comment.version != null" class="vtag" :title="t('comment.versionTitle', { version: comment.version })">v{{ comment.version }}</span>
                 <span v-if="comment.isNew" class="newtag">{{ t('comment.new') }}</span>
+                <span v-if="comment.pending" class="sending">{{ t('comment.sending') }}</span>
             </div>
             <div v-if="comment.deleted" class="deleted">{{ t('comment.deleted') }}</div>
+            <!-- being sent: the typed text (Bitbucket renders the HTML) -->
+            <div v-else-if="comment.pending" class="raw">{{ comment.raw }}</div>
             <SafeHtml v-else :html="comment.html" />
-            <div v-if="!comment.deleted" class="acts">
+            <div v-if="!comment.deleted && !comment.pending" class="acts">
                 <button type="button" data-action="reply" @click="emit('reply')">{{ t('common.reply') }}</button>
                 <ConfirmButton
                     v-if="comment.mine"

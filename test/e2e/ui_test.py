@@ -520,7 +520,10 @@ def run_checks(page):
         calls.wait(lambda c: is_post_comment(c) and comment_parent(c) == my_thread['id'], f'POST comments parent={my_thread["id"]}')
         mine = page.locator(f'{thread_sel} .rv-cm', has_text='Merci, c\'est bon pour moi.')
         expect(mine).to_have_count(1, timeout=10000)
+        # shown at once as pending (temporary negative id), then replaced by the comment Bitbucket created
+        expect(mine).not_to_have_class(re.compile(r'\bpending\b'), timeout=10000)
         cid = int(mine.get_attribute('data-comment'))
+        assert cid > 0, cid
         calls.start()
         mine.locator('[data-action="delete"]').click()  # confirm() accepted by the dialog handler
         calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{cid}'), f'DELETE comments/{cid}')

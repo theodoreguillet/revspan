@@ -256,6 +256,8 @@ export interface Comment {
     isNew: boolean;
     deleted: boolean;
     mine: boolean;
+    /** Page only (never set by the server): shown before the server answers, with a negative temporary id. */
+    pending?: true;
 }
 
 export interface Thread {

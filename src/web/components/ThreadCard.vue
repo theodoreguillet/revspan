@@ -29,6 +29,8 @@ const reply = computed({
 const collapsedBar = computed(() => props.thread.resolved && props.context === 'diff' && !page.expandedThreads.has(props.thread.id));
 const origin = computed(() => props.thread.anchor?.to ?? props.thread.anchor?.from ?? null);
 const fromOnly = computed(() => props.thread.anchor?.to == null && props.thread.anchor?.from != null);
+/** New thread being sent: no reply nor resolution until Bitbucket gives it an id. */
+const pending = computed(() => props.thread.comments[0]?.pending === true);
 
 async function sendReply(): Promise<void> {
     const text = reply.value.trim();
@@ -109,14 +111,13 @@ function autosize(): void {
             <span v-else><span class="st open">{{ t('thread.open') }}</span></span>
         </div>
         <CommentItem v-for="c in thread.comments" :key="c.id" :comment="c" @reply="focusReply" />
-        <div class="rv-th-f">
+        <div v-if="!pending" class="rv-th-f">
             <textarea
                 ref="replyBox"
                 v-model="reply"
                 rows="1"
                 :placeholder="t('thread.replyPlaceholder')"
                 :aria-label="t('thread.replyLabel')"
-                :disabled="sending"
                 @input="autosize"
                 @keydown="onReplyKeydown"
             />

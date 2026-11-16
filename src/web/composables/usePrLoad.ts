@@ -1,5 +1,5 @@
-// PR page data: detail (always loaded), version summary, range diff (cached),
-// and writes followed by a reload.
+// PR page data: detail (always loaded), version summary, range diff (cached), and writes shown at once then
+// confirmed by a background refresh of the detail.
 import { computed, ref, shallowRef } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
@@ -13,12 +13,14 @@ export interface CompareParams extends Range {
 }
 
 export interface ActOptions {
-    /** After a successful write, before the reload (close a composer, forget a draft...). */
+    /** After a successful write, before the background refresh (replace a pending comment, forget a draft...). */
     onDone?: () => void;
-    /** Also reload the diff (new inline thread: its placement comes from the diff). */
-    reloadCompare?: boolean;
     /** Button that started the action (loading indicator on that button). */
     key?: string;
+    /** Local update shown before the write is sent. */
+    optimistic?: () => void;
+    /** Undoes `optimistic` when the write fails. */
+    rollback?: () => void;
 }
 
 export function usePrLoad(prRef: PrRef, initial: PrDetail) {
@@ -29,13 +31,25 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const compareLoading = ref(false);
     const compareError = shallowRef<unknown>(null);
     const cache = new Map<string, Comparison>();
-    let current: CompareParams | null = null;
+    /** Comparisons being computed, by key: asking again for the same range waits for the same answer. */
+    const inflight = new Map<string, Promise<Comparison>>();
+    /** Latest diff request: only its answer is shown (fast range clicks, late answers). */
+    let compareRequest = 0;
     /** Latest summary request: only its response is kept. */
     let summaryRequest = 0;
-    /** Incremented by each forced diff reload: an earlier response writes neither the cache nor the diff. */
-    let generation = 0;
     /** Versions a comparison found erased (410) that already triggered a detail reload: at most once each, no loop. */
     const reloadedForPurge = new Set<number>();
+
+    /** Write action in progress (key of its button), during the write only; only one at a time. */
+    const pendingAction = ref<string | null>(null);
+    const acting = computed(() => pendingAction.value !== null);
+    const busy = (key: string): boolean => pendingAction.value === key;
+    /** Writes started so far: a detail read before the latest one would erase its local update. */
+    let writes = 0;
+    /** A refresh was dropped while a write was in progress: refresh when that write ends, even if it fails. */
+    let refreshWanted = false;
+    let running: Promise<void> | null = null;
+    const refreshing = ref(false);
 
     async function loadSummary(): Promise<void> {
         const request = ++summaryRequest;
@@ -55,53 +69,90 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         // A commit erased by Bitbucket after being cached only shows up when the summary is computed: the detail, loaded
         // before, still thinks the version is readable (and the range may start from it). It is reloaded once.
         if (purgedSinceDetail(detail.value.versions, result)) {
-            await reloadDetail();
+            await refreshDetail();
         }
     }
 
-    /** Reloads the detail, and the summary if the version list changed (version pushed while reading). */
-    async function reloadDetail(): Promise<void> {
-        const before = detail.value.versions;
-        try {
-            detail.value = await api.pr(prRef);
-        } catch (error) {
-            showError(error);
-            return;
+    /** Reads the detail; a read during which a write started is dropped, and read again unless a write is still in progress. */
+    async function readDetail(): Promise<void> {
+        for (;;) {
+            const started = writes;
+            let fresh: PrDetail;
+            try {
+                fresh = await api.pr(prRef);
+            } catch (error) {
+                showError(error);
+                return;
+            }
+            if (started === writes && pendingAction.value === null) {
+                const before = detail.value.versions;
+                detail.value = fresh;
+                if (versionsChanged(before, fresh.versions)) {
+                    void loadSummary();
+                }
+                return;
+            }
+            if (pendingAction.value !== null) {
+                // the write in progress refreshes when it ends
+                refreshWanted = true;
+                return;
+            }
+            // a write started and ended during the read: read again
         }
-        if (versionsChanged(before, detail.value.versions)) {
-            void loadSummary();
+    }
+
+    /**
+     * Reloads the detail in the background, and the summary if the version list changed (version pushed while
+     * reading). A read that started before a write is dropped, so it never erases the write's local update.
+     * Calls during a refresh share it.
+     */
+    function refreshDetail(): Promise<void> {
+        if (running) {
+            return running;
         }
+        refreshWanted = false;
+        refreshing.value = true;
+        running = readDetail().finally(() => {
+            running = null;
+            refreshing.value = false;
+        });
+        return running;
     }
 
     const keyOf = (p: CompareParams): string => `${p.from}-${p.to}-${p.context}`;
 
-    async function loadCompare(params: CompareParams, { force = false } = {}): Promise<void> {
-        current = params;
+    function fetchCompare(params: CompareParams, key: string): Promise<Comparison> {
+        let request = inflight.get(key);
+        if (!request) {
+            request = api.compare(prRef, params.from, params.to, params.context).finally(() => inflight.delete(key));
+            inflight.set(key, request);
+        }
+        return request;
+    }
+
+    async function loadCompare(params: CompareParams): Promise<void> {
+        const request = ++compareRequest;
         const key = keyOf(params);
         const cached = cache.get(key);
-        if (cached && !force) {
+        if (cached) {
             compare.value = cached;
             compareError.value = null;
             compareLoading.value = false;
             return;
         }
-        const requested = generation;
         compareLoading.value = true;
         try {
-            const result = await api.compare(prRef, params.from, params.to, params.context);
-            if (requested !== generation) {
-                return;
+            const result = await fetchCompare(params, key);
+            // a second wait for the same answer keeps the entry stored (and maybe patched) by the first one
+            if (!cache.has(key)) {
+                cache.set(key, result);
             }
-            cache.set(key, result);
-            if (current && keyOf(current) === key) {
-                compare.value = result;
+            if (request === compareRequest) {
+                compare.value = cache.get(key) ?? result;
                 compareError.value = null;
             }
         } catch (error) {
-            if (requested !== generation) {
-                return;
-            }
-            if (current && keyOf(current) === key) {
+            if (request === compareRequest) {
                 compare.value = null;
                 compareError.value = error;
                 showError(error);
@@ -111,49 +162,71 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             const purged = error instanceof ApiError && error.code === 'VERSION_UNAVAILABLE' ? error.params.version : undefined;
             if (purged !== undefined && !reloadedForPurge.has(purged)) {
                 reloadedForPurge.add(purged);
-                await reloadDetail();
+                await refreshDetail();
             }
         }
-        if (current && keyOf(current) === key) {
+        if (request === compareRequest) {
             compareLoading.value = false;
         }
     }
 
-    async function reload({ reloadCompare = false } = {}): Promise<void> {
-        await reloadDetail();
-        if (reloadCompare && current) {
-            generation++;
-            cache.clear();
-            await loadCompare(current, { force: true });
-        }
-    }
-
-    /** Write action in progress (key of its button), until the reload ends; only one at a time. */
-    const pendingAction = ref<string | null>(null);
-    const acting = computed(() => pendingAction.value !== null);
-    const busy = (key: string): boolean => pendingAction.value === key;
-
     /**
-     * Runs a write then reloads the PR. Returns true if the write succeeded; false if it failed, or if another
-     * is in progress (message shown, nothing is sent or forgotten: the draft stays).
+     * Runs a write: `optimistic` first, `rollback` if the write fails, `onDone` once it succeeded, then a background
+     * refresh of the detail (not awaited). Returns true if the write succeeded; false if it failed, or if another is in
+     * progress (message shown, nothing is sent or forgotten: the draft stays).
      */
-    async function act(write: () => Promise<unknown>, { onDone, reloadCompare = false, key = 'action' }: ActOptions = {}): Promise<boolean> {
+    async function act(write: () => Promise<unknown>, { onDone, key = 'action', optimistic, rollback }: ActOptions = {}): Promise<boolean> {
         if (pendingAction.value !== null) {
-            // a write launched (⌘/Ctrl+Enter…) while another one is finishing
+            // a write launched (⌘/Ctrl+Enter…) while another one is in progress
             showError(new Error(t('error.busy')));
             return false;
         }
         pendingAction.value = key;
+        writes++;
+        let ok = false;
         try {
+            optimistic?.();
             await write();
-            onDone?.();
-            await reload({ reloadCompare });
-            return true;
+            ok = true;
         } catch (error) {
+            rollback?.();
             showError(error);
-            return false;
         } finally {
             pendingAction.value = null;
+        }
+        if (ok) {
+            onDone?.();
+        }
+        if (ok || refreshWanted) {
+            void refreshDetail();
+        }
+        return ok;
+    }
+
+    /** Local update of the detail (optimistic write, comment returned by the server). */
+    function patchDetail(fn: (d: PrDetail) => PrDetail): void {
+        detail.value = fn(detail.value);
+    }
+
+    /**
+     * Local update of the shown comparison and of the cached ones (`fn` returns its argument unchanged for a comparison
+     * it does not concern): a thread placed on the last version belongs to every cached range that ends there.
+     */
+    function patchCompare(fn: (c: Comparison) => Comparison): void {
+        const patched = new Map<Comparison, Comparison>();
+        const apply = (c: Comparison): Comparison => {
+            let next = patched.get(c);
+            if (!next) {
+                next = fn(c);
+                patched.set(c, next);
+            }
+            return next;
+        };
+        for (const [key, cmp] of cache) {
+            cache.set(key, apply(cmp));
+        }
+        if (compare.value) {
+            compare.value = apply(compare.value);
         }
     }
 
@@ -163,8 +236,8 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     }
 
     return {
-        detail, summary, sums, compare, compareLoading, compareError, pendingAction, acting, busy,
-        loadSummary, loadCompare, act, patchReview,
+        detail, summary, sums, compare, compareLoading, compareError, pendingAction, acting, busy, refreshing,
+        loadSummary, loadCompare, refreshDetail, act, patchDetail, patchCompare, patchReview,
     };
 }
 

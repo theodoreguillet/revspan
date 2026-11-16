@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, effectScope, nextTick } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import type { Comparison, FileDiff, PrDetail, Summary, Version } from '../../src/shared/api.ts';
+import type { FileDiff, PrDetail, Summary, Version } from '../../src/shared/api.ts';
 import { useDiffOptions } from '../../src/web/composables/useDiffOptions.ts';
 import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
@@ -36,12 +36,6 @@ const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 
 const summaryOf = (detail: PrDetail): Summary => ({ versions: [...prLong().sums.values()].filter((s) => s.index <= detail.versions.length) });
 
-function comparison(messageTo: string): Comparison {
-    return {
-        from: 7, to: 10, stats: { files: 0, added: 0, removed: 0 }, files: [], masterOnly: [], messageChanged: false, messageFrom: '', messageTo,
-    };
-}
-
 function fileDiff(path: string, contentHash: string): FileDiff {
     return {
         path, oldPath: null, status: 'modified', category: 'code', binary: false, tooLarge: false, added: 1, removed: 0, contentHash, conflict: false,
@@ -58,7 +52,7 @@ describe('PR page actions: loading indicator', () => {
         api.pr.mockResolvedValue(detail);
     });
 
-    it('button "in progress" during the write and the reload, one action at a time', async () => {
+    it('button "in progress" during the write, one action at a time', async () => {
         const load = usePrLoad(ref, detail);
         const write = deferred();
         api.approve.mockReturnValue(write.promise);
@@ -197,39 +191,6 @@ describe('reload: consistent summary and detail', () => {
         await settle();
         expect(api.pr).toHaveBeenCalledTimes(1);
         expect(api.summary).toHaveBeenCalledTimes(1);
-    });
-});
-
-describe('comparison in flight and forced reload', () => {
-    let detail: PrDetail;
-
-    beforeEach(() => {
-        vi.clearAllMocks();
-        detail = prLong().data;
-        api.pr.mockResolvedValue(detail);
-    });
-
-    it('an unforced response arriving after the forced reload writes neither the cache nor the diff', async () => {
-        const load = usePrLoad(ref, detail);
-        const params = { from: 7, to: 10, context: 3 };
-        const stale = deferred<Comparison>();
-        const fresh = deferred<Comparison>();
-        api.compare.mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise);
-
-        const loading = load.loadCompare(params);
-        const acting = load.act(() => Promise.resolve(), { reloadCompare: true });
-        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
-        const fresher = comparison('nouveau fil placé');
-        fresh.resolve(fresher);
-        expect(await acting).toBe(true);
-        stale.resolve(comparison('avant le commentaire'));
-        await loading;
-
-        expect(load.compare.value).toBe(fresher);
-        expect(load.compareLoading.value).toBe(false);
-        await load.loadCompare(params);
-        expect(load.compare.value).toBe(fresher);
-        expect(api.compare).toHaveBeenCalledTimes(2);
     });
 });
 

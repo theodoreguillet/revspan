@@ -347,6 +347,7 @@ export const en = {
     'comment.new': 'new',
     'comment.deleted': 'Comment deleted',
     'comment.deleteQuestion': 'Delete this comment on Bitbucket?',
+    'comment.sending': 'sending…',
     'composer.general': 'New general comment',
     'composer.deletedLine': 'Deleted line {line} ({from} → {to}): posted as a general comment quoting the line.',
     'composer.line': 'Line {line} of {version}',

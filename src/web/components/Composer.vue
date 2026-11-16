@@ -77,7 +77,6 @@ onMounted(() => {
             v-model="text"
             :placeholder="placeholder"
             :aria-label="general ? t('composer.general') : t('composer.label')"
-            :disabled="sending"
             @keydown="onKeydown"
         />
         <div class="row">

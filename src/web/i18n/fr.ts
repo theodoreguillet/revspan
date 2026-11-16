@@ -346,6 +346,7 @@ export const fr: Catalog = {
     'comment.new': 'nouveau',
     'comment.deleted': 'Commentaire supprimé',
     'comment.deleteQuestion': 'Supprimer ce commentaire sur Bitbucket ?',
+    'comment.sending': 'envoi…',
     'composer.general': 'Nouveau commentaire général',
     'composer.deletedLine': 'Ligne {line} supprimée ({from} → {to}) : publié comme commentaire général qui cite la ligne.',
     'composer.line': 'Ligne {line} de {version}',

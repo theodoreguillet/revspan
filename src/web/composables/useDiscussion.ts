@@ -1,8 +1,10 @@
-// Comments: drafts, line composer, replies, deletion, resolution.
+// Comments: drafts, line composer, replies, deletion, resolution. A comment shows at once as pending, is replaced by the
+// server's answer, and the PR is refreshed in the background; if the send fails, it disappears and its draft comes back.
 import { reactive, ref } from 'vue';
-import type { Comment, PrRef, Thread } from '../../shared/api.ts';
+import type { Comment, Comparison, NewComment, PrRef, Thread } from '../../shared/api.ts';
 import { tr } from '../i18n/index.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
+import { removeComment, replaceComment, withoutPlacement, withPendingComment, withPlacement, withResolved, type PendingComment } from '../lib/optimistic.ts';
 import { api } from '../services/api.ts';
 import type { PrLoad } from './usePrLoad.ts';
 
@@ -42,33 +44,102 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         composer.value = null;
     }
 
+    /** Puts back the text of a failed send, before anything typed in the same box since. */
+    function restoreDraft(key: string, text: string): void {
+        const typed = draft(key);
+        setDraft(key, typed ? `${text}\n\n${typed}` : text);
+    }
+
+    /** Temporary ids of the comments being sent (negative: never a Bitbucket id). */
+    let lastTempId = 0;
+
+    interface Sending {
+        /** Draft of the box the text comes from, and the typed text (restored if the send fails). */
+        draftKey: string;
+        text: string;
+        /** Button key (single-write lock and loading indicator). */
+        key: string;
+        /** Line composer the text comes from: closed at once, reopened if the send fails and no other one is open. */
+        target?: ComposerTarget;
+    }
+
+    function send(body: NewComment, { draftKey, text, key, target }: Sending): Promise<boolean> {
+        const tempId = --lastTempId;
+        const pending: PendingComment = { tempId, raw: body.raw, threadId: body.parentId ?? null, inline: body.inline ?? null };
+        const { inline } = body;
+        // an inline comment is only possible on the last version: its line is valid in every range that ends there
+        const version = load.compare.value?.to;
+        const place = (threadId: number) => (c: Comparison): Comparison =>
+            (inline && c.to === version ? withPlacement(withoutPlacement(c, tempId), inline.path, threadId, inline.to) : withoutPlacement(c, tempId));
+        let created: Comment | null = null;
+        return load.act(async () => {
+            created = await api.comment(prRef, body);
+        }, {
+            key,
+            optimistic: () => {
+                load.patchDetail((d) => withPendingComment(d, pending, d.me));
+                if (inline) {
+                    load.patchCompare(place(tempId));
+                }
+                drafts.delete(draftKey);
+                if (target && composer.value?.key === target.key) {
+                    composer.value = null;
+                }
+            },
+            rollback: () => {
+                load.patchDetail((d) => removeComment(d, tempId));
+                if (inline) {
+                    load.patchCompare((c) => withoutPlacement(c, tempId));
+                }
+                restoreDraft(draftKey, text);
+                if (target && composer.value === null) {
+                    composer.value = target;
+                }
+            },
+            onDone: () => {
+                const comment = created;
+                if (!comment) {
+                    return;
+                }
+                load.patchDetail((d) => replaceComment(d, tempId, comment));
+                if (inline) {
+                    load.patchCompare(place(comment.id));
+                }
+            },
+        });
+    }
+
     /** Inline comment (new side) or, on a deleted line, a general comment quoting it. */
     function submitComposer(target: ComposerTarget, text: string): Promise<boolean> {
-        const done = (): void => {
-            drafts.delete(target.key);
-            composer.value = null;
-        };
         const cmp = load.compare.value;
-        const key = actionKey.composer(target.key);
+        const sending = { draftKey: target.key, text, key: actionKey.composer(target.key), target };
         if (target.kind === 'old' && cmp) {
-            const raw = deletedLineComment(tr(), target.path, cmp.from, cmp.to, target.code, text);
-            return load.act(() => api.comment(prRef, { raw }), { onDone: done, key });
+            return send({ raw: deletedLineComment(tr(), target.path, cmp.from, cmp.to, target.code, text) }, sending);
         }
-        return load.act(() => api.comment(prRef, { raw: text, inline: { path: target.path, to: target.line } }), { onDone: done, reloadCompare: true, key });
+        return send({ raw: text, inline: { path: target.path, to: target.line } }, sending);
     }
 
     const reply = (thread: Thread, text: string): Promise<boolean> =>
-        load.act(() => api.comment(prRef, { raw: text, parentId: thread.id }), { onDone: () => drafts.delete(replyDraftKey(thread.id)), key: actionKey.reply(thread.id) });
+        send({ raw: text, parentId: thread.id }, { draftKey: replyDraftKey(thread.id), text, key: actionKey.reply(thread.id) });
 
     const postGeneral = (text: string): Promise<boolean> =>
-        load.act(() => api.comment(prRef, { raw: text }), { onDone: () => drafts.delete(GENERAL_DRAFT), key: actionKey.composer(GENERAL_DRAFT) });
+        send({ raw: text }, { draftKey: GENERAL_DRAFT, text, key: actionKey.composer(GENERAL_DRAFT) });
 
-    // the confirmation is asked by the button (ConfirmButton)
+    // the confirmation is asked by the button (ConfirmButton): no optimistic delete, the comment goes once the server agreed
     const deleteComment = (comment: Comment): Promise<boolean> =>
-        load.act(() => api.deleteComment(prRef, comment.id), { key: actionKey.remove(comment.id) });
+        load.act(() => api.deleteComment(prRef, comment.id), {
+            key: actionKey.remove(comment.id),
+            onDone: () => load.patchDetail((d) => removeComment(d, comment.id)),
+        });
 
-    const resolve = (thread: Thread, resolved: boolean): Promise<boolean> =>
-        load.act(() => api.resolve(prRef, thread.id, resolved), { key: actionKey.resolve(thread.id) });
+    function resolve(thread: Thread, resolved: boolean): Promise<boolean> {
+        const before = load.detail.value.threads.find((t) => t.id === thread.id) ?? thread;
+        return load.act(() => api.resolve(prRef, thread.id, resolved), {
+            key: actionKey.resolve(thread.id),
+            optimistic: () => load.patchDetail((d) => withResolved(d, thread.id, resolved, d.me)),
+            rollback: () => load.patchDetail((d) => withResolved(d, thread.id, before.resolved, before.resolvedBy)),
+        });
+    }
 
     return { drafts, composer, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, deleteComment, resolve };
 }
