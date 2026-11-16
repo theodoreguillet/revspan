@@ -21,7 +21,7 @@ export interface QueueInput {
     myApprovalCurrent: boolean;
     /** My approval is still active and only neutral versions arrived since (approvalHoldsSince). */
     approvalHolds: boolean;
-    /** I reviewed the PR (local mark, comment, approval or change request) or approved it. */
+    /** I reviewed the PR (local mark, approval or change request) or approved it. */
     reviewedOrApproved: boolean;
     /** Versions with code or dependencies since my review; null: their types are not computed yet. */
     newCodeVersions: number | null;

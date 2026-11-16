@@ -187,7 +187,7 @@ export const fr: Catalog = {
     'banner.depsVersions': { one: '{count} version de dépendances', other: '{count} versions de dépendances' },
     'banner.otherVersions': { one: '{count} autre sans changement de l\'auteur', other: '{count} autres sans changement de l\'auteur' },
     'banner.markReviewed': 'Marquer v{version} comme relue',
-    'banner.rule': 'Approuver ou commenter marque la version comme relue automatiquement.',
+    'banner.rule': 'Approuver marque la version comme relue automatiquement.',
 
     // ---------- Timeline and range ----------
     'timeline.label': 'Frise des versions',

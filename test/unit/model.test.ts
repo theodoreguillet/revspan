@@ -88,21 +88,28 @@ describe('computeReview', () => {
         id: 1, user: user(ME, 'Moi'), created_on: '2026-11-05T11:00:00Z', deleted: false, content: { raw }, ...extra,
     });
 
-    it('the most recent of approval, new comment and local mark', () => {
+    it('the most recent of approval and local mark', () => {
         const versions = versionsFixture();
-        expect(computeReview({ versions, activity, comments: [], meUuid: ME, local: null }))
+        expect(computeReview({ versions, activity, meUuid: ME, local: null }))
             .toEqual({ lastReviewed: 2, lastReviewedSource: 'approval', lastReviewedAt: '2026-11-03T15:03:05Z', viewed: {} });
-        expect(computeReview({ versions, activity, comments: [myComment('Nit')], meUuid: ME, local: null }).lastReviewed).toBe(3);
         const local = { reviewedHash: '178703a1c7dc0000', reviewedAt: '2026-11-05T14:00:00Z', viewed: { 'a.ts': 'h' } };
-        expect(computeReview({ versions, activity, comments: [], meUuid: ME, local }))
+        expect(computeReview({ versions, activity, meUuid: ME, local }))
             .toMatchObject({ lastReviewed: 4, lastReviewedSource: 'local', viewed: { 'a.ts': 'h' } });
-        expect(computeReview({ versions, activity, comments: [], meUuid: null, local: null }).lastReviewed).toBeNull();
+        expect(computeReview({ versions, activity, meUuid: null, local: null }).lastReviewed).toBeNull();
     });
 
-    it('a reply does not count as a review', () => {
+    it('a comment of mine does not count as a review', () => {
         const versions = versionsFixture();
-        const comments = [myComment('merci', { parent: { id: 9 } })];
-        expect(computeReview({ versions, activity, comments, meUuid: ME, local: null }).lastReviewed).toBe(2);
+        expect(computeReview({ versions, activity: [{ comment: myComment('Nit') }], meUuid: ME, local: null }))
+            .toMatchObject({ lastReviewed: null, lastReviewedSource: null });
+        expect(computeReview({ versions, activity, meUuid: ME, local: null }).lastReviewed).toBe(2);
+    });
+
+    it('a request for changes still counts as a review', () => {
+        const versions = versionsFixture();
+        const changes = [{ changes_requested: { user: user(ME, 'Moi'), date: '2026-11-05T11:00:00Z' } }];
+        expect(computeReview({ versions, activity: changes, meUuid: ME, local: null }))
+            .toMatchObject({ lastReviewed: 3, lastReviewedSource: 'approval' });
     });
 });
 

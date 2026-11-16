@@ -234,7 +234,7 @@ export interface Participant {
     approvedVersion: number | null;
 }
 
-export type ReviewSource = 'approval' | 'comment' | 'local';
+export type ReviewSource = 'approval' | 'local';
 
 export interface Review {
     lastReviewed: number | null;

@@ -227,8 +227,8 @@ describe('reading a PR', () => {
         expect(body.pr.title).toBe('DEMO-1 - feat(records): archive records in bulk');
         expect(body.versions.map((v) => v.isRebase)).toEqual([false, false, true, false, true, false]);
         expect(body.versions[5]?.messageChanged).toBe(true);
-        // My comment of Oct 2 -> v2
-        expect(body.review).toMatchObject({ lastReviewed: 2, lastReviewedSource: 'comment' });
+        // My request for changes of Oct 2 -> v2 (my comment of the same day does not count)
+        expect(body.review).toMatchObject({ lastReviewed: 2, lastReviewedSource: 'approval' });
         expect(body.participants.find((p) => p.user?.uuid === '{yan}')?.approvedVersion).toBe(6);
         expect(body.threads).toHaveLength(4);
         const mine = body.threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
@@ -1153,7 +1153,7 @@ describe('request budget', () => {
         expect(cardOf(await home(), FAKE_PRS.others)?.lastReviewed).toBe(1);
     });
 
-    it('a comment written from Revspan shows on the home at once, even if Bitbucket keeps updated_on', async () => {
+    it('a comment written from Revspan does not set the review, even when Bitbucket keeps updated_on', async () => {
         fakeTime();
         const { fake } = await setup();
         expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBeNull();
@@ -1164,7 +1164,11 @@ describe('request budget', () => {
         if (fakePr) {
             fakePr.updated_on = updatedOn;
         }
-        expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBe(2);
+        const afterComment = await home();
+        expect(cardOf(afterComment, FAKE_PRS.neverReviewed)?.lastReviewed).toBeNull();
+        expect(groupsOf(afterComment)[FAKE_PRS.neverReviewed]).toBe('to-do');
+        await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/reviewed`, { version: 1 });
+        expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBe(1);
     });
 
     it('PR summary, comparison and "reviewed" mark read no build status, branch head or rebase merge base', async () => {

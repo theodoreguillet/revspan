@@ -211,7 +211,7 @@ one request per interval even once finished (see "Build status").
 - **Version timeline**: one dot per push, grouped by day; ◆ = rebase; under each dot, what the author changed
   (`+35 −14`, `deps` = only package.json / lockfile / submodule, `rebase only`, `message`).
   Click = what this version changed; Shift+click = extend the range; "master" = full version.
-- **Resume**: a "✓ reviewed" mark on your last review (approval, new comment or "Mark as reviewed"),
+- **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed"),
   a banner with what moved since, blue dots on the new versions.
 - **Diff**: unified or side by side, "seen" files (the tick is dropped if the file changes), files coming from master hidden.
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution;

@@ -321,7 +321,7 @@ export class PrService {
             throw new AppError(404, 'BB_NOT_FOUND', 'No version found for this pull request.', { reason: 'no-versions' });
         }
         const meUuid = me?.uuid ?? null;
-        const review = computeReview({ versions, activity, comments, meUuid, local: this.store.prState(prKeyOf(ref)) });
+        const review = computeReview({ versions, activity, meUuid, local: this.store.prState(prKeyOf(ref)) });
         const threads: Thread[] = buildThreads(comments, versions, { meUuid, sinceDate: review.lastReviewedAt });
         const info = prInfo(ref, pr);
         const head = pr.source?.commit?.hash ?? versions[versions.length - 1]?.hash ?? '';

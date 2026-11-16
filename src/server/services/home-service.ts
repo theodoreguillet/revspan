@@ -404,9 +404,7 @@ export class HomeService {
 
         const activity = await this.activityOf(client, ref, raw);
         const versions = extractUpdates(activity, raw).map((u, i) => ({ index: i + 1, hash: u.hash, pushedAt: u.date }));
-        // The activity comments are enough here (no need to load all the comments).
-        const myComments = activity.flatMap((e) => (e.comment && e.comment.user?.uuid === meUuid ? [e.comment] : []));
-        const review = computeReview({ versions, activity, comments: myComments, meUuid, local });
+        const review = computeReview({ versions, activity, meUuid, local });
         const lastReviewed = review.lastReviewed;
         const newVersions = versions.length - (lastReviewed ?? 0);
 

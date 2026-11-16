@@ -188,7 +188,7 @@ export const en = {
     'banner.depsVersions': { one: '{count} dependency update', other: '{count} dependency updates' },
     'banner.otherVersions': { one: '{count} other with no change from the author', other: '{count} others with no change from the author' },
     'banner.markReviewed': 'Mark v{version} as reviewed',
-    'banner.rule': 'Approving or commenting marks the version as reviewed automatically.',
+    'banner.rule': 'Approving marks the version as reviewed automatically.',
 
     // ---------- Timeline and range ----------
     'timeline.label': 'Version timeline',

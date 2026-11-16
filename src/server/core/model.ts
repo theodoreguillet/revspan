@@ -158,28 +158,22 @@ interface ReviewCandidate {
 }
 
 /**
- * Last review = the most recent of my approvals / change requests / new comments,
- * or of the local "reviewed" mark.
+ * Last review = the most recent of my approvals / change requests or of the local "reviewed" mark.
+ * A comment never counts: only an explicit verdict or "Mark as reviewed" sets the review.
  */
 export function computeReview(input: {
     versions: readonly DatedVersion[];
     activity: readonly BbActivity[];
-    comments: readonly BbComment[];
     meUuid: string | null;
     local: LocalReview | null;
 }): Review {
-    const { versions, activity, comments, meUuid, local } = input;
+    const { versions, activity, meUuid, local } = input;
     const candidates: ReviewCandidate[] = [];
     if (meUuid) {
         for (const entry of activity) {
             const event = entry.approval ?? entry.changes_requested;
             if (event?.user?.uuid === meUuid && event.date) {
                 candidates.push({ source: 'approval', at: event.date, version: versionAt(versions, event.date) });
-            }
-        }
-        for (const comment of comments) {
-            if (comment.user?.uuid === meUuid && !comment.deleted && comment.created_on && !isReply(comment)) {
-                candidates.push({ source: 'comment', at: comment.created_on, version: versionAt(versions, comment.created_on) });
             }
         }
     }
