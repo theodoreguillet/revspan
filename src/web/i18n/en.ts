@@ -289,6 +289,7 @@ export const en = {
     'file.renamedOnly': 'File renamed without content changes.',
     'file.noLines': 'No changed lines to show.',
     'files.label': 'Files',
+    'files.loading': 'Loading the files…',
     'files.progress': '{seen} / {total} viewed',
     'files.code': 'Code',
     'files.deps': 'Dependencies',

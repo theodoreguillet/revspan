@@ -15,9 +15,14 @@ const STATUS_ICONS = {
     changed: { icon: '●', cls: 'changed', title: 'files.changedSinceViewed' },
 } as const satisfies Record<ViewedStatus, { icon: string; cls: string; title: MessageKey }>;
 const INDENT = 12;
+/** Row widths of the placeholder list. */
+const SKELETON_ROWS = ['70%', '55%', '82%', '48%', '64%', '58%'];
 
 type GroupKey = 'code' | 'deps';
 interface Entry { path: string; file: FileDiff; idx: number }
+
+/** skeleton: placeholder rows while a slow diff is computed (the width and the resize handle stay). */
+defineProps<{ skeleton?: boolean }>();
 
 const page = usePrPage();
 const files = computed(() => page.compare?.files ?? []);
@@ -86,63 +91,69 @@ watch(() => page.curFile, async (idx) => {
 <template>
     <aside ref="panel" :class="['rv-files', { resizing: resize.dragging.value }]" :style="resize.style.value" :aria-label="t('files.label')">
         <div class="rv-files-in">
-            <div class="rv-prog">
-                <span class="cnt">{{ t('files.progress', { seen: seenCount, total: files.length }) }}</span>
-                <span class="rv-bar"><i :style="{ width: `${files.length ? (100 * seenCount) / files.length : 0}%` }" /></span>
+            <div v-if="skeleton" class="rv-files-skel" aria-busy="true">
+                <span class="rv-sr-only">{{ t('files.loading') }}</span>
+                <div v-for="(width, k) in SKELETON_ROWS" :key="k" class="rv-skel" :style="{ width }" />
             </div>
-            <template v-for="group in groups" :key="group.key">
-                <div class="rv-grp">{{ t(group.label) }}</div>
-                <template v-for="row in group.rows" :key="row.kind === 'dir' ? `d:${row.dir.path}` : `f:${row.item.path}`">
-                    <div
-                        v-if="row.kind === 'dir'"
-                        :class="['rv-d', { collapsed: row.collapsed }]"
-                        :style="indent(row.depth)"
-                        :data-dir="row.dir.path"
-                        :title="row.dir.path"
-                        role="button"
-                        tabindex="0"
-                        :aria-expanded="!row.collapsed"
-                        @click="toggleDir(group.key, row.dir.path)"
-                        @keydown.enter.space.prevent="toggleDir(group.key, row.dir.path)"
-                    >
-                        <span class="tw" aria-hidden="true">{{ row.collapsed ? '▸' : '▾' }}</span>
-                        <span class="nm"><bdi>{{ row.dir.name }}</bdi></span>
-                        <template v-if="row.collapsed">
-                            <span v-if="dirThreads(row.files)" class="cm" :title="t('common.threads', { count: dirThreads(row.files) })">💬{{ dirThreads(row.files) }}</span>
-                            <span v-if="unseen(row.files)" class="un" :title="t('files.dirUnseen', { count: unseen(row.files) })">{{ unseen(row.files) }}</span>
-                            <span v-else class="ck seen" :title="t('files.dirViewed')">✓</span>
-                        </template>
-                    </div>
-                    <div
-                        v-else
-                        :ref="(el) => setRow(row.item.idx, el)"
-                        :class="['rv-f', { cur: row.item.idx === page.curFile }]"
-                        :style="indent(row.depth)"
-                        :data-path="row.item.path"
-                        :data-idx="row.item.idx"
-                        :title="row.item.path"
-                        role="button"
-                        tabindex="0"
-                        @click="page.gotoFile(row.item.idx, { expand: true })"
-                        @keydown.enter.space.prevent="page.gotoFile(row.item.idx, { expand: true })"
-                    >
-                        <span :class="['ck', status(row.item.file).cls]" :title="t(status(row.item.file).title)">{{ status(row.item.file).icon }}</span>
-                        <span class="nm"><span class="base">{{ basename(row.item.path) }}</span></span>
-                        <span v-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
-                        <span v-if="threads(row.item.file)" class="cm" :title="t('common.threads', { count: threads(row.item.file) })">💬{{ threads(row.item.file) }}</span>
-                        <span class="ad">+{{ row.item.file.added }}</span>
-                        <span class="dl">{{ MINUS }}{{ row.item.file.removed }}</span>
-                    </div>
+            <template v-else>
+                <div class="rv-prog">
+                    <span class="cnt">{{ t('files.progress', { seen: seenCount, total: files.length }) }}</span>
+                    <span class="rv-bar"><i :style="{ width: `${files.length ? (100 * seenCount) / files.length : 0}%` }" /></span>
+                </div>
+                <template v-for="group in groups" :key="group.key">
+                    <div class="rv-grp">{{ t(group.label) }}</div>
+                    <template v-for="row in group.rows" :key="row.kind === 'dir' ? `d:${row.dir.path}` : `f:${row.item.path}`">
+                        <div
+                            v-if="row.kind === 'dir'"
+                            :class="['rv-d', { collapsed: row.collapsed }]"
+                            :style="indent(row.depth)"
+                            :data-dir="row.dir.path"
+                            :title="row.dir.path"
+                            role="button"
+                            tabindex="0"
+                            :aria-expanded="!row.collapsed"
+                            @click="toggleDir(group.key, row.dir.path)"
+                            @keydown.enter.space.prevent="toggleDir(group.key, row.dir.path)"
+                        >
+                            <span class="tw" aria-hidden="true">{{ row.collapsed ? '▸' : '▾' }}</span>
+                            <span class="nm"><bdi>{{ row.dir.name }}</bdi></span>
+                            <template v-if="row.collapsed">
+                                <span v-if="dirThreads(row.files)" class="cm" :title="t('common.threads', { count: dirThreads(row.files) })">💬{{ dirThreads(row.files) }}</span>
+                                <span v-if="unseen(row.files)" class="un" :title="t('files.dirUnseen', { count: unseen(row.files) })">{{ unseen(row.files) }}</span>
+                                <span v-else class="ck seen" :title="t('files.dirViewed')">✓</span>
+                            </template>
+                        </div>
+                        <div
+                            v-else
+                            :ref="(el) => setRow(row.item.idx, el)"
+                            :class="['rv-f', { cur: row.item.idx === page.curFile }]"
+                            :style="indent(row.depth)"
+                            :data-path="row.item.path"
+                            :data-idx="row.item.idx"
+                            :title="row.item.path"
+                            role="button"
+                            tabindex="0"
+                            @click="page.gotoFile(row.item.idx, { expand: true })"
+                            @keydown.enter.space.prevent="page.gotoFile(row.item.idx, { expand: true })"
+                        >
+                            <span :class="['ck', status(row.item.file).cls]" :title="t(status(row.item.file).title)">{{ status(row.item.file).icon }}</span>
+                            <span class="nm"><span class="base">{{ basename(row.item.path) }}</span></span>
+                            <span v-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
+                            <span v-if="threads(row.item.file)" class="cm" :title="t('common.threads', { count: threads(row.item.file) })">💬{{ threads(row.item.file) }}</span>
+                            <span class="ad">+{{ row.item.file.added }}</span>
+                            <span class="dl">{{ MINUS }}{{ row.item.file.removed }}</span>
+                        </div>
+                    </template>
                 </template>
+                <div v-if="!files.length" class="rv-grp">{{ t('files.none') }}</div>
+                <div v-if="masterOnly.length" class="rv-masked">
+                    {{ t('files.masterOnly', { count: masterOnly.length }) }}
+                    <button type="button" class="rv-link" @click="page.showMasterOnly = !page.showMasterOnly">{{ page.showMasterOnly ? t('files.hide') : t('files.show') }}</button>
+                    <ul v-if="page.showMasterOnly">
+                        <li v-for="p in masterOnly" :key="p" :title="p"><bdi>{{ p }}</bdi></li>
+                    </ul>
+                </div>
             </template>
-            <div v-if="!files.length" class="rv-grp">{{ t('files.none') }}</div>
-            <div v-if="masterOnly.length" class="rv-masked">
-                {{ t('files.masterOnly', { count: masterOnly.length }) }}
-                <button type="button" class="rv-link" @click="page.showMasterOnly = !page.showMasterOnly">{{ page.showMasterOnly ? t('files.hide') : t('files.show') }}</button>
-                <ul v-if="page.showMasterOnly">
-                    <li v-for="p in masterOnly" :key="p" :title="p"><bdi>{{ p }}</bdi></li>
-                </ul>
-            </div>
         </div>
         <div
             class="rv-resize"

@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Comment, Comparison, DiffLine, PrDetail } from '../../src/shared/api.ts';
 import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
-import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
+import { setHostVisible } from '../../src/web/composables/usePageVisible.ts';
+import { usePrLoad, type PrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { composerTargetFor } from '../../src/web/lib/diff.ts';
+import { presets } from '../../src/web/lib/selection.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
@@ -259,5 +261,155 @@ describe('PR page writes without waiting for a reload', () => {
         expect(showError).toHaveBeenCalledWith(expect.objectContaining({ message: 'local update failed' }));
         expect(load.pendingAction.value).toBeNull();
         expect(api.pr).toHaveBeenCalledOnce();
+    });
+});
+
+describe('PR page loading and prefetch', () => {
+    let detail: PrDetail;
+    const started: PrLoad[] = [];
+    // 6 versions, last reviewed v2: since = v2 → v6, last = v5 → v6, all = master → v6
+    const plan = () => ({ presets: presets(6, 2), context: 3 });
+    const since = { from: 2, to: 6, context: 3 };
+
+    function prefetching(): PrLoad {
+        const load = usePrLoad(ref, detail);
+        load.startPrefetch(plan);
+        started.push(load);
+        return load;
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        detail = prLong().data;
+        setHostVisible(true);
+    });
+
+    afterEach(() => {
+        started.splice(0).forEach((load) => load.stopPrefetch());
+        setHostVisible(true);
+        vi.useRealTimers();
+    });
+
+    it('switches to the skeleton 200 ms after a user request', async () => {
+        vi.useFakeTimers();
+        const slow = deferred<Comparison>();
+        api.compare.mockResolvedValueOnce(comparison(2, 6)).mockReturnValueOnce(slow.promise);
+        const load = usePrLoad(ref, detail);
+        expect(load.diffMode.value).toBe('skeleton');
+        await load.loadCompare(since);
+        expect(load.diffMode.value).toBe('diff');
+
+        const loading = load.loadCompare({ from: 3, to: 6, context: 3 });
+        expect(load.diffMode.value).toBe('progress');
+        vi.advanceTimersByTime(199);
+        expect(load.diffMode.value).toBe('progress');
+        vi.advanceTimersByTime(1);
+        expect(load.diffMode.value).toBe('skeleton');
+        slow.resolve(comparison(3, 6));
+        await loading;
+        expect(load.diffMode.value).toBe('diff');
+        load.stopPrefetch();
+    });
+
+    it('prefetches only while visible', async () => {
+        const last = deferred<Comparison>();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 5 ? last.promise : Promise.resolve(comparison(from, to))));
+        setHostVisible(false);
+        const load = prefetching();
+        await load.loadCompare(since);
+        await settle();
+        expect(api.compare).toHaveBeenCalledOnce();
+
+        setHostVisible(true);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
+        expect(api.compare).toHaveBeenLastCalledWith(ref, 5, 6, 3);
+        // one range at a time
+        await settle();
+        expect(api.compare).toHaveBeenCalledTimes(2);
+
+        // hidden while a range is computed: it lands in the cache, the next one waits
+        setHostVisible(false);
+        last.resolve(comparison(5, 6));
+        await settle();
+        expect(api.compare).toHaveBeenCalledTimes(2);
+
+        setHostVisible(true);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(3));
+        expect(api.compare).toHaveBeenLastCalledWith(ref, 0, 6, 3);
+        await settle();
+        expect(api.compare).toHaveBeenCalledTimes(3);
+
+        // a click on a prefetched preset shows it at once
+        await load.loadCompare({ from: 5, to: 6, context: 3 });
+        expect(load.compare.value?.to).toBe(6);
+        expect(load.compareLoading.value).toBe(false);
+        expect(api.compare).toHaveBeenCalledTimes(3);
+    });
+
+    it('a user selection overtakes the prefetch', async () => {
+        const last = deferred<Comparison>();
+        const picked = deferred<Comparison>();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => {
+            if (from === 5) {
+                return last.promise;
+            }
+            return from === 3 ? picked.promise : Promise.resolve(comparison(from, to, `${from}-${to}`));
+        });
+        const load = prefetching();
+        await load.loadCompare(since);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
+
+        const picking = load.loadCompare({ from: 3, to: 6, context: 3 });
+        // asked at once, not queued behind the prefetch
+        expect(api.compare).toHaveBeenCalledTimes(3);
+        last.resolve(comparison(5, 6, 'prefetched'));
+        await settle();
+        // the prefetch lands in the cache without replacing the diff, and nothing else starts while the user waits
+        expect(load.compare.value?.messageTo).toBe('2-6');
+        expect(load.compareLoading.value).toBe(true);
+        expect(api.compare).toHaveBeenCalledTimes(3);
+
+        picked.resolve(comparison(3, 6, 'picked'));
+        await picking;
+        expect(load.compare.value?.messageTo).toBe('picked');
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(4));
+        expect(api.compare).toHaveBeenLastCalledWith(ref, 0, 6, 3);
+
+        await load.loadCompare({ from: 5, to: 6, context: 3 });
+        expect(load.compare.value?.messageTo).toBe('prefetched');
+        expect(api.compare).toHaveBeenCalledTimes(4);
+    });
+
+    it('a selection of the range being prefetched waits for the same request', async () => {
+        const last = deferred<Comparison>();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 5 ? last.promise : Promise.resolve(comparison(from, to))));
+        const load = prefetching();
+        await load.loadCompare(since);
+        await vi.waitFor(() => expect(api.compare).toHaveBeenCalledTimes(2));
+
+        const picking = load.loadCompare({ from: 5, to: 6, context: 3 });
+        last.resolve(comparison(5, 6, 'shared'));
+        await picking;
+        expect(load.compare.value?.messageTo).toBe('shared');
+        expect(api.compare.mock.calls.filter(([, from]) => from === 5)).toHaveLength(1);
+    });
+
+    it('does not prefetch a large PR, and stops for good', async () => {
+        const big = { ...comparison(2, 6), stats: { files: 31, added: 1, removed: 0 } };
+        api.compare.mockResolvedValueOnce(big).mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        const large = prefetching();
+        await large.loadCompare(since);
+        await settle();
+        expect(api.compare).toHaveBeenCalledOnce();
+
+        vi.clearAllMocks();
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+        setHostVisible(false);
+        const left = prefetching();
+        await left.loadCompare(since);
+        left.stopPrefetch();
+        setHostVisible(true);
+        await settle();
+        expect(api.compare).toHaveBeenCalledOnce();
     });
 });

@@ -288,6 +288,7 @@ export const fr: Catalog = {
     'file.renamedOnly': 'Fichier renommé sans changement de contenu.',
     'file.noLines': 'Aucune ligne modifiée à afficher.',
     'files.label': 'Fichiers',
+    'files.loading': 'Chargement des fichiers…',
     'files.progress': '{seen} / {total} vus',
     'files.code': 'Code',
     'files.deps': 'Dépendances',

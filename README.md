@@ -196,6 +196,7 @@ Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one rep
 | After one code push on a PR you reviewed, with the version check | **19** (was 47) |
 | Explicit Refresh (VS Code command or the page's ↻ button) | **3** (was 30) |
 | A repository fails (rate limit, outage), second window within 60 s | **0**: the failed home is shared for 60 s |
+| Opening a PR of ≤ 30 files: up to 3 extra comparisons in the background (prefetch), none for larger PRs or hidden tabs | **+1** on the main PR (48 → 49, cold caches): 2 comparisons, the third preset being the diff shown, mostly reuse what the version summaries already read |
 
 Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only
 one window computes) and `home.drop` (a counter bumped on every write, so a result computed before a write is not

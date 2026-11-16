@@ -1,14 +1,23 @@
-// PR page data: detail (always loaded), version summary, range diff (cached), and writes shown at once then
-// confirmed by a background refresh of the detail.
-import { computed, ref, shallowRef } from 'vue';
+// PR page data: detail (always loaded), version summary, range diff (cached, presets prefetched), and writes shown at
+// once then confirmed by a background refresh of the detail.
+import { computed, ref, shallowRef, watch, type WatchStopHandle } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
 import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
-import type { Range } from '../lib/selection.ts';
+import { diffDisplay, SKELETON_DELAY_MS } from '../lib/loading.ts';
+import { prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
+import type { Preset, Range } from '../lib/selection.ts';
 import { t } from '../i18n/index.ts';
 import { api, ApiError } from '../services/api.ts';
 import { showError } from './useErrors.ts';
+import { usePageVisible } from './usePageVisible.ts';
 
 export interface CompareParams extends Range {
+    context: number;
+}
+
+/** What the prefetch computes, read each time it picks the next range (the version list may have changed). */
+export interface PrefetchPlan {
+    presets: readonly Preset[];
     context: number;
 }
 
@@ -30,6 +39,14 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     const compare = shallowRef<Comparison | null>(null);
     const compareLoading = ref(false);
     const compareError = shallowRef<unknown>(null);
+    /** Start of the comparison the user is waiting for (null: none), and a clock ticked when the skeleton is due. */
+    const compareSince = ref<number | null>(null);
+    const now = ref(Date.now());
+    let skeletonTimer: ReturnType<typeof setTimeout> | undefined;
+    /** What the diff area shows: the diff, the diff with the progress bar, or the skeleton. */
+    const diffMode = computed(() => diffDisplay({
+        loading: compareLoading.value, since: compareSince.value, now: now.value, hasCompare: compare.value !== null,
+    }));
     const cache = new Map<string, Comparison>();
     /** Comparisons being computed, by key: asking again for the same range waits for the same answer. */
     const inflight = new Map<string, Promise<Comparison>>();
@@ -41,6 +58,17 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     let summaryRequest = 0;
     /** Versions a comparison found erased (410) that already triggered a detail reload: at most once each, no loop. */
     const reloadedForPurge = new Set<number>();
+
+    const visible = usePageVisible();
+    /** Prefetch source, null when not started or stopped (page left). */
+    let prefetchPlan: (() => PrefetchPlan) | null = null;
+    let stopVisibleWatch: WatchStopHandle | null = null;
+    /** A prefetched range is being computed: one at a time. */
+    let prefetchRunning = false;
+    /** The prefetch starts once a first diff is shown: the page's own comparison goes first. */
+    let compareShown = false;
+    /** Keys the prefetch already asked for (landed, failed or dropped): never asked twice, its cost stays capped. */
+    const prefetched = new Set<string>();
 
     /** Write action in progress (key of its button), during the write only; only one at a time. */
     const pendingAction = ref<string | null>(null);
@@ -156,17 +184,40 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         return cache.get(key) ?? result;
     }
 
+    /** The skeleton timer starts with the first request of a wait: a second click while waiting does not restart it. */
+    function setCompareLoading(on: boolean): void {
+        compareLoading.value = on;
+        if (!on) {
+            compareSince.value = null;
+            clearTimeout(skeletonTimer);
+            return;
+        }
+        if (compareSince.value === null) {
+            compareSince.value = Date.now();
+            now.value = compareSince.value;
+            skeletonTimer = setTimeout(() => {
+                now.value = Date.now();
+            }, SKELETON_DELAY_MS);
+        }
+    }
+
+    function showCompare(result: Comparison): void {
+        compare.value = result;
+        compareError.value = null;
+        compareShown = true;
+    }
+
     async function loadCompare(params: CompareParams): Promise<void> {
         const request = ++compareRequest;
         const key = keyOf(params);
         const cached = cache.get(key);
         if (cached) {
-            compare.value = cached;
-            compareError.value = null;
-            compareLoading.value = false;
+            showCompare(cached);
+            setCompareLoading(false);
+            pumpPrefetch();
             return;
         }
-        compareLoading.value = true;
+        setCompareLoading(true);
         try {
             const result = await fetchIntoCache(params);
             if (result === null) {
@@ -177,8 +228,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
                 return;
             }
             if (request === compareRequest) {
-                compare.value = result;
-                compareError.value = null;
+                showCompare(result);
             }
         } catch (error) {
             if (request === compareRequest) {
@@ -195,8 +245,55 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             }
         }
         if (request === compareRequest) {
-            compareLoading.value = false;
+            setCompareLoading(false);
+            pumpPrefetch();
         }
+    }
+
+    /**
+     * Computes the next preset range not cached yet, in the background, into the cache only (never the shown diff):
+     * while the page is visible, once a first diff is shown, never while the user waits for a diff (theirs goes first,
+     * the prefetch resumes after it), one range at a time, and only for a PR of at most PREFETCH_MAX_FILES files.
+     */
+    function pumpPrefetch(): void {
+        if (!prefetchPlan || prefetchRunning || !compareShown || compareLoading.value || !visible.value) {
+            return;
+        }
+        const { presets, context } = prefetchPlan();
+        const rangeKey = (r: Range): string => keyOf({ ...r, context });
+        const skip = new Set([...cache.keys(), ...inflight.keys(), ...prefetched]);
+        const last = Math.max(0, ...presets.map((p) => p.to));
+        const next = prefetchQueue(presets, skip, rangeKey, prefetchFileCount(cache.values(), last))[0];
+        if (!next) {
+            return;
+        }
+        prefetched.add(rangeKey(next));
+        prefetchRunning = true;
+        // a failure stays silent: a click on that preset asks again and shows the error
+        void fetchIntoCache({ ...next, context }).catch(() => null).finally(() => {
+            prefetchRunning = false;
+            pumpPrefetch();
+        });
+    }
+
+    /** Starts the prefetch of the presets; it pauses while the page is hidden and resumes when it shows again. */
+    function startPrefetch(plan: () => PrefetchPlan): void {
+        prefetchPlan = plan;
+        stopVisibleWatch?.();
+        stopVisibleWatch = watch(visible, (isVisible) => {
+            if (isVisible) {
+                pumpPrefetch();
+            }
+        });
+        pumpPrefetch();
+    }
+
+    /** Page left: no more background comparison (one in flight may still land in the cache) nor timer. */
+    function stopPrefetch(): void {
+        prefetchPlan = null;
+        stopVisibleWatch?.();
+        stopVisibleWatch = null;
+        clearTimeout(skeletonTimer);
     }
 
     /**
@@ -280,8 +377,9 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     }
 
     return {
-        detail, summary, sums, compare, compareLoading, compareError, pendingAction, acting, busy, refreshing,
-        loadSummary, loadCompare, fetchIntoCache, refreshDetail, act, patchDetail, patchCompare, evictCompare, patchReview,
+        detail, summary, sums, compare, compareLoading, compareError, diffMode, pendingAction, acting, busy, refreshing,
+        loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, act, patchDetail, patchCompare,
+        evictCompare, patchReview,
     };
 }
 

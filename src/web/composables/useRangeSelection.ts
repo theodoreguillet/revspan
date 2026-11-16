@@ -4,7 +4,8 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { PrDetail, PrRef } from '../../shared/api.ts';
 import {
-    clickSelection, defaultSelection, isValidSelection, parseRangeQuery, repairSelection, singleVersion, unavailableVersions, type Range,
+    clickSelection, defaultSelection, isValidSelection, parseRangeQuery, presets as presetsOf, repairSelection, singleVersion, unavailableVersions,
+    type Range,
 } from '../lib/selection.ts';
 
 export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
@@ -12,6 +13,8 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
     const router = useRouter();
     const n = computed(() => detail.value.versions.length);
     const unavailable = computed(() => unavailableVersions(detail.value.versions));
+    /** Preset ranges ("Since my review", "Last version", "All vs master") of the current version list. */
+    const presets = computed(() => presetsOf(n.value, detail.value.review.lastReviewed, unavailable.value));
 
     const rangeQuery = (r: Range): Record<string, string> => ({ from: String(r.from), to: String(r.to) });
 
@@ -87,5 +90,5 @@ export function useRangeSelection(prRef: PrRef, detail: Ref<PrDetail>) {
         }
     });
 
-    return { n, unavailable, from, to, select, selectVersion, clickVersion, stepVersion };
+    return { n, unavailable, presets, from, to, select, selectVersion, clickVersion, stepVersion };
 }

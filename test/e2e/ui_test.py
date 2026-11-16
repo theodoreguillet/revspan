@@ -138,6 +138,12 @@ def fake_delete_comment(cid):
     urllib.request.urlopen(request, timeout=10).close()
 
 
+def fake_delay(route, ms):
+    """Slows down the fake Bitbucket's requests whose path has that segment (ms=0: back to normal)."""
+    base = CALLS_URL.rsplit('/__calls', 1)[0]
+    http_json(f'{base}/__delay?route={route}&ms={ms}')
+
+
 def body_of(call):
     return call.get('body') or {}
 
@@ -181,7 +187,7 @@ def readout(page):
 def wait_pr_ready(page):
     expect(page.locator('.rv-track .rv-v')).not_to_have_count(0, timeout=20000)
     expect(page.locator('.rv-tabs')).to_be_visible()
-    page.wait_for_function('() => !document.querySelector(".rv-body.loading") && !document.querySelector(".rv-loading")', timeout=20000)
+    page.wait_for_function('() => !document.querySelector(".rv-progress") && !document.querySelector(".rv-diff-skel")', timeout=20000)
 
 
 def open_pr(page, ref, query=''):
@@ -420,6 +426,26 @@ def run_checks(page):
             expect(page.locator('.rv-preset.on[data-preset="since"]')).to_be_visible()
     open_main(page)
 
+    if FAKE_PRS and CALLS_URL:
+        @check('diff_skeleton: a slow diff shows the progress bar, then a skeleton instead of the greyed diff')
+        def diff_skeleton(page):
+            # Shift+click on v4 inside v2 → v6 moves "from": v3 → v6, never computed yet (its diffstat is slowed down)
+            fake_delay('diffstat', 1500)
+            try:
+                page.click('.rv-v[data-i="4"]', modifiers=['Shift'])
+                expect(page.locator('.rv-progress[role="progressbar"][data-loading]')).to_be_attached()
+                expect(page.locator('.rv-diff-skel[aria-busy="true"]')).to_be_visible()
+                expect(page.locator('.rv-files-skel[aria-busy="true"]')).to_be_visible()
+                expect(page.locator('.rv-diff .rv-file')).to_have_count(0)
+                expect(page.locator('.rv-body.loading')).to_have_count(0)
+            finally:
+                fake_delay('diffstat', 0)
+            expect(page.locator('.rv-diff-skel')).to_have_count(0, timeout=10000)
+            expect(page.locator('.rv-progress')).to_have_count(0)
+            expect(page.locator('.rv-diff .rv-file')).not_to_have_count(0)
+            expect(readout(page)).to_contain_text('Changements de v4 à v6 · par rapport à v3')
+        diff_skeleton(page)
+
     @check('click on a version = what it changed')
     def click_version(page):
         page.click('.rv-v[data-i="4"]')
@@ -501,9 +527,9 @@ def run_checks(page):
     def full_context(page):
         before = page.locator('.rv-diff .rv-l').count()
         page.locator('.rv-seg button[data-seg="full"]').click()
-        page.wait_for_function(f'() => !document.querySelector(".rv-body.loading") && document.querySelectorAll(".rv-diff .rv-l").length > {before}', timeout=10000)
+        page.wait_for_function(f'() => !document.querySelector(".rv-progress") && document.querySelectorAll(".rv-diff .rv-l").length > {before}', timeout=10000)
         page.locator('.rv-seg button[data-seg="3"]').click()
-        page.wait_for_function(f'() => !document.querySelector(".rv-body.loading") && document.querySelectorAll(".rv-diff .rv-l").length === {before}', timeout=10000)
+        page.wait_for_function(f'() => !document.querySelector(".rv-progress") && document.querySelectorAll(".rv-diff .rv-l").length === {before}', timeout=10000)
     full_context(page)
 
     @check('inline comment (+ button, Cmd/Ctrl+Enter)')

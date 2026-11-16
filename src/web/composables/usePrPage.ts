@@ -1,6 +1,6 @@
 // PR page state, shared through provide/inject: assembles the specialized composables
 // (data, range, display options, navigation, comments, review) and wires them together.
-import { computed, inject, nextTick, provide, reactive, watch, type InjectionKey } from 'vue';
+import { computed, inject, nextTick, onScopeDispose, provide, reactive, watch, type InjectionKey } from 'vue';
 import type { PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
 import { viewedStatus } from '../lib/diff.ts';
 import { useDiffNav } from './useDiffNav.ts';
@@ -24,10 +24,14 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     const canInlineComment = computed(() => load.compare.value?.to === range.n.value && load.detail.value.pr.state === 'OPEN');
     const files = computed(() => load.compare.value?.files ?? []);
 
-    const compareParams = () => ({ from: range.from.value, to: range.to.value, context: options.fullContext.value ? FULL_CONTEXT : 3 });
+    const context = (): number => (options.fullContext.value ? FULL_CONTEXT : 3);
+    const compareParams = () => ({ from: range.from.value, to: range.to.value, context: context() });
 
     void load.loadSummary();
     void load.loadCompare(compareParams());
+    // presets computed in the background with the current context, so that a click on one shows it at once
+    load.startPrefetch(() => ({ presets: range.presets.value, context: context() }));
+    onScopeDispose(load.stopPrefetch);
 
     watch([range.from, range.to], () => {
         discussion.closeComposer();

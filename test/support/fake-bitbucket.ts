@@ -1,6 +1,7 @@
 // In-memory fake Bitbucket Cloud (API 2.0) for integration tests, the UI and development.
 // Repository acme/demo-repo, several PRs covering the page's cases (see FAKE_PRS). Writes are
-// recorded (GET /__calls), so are all requests (GET /__requests). Manual launch: node test/support/fake-bitbucket.ts [port]
+// recorded (GET /__calls), so are all requests (GET /__requests). GET /__delay?route=diffstat&ms=1500 slows down every
+// request whose path has that segment (ms=0 removes it). Manual launch: node test/support/fake-bitbucket.ts [port]
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -417,6 +418,8 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
     const auth = `Basic ${Buffer.from(`${FAKE_EMAIL}:${FAKE_TOKEN}`).toString('base64')}`;
     const fullHash = (prefix: string): string | undefined => [...data.repo.commits.keys()].find((k) => k.startsWith(prefix));
     let failNext: number | null = null;
+    /** Answer delay by path segment ("diffstat", "src"...): slow Bitbucket for the loading indicators. */
+    const delays = new Map<string, number>();
 
     const server = http.createServer((req, res) => {
         void handle(req, res).catch((error: Error) => send(res, 500, { error: { message: error.message } }));
@@ -435,6 +438,16 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             failNext = Number(url.searchParams.get('status'));
             return send(res, 200, { ok: true });
         }
+        if (path === '/__delay') {
+            const route = url.searchParams.get('route') ?? '';
+            const ms = Number(url.searchParams.get('ms') ?? 0);
+            if (ms > 0) {
+                delays.set(route, ms);
+            } else {
+                delays.delete(route);
+            }
+            return send(res, 200, { ok: true });
+        }
         if (req.headers.authorization !== auth) {
             return send(res, 401, { type: 'error', error: { message: 'Unauthorized' } });
         }
@@ -443,6 +456,10 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             const status = failNext;
             failNext = null;
             return send(res, status, { type: 'error', error: { message: 'boom' } });
+        }
+        const delay = [...delays].find(([route]) => path.split('/').includes(route))?.[1];
+        if (delay) {
+            await new Promise((done) => setTimeout(done, delay));
         }
         const body = req.method === 'GET' ? null : await readBody(req);
         if (req.method !== 'GET') {

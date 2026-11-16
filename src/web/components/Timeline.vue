@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { t, tr } from '../i18n/index.ts';
-import { PRESET_LABELS, presets, readout } from '../lib/selection.ts';
+import { PRESET_LABELS, readout } from '../lib/selection.ts';
 import { inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
 import TimelineNode from './TimelineNode.vue';
 
@@ -27,7 +27,6 @@ const text = computed(() => {
     const stats = cmp && cmp.from === page.from && cmp.to === page.to ? cmp.stats : null;
     return readout(tr(), { from: page.from, to: page.to, versions: versions.value, sums: page.sums, stats, destBranch: dest.value });
 });
-const presetList = computed(() => presets(page.n, lastReviewed.value, page.unavailable));
 
 const band = (after: number): boolean => inBand(after, page.from, page.to);
 
@@ -123,7 +122,7 @@ onBeforeUnmount(() => {
         <div class="rv-tl-foot">
             <span class="rv-readout" aria-live="polite"><b>{{ text.bold }}</b> <span class="s">{{ text.rest }}</span></span>
             <button
-                v-for="p in presetList"
+                v-for="p in page.presets"
                 :key="p.key"
                 type="button"
                 :class="['rv-preset', { on: p.from === page.from && p.to === page.to }]"
@@ -137,5 +136,7 @@ onBeforeUnmount(() => {
                 <span class="rv-legend"><span class="reb">◆</span> {{ t('timeline.legendRebase') }} · <span class="new">●</span> {{ t('timeline.legendNew') }}</span>
             </span>
         </div>
+        <!-- a diff the user asked for is being computed (never the background prefetch) -->
+        <div v-if="page.compareLoading" class="rv-progress" role="progressbar" data-loading :aria-label="t('diff.computing')" />
     </div>
 </template>
