@@ -5,6 +5,7 @@ import { t, tr } from '../i18n/index.ts';
 import { PRESET_LABELS, readout } from '../lib/selection.ts';
 import { inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
 import TimelineNode from './TimelineNode.vue';
+import TimelineSymbol from './TimelineSymbol.vue';
 
 const page = usePrPage();
 const root = ref<HTMLElement | null>(null);
@@ -133,7 +134,13 @@ onBeforeUnmount(() => {
             </button>
             <span class="rv-hint">
                 <label><input id="hide-no-code" v-model="page.hideNoCode" type="checkbox"> {{ t('timeline.hideNoCode') }}</label>
-                <span class="rv-legend"><span class="reb">◆</span> {{ t('timeline.legendRebase') }} · <span class="new">●</span> {{ t('timeline.legendNew') }}</span>
+                <span class="rv-legend" data-legend>
+                    <span><TimelineSymbol /> {{ t('timeline.legendCommit') }}</span>
+                    <span><TimelineSymbol rebase /> {{ t('timeline.legendRebase') }}</span>
+                    <span><TimelineSymbol gone /> {{ t('timeline.legendGone') }}</span>
+                    <span><i class="new" /> {{ t('timeline.legendNew') }}</span>
+                    <span><i class="seen" /> {{ t('timeline.legendReviewed') }}</span>
+                </span>
             </span>
         </div>
         <!-- a diff the user asked for is being computed (never the background prefetch) -->

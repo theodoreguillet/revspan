@@ -6,6 +6,7 @@ import { t, tr } from '../i18n/index.ts';
 import { MINUS } from '../lib/format.ts';
 import { isMuted } from '../lib/kinds.ts';
 import { nodeDelta, nodeTooltip } from '../lib/timeline.ts';
+import TimelineSymbol from './TimelineSymbol.vue';
 
 const props = defineProps<{ version: Version }>();
 const page = usePrPage();
@@ -40,7 +41,7 @@ const title = computed(() => nodeTooltip(tr(), props.version, sum.value, { lastR
     >
         <span class="tag de">{{ t('timeline.from') }}</span>
         <span class="tag a">{{ t('timeline.to') }}</span>
-        <span class="rv-dot" />
+        <TimelineSymbol :rebase="version.isRebase" :gone="!version.available" />
         <span class="rv-vl">v{{ i }}</span>
         <span v-if="delta.code" class="rv-dl code"><span class="a">+{{ delta.added }}</span> <span class="d">{{ MINUS }}{{ delta.removed }}</span></span>
         <span v-else class="rv-dl muted">{{ delta.text }}</span>

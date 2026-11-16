@@ -3,7 +3,6 @@ import type { Version, VersionSummary } from '../../shared/api.ts';
 import type { Translator } from '../i18n/index.ts';
 import { dayKey, daysBetween, fmtDateTime, fmtDay, fmtMonth, gapLabel, isToday, MINUS } from './format.ts';
 import { CODE_KINDS, isMuted, KIND_LABELS, type SummaryMap } from './kinds.ts';
-import { filesText } from './describe.ts';
 
 export const MAX_VISIBLE_NODES = 12;
 
@@ -162,42 +161,46 @@ export function nodeDelta(tr: Translator, sum: VersionSummary | undefined): Node
     return { code: false, text: tr.t(KIND_LABELS[sum.kind]) };
 }
 
-/** Tooltip of a node: version, date, hash, base, type, files. */
+/** Plain-words label of what a version is, for the tooltip's first line. */
+function tipKind(tr: Translator, v: Version, sum: VersionSummary): string {
+    switch (sum.kind) {
+        case 'creation':
+            return `${tr.t('timeline.tipCreation')} (+${sum.added} ${MINUS}${sum.removed})`;
+        case 'code':
+            return `${tr.t(v.isRebase ? 'timeline.tipRebaseCode' : 'timeline.tipCode')} (+${sum.added} ${MINUS}${sum.removed})`;
+        case 'deps':
+            return tr.t('timeline.tipDeps');
+        case 'rebase-only':
+            return tr.t('timeline.tipRebaseOnly');
+        case 'message-only':
+            return tr.t('timeline.tipMessageOnly');
+        case 'unavailable':
+            return tr.t('timeline.tipUnavailable');
+        case 'none':
+            return tr.t('timeline.tipNone');
+    }
+}
+
+/** Tooltip of a node, two lines at most: what the version is, then its date and flags. The Versions tab has the detail. */
 export function nodeTooltip(tr: Translator, v: Version, sum: VersionSummary | undefined, opts: { lastReviewed: number | null; n: number }): string {
-    const parts = [`v${v.index}`, fmtDateTime(tr, v.pushedAt), v.shortHash];
+    const first = [`v${v.index}`];
     if (!v.available) {
-        parts.push(tr.t('timeline.unavailable'));
-        if (v.index === opts.lastReviewed) {
-            parts.push(tr.t('timeline.reviewedByYou'));
-        }
-        return parts.join(' · ');
-    }
-    parts.push(v.isRebase
-        ? `${tr.t('timeline.rebasedOnto', { base: v.baseShort })}${sum?.masterFiles ? ` (${tr.t('timeline.masterFiles', { count: sum.masterFiles })})` : ''}`
-        : tr.t('timeline.onBase', { base: v.baseShort }));
-    if (sum?.since !== undefined) {
-        parts.push(sum.since === 0 ? tr.t('timeline.countedFromBase') : tr.t('timeline.countedFrom', { version: sum.since }));
-    }
-    if (sum) {
-        parts.push(tr.t(KIND_LABELS[sum.kind]));
-        if (sum.files.length) {
-            parts.push(filesText(tr, sum.files, 6));
-        }
-        if (CODE_KINDS.has(sum.kind) || sum.kind === 'deps') {
-            parts.push(`+${sum.added} ${MINUS}${sum.removed}`);
-        }
+        first.push(tr.t('timeline.tipUnavailable'));
+    } else if (sum) {
+        first.push(tipKind(tr, v, sum));
         if (sum.conflicts) {
-            parts.push(tr.t('timeline.conflicts', { count: sum.conflicts }));
+            first.push(tr.t('timeline.tipConflicts', { count: sum.conflicts }));
         }
     }
-    if (v.messageChanged) {
-        parts.push(tr.t('common.commitMessageChanged'));
-    }
-    if (v.index === opts.lastReviewed) {
-        parts.push(tr.t('timeline.reviewedByYou'));
+    const second = [fmtDateTime(tr, v.pushedAt)];
+    if (v.available && v.messageChanged && sum?.kind !== 'message-only') {
+        second.push(tr.t('timeline.tipMessageChanged'));
     }
     if (v.index === opts.n) {
-        parts.push(tr.t('timeline.latest'));
+        second.push(tr.t('timeline.latest'));
     }
-    return parts.join(' · ');
+    if (v.index === opts.lastReviewed) {
+        second.push(tr.t('timeline.reviewedByYou'));
+    }
+    return `${first.join(' · ')}\n${second.join(' · ')}`;
 }

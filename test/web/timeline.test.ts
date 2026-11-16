@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inBand, nodeDelta, nodeStates, nodeTooltip, timelineModel, type TimelineItem } from '../../src/web/lib/timeline.ts';
+import type { Version, VersionSummary } from '../../src/shared/api.ts';
 import { makeSums, makeVersions, prLong, versionAt } from './fixtures.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 
@@ -108,24 +109,56 @@ describe('nodeDelta / nodeTooltip', () => {
         expect(nodeDelta(fr, undefined)).toEqual({ code: false, text: '…' });
     });
 
-    it('tooltip: version, date, hash, base or rebase, type, files', () => {
+    const sumOf = (kind: VersionSummary['kind'], extra: Partial<VersionSummary> = {}): VersionSummary =>
+        ({ index: 1, kind, added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0, ...extra });
+    const tip = (versions: Version[], i: number, sum: VersionSummary | undefined, opts = { lastReviewed: null as number | null, n: 99 }): string =>
+        nodeTooltip(fr, versionAt(versions, i), sum, opts);
+
+    it('nodeTooltip is two lines at most, without hash, base or file list', () => {
         const opts = { lastReviewed: 7, n: 10 };
-        expect(nodeTooltip(fr, versionAt(data.versions, 8), sums.get(8), opts))
-            .toMatch(/^v8 · \d\d\/11 \d\d:\d\d · e437672 · rebase sur 070b8d3 \(137 fichiers de master\) · rebase seul$/);
-        expect(nodeTooltip(fr, versionAt(data.versions, 4), sums.get(4), opts))
-            .toContain('code · UpdateRecord.ts, UpdateRecordSpec.ts, coverage.config.json et openapi.yaml · +35 −14');
-        expect(nodeTooltip(fr, versionAt(data.versions, 7), sums.get(7), opts)).toContain('relue par toi');
-        expect(nodeTooltip(fr, versionAt(data.versions, 10), sums.get(10), opts)).toMatch(/dernière version$/);
+        for (const i of [1, 4, 5, 7, 8, 9, 10]) {
+            const text = nodeTooltip(fr, versionAt(data.versions, i), sums.get(i), opts);
+            expect(text.split('\n').length).toBeLessThanOrEqual(2);
+            expect(text).not.toMatch(/[0-9a-f]{7}|\.ts|comptés|fichiers? de master/);
+        }
     });
 
-    it('unavailable version: explanation in place of the base and the type; old reference flagged', () => {
+    it('nodeTooltip says code with counts', () => {
+        expect(tip(data.versions, 4, sums.get(4)).split('\n')[0]).toBe('v4 · code (+35 −14)');
+    });
+
+    it('nodeTooltip says rebase only, rebase + code, deps and message only', () => {
+        expect(tip(data.versions, 8, sums.get(8)).split('\n')[0]).toBe('v8 · rebase seul');
+        const versions = makeVersions(3, { rebases: [2] });
+        expect(tip(versions, 2, sumOf('code', { added: 3, removed: 1 })).split('\n')[0]).toBe('v2 · rebase + code (+3 −1)');
+        expect(tip(versions, 3, sumOf('deps')).split('\n')[0]).toBe('v3 · deps seulement');
+        expect(tip(versions, 1, sumOf('message-only')).split('\n')[0]).toBe('v1 · message seulement');
+    });
+
+    it('nodeTooltip flags the latest and my last review on line 2', () => {
+        const opts = { lastReviewed: 7, n: 10 };
+        expect(nodeTooltip(fr, versionAt(data.versions, 7), sums.get(7), opts).split('\n')[1]).toMatch(/^\d\d\/11 \d\d:\d\d · relue par toi$/);
+        expect(nodeTooltip(fr, versionAt(data.versions, 10), sums.get(10), opts).split('\n')[1]).toMatch(/^\d\d\/\d\d \d\d:\d\d · dernière version$/);
+        expect(nodeTooltip(fr, versionAt(data.versions, 5), sums.get(5), opts).split('\n')[1]).toMatch(/^\d\d\/\d\d \d\d:\d\d$/);
+    });
+
+    it('nodeTooltip flags a changed commit message unless the version is message only', () => {
+        const versions = makeVersions(2, { messageChanged: [1, 2] });
+        expect(tip(versions, 1, sumOf('code', { added: 1 })).split('\n')[1]).toMatch(/ · message modifié$/);
+        expect(tip(versions, 2, sumOf('message-only'))).not.toContain('message modifié');
+    });
+
+    it('nodeTooltip describes an unavailable version briefly', () => {
         const versions = makeVersions(3, { unavailable: [1] });
-        const unavailable = nodeTooltip(fr, versionAt(versions, 1), { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
-        expect(unavailable).toContain('indisponible : Bitbucket a effacé ce commit');
-        expect(unavailable).toContain('relue par toi');
-        expect(unavailable).not.toContain('base');
-        expect(nodeDelta(fr, { index: 1, kind: 'unavailable', added: 0, removed: 0, files: [], masterFiles: 0, conflicts: 0 })).toEqual({ code: false, text: 'indisponible' });
-        const afterGap = nodeTooltip(fr, versionAt(versions, 2), { index: 2, kind: 'code', since: 0, added: 1, removed: 0, files: [], masterFiles: 0, conflicts: 0 }, { lastReviewed: 1, n: 3 });
-        expect(afterGap).toContain('changements comptés depuis la base (versions précédentes indisponibles)');
+        const text = tip(versions, 1, sumOf('unavailable'), { lastReviewed: 1, n: 3 });
+        expect(text.split('\n')[0]).toBe('v1 · indisponible (écrasée par un force-push)');
+        expect(text.split('\n')[1]).toMatch(/ · relue par toi$/);
+        expect(nodeDelta(fr, sumOf('unavailable'))).toEqual({ code: false, text: 'indisponible' });
+    });
+
+    it('nodeTooltip adds conflicts only when present', () => {
+        const versions = makeVersions(2);
+        expect(tip(versions, 1, sumOf('code', { added: 1, conflicts: 2 })).split('\n')[0]).toBe('v1 · code (+1 −0) · ⚠ 2 conflits avec master');
+        expect(tip(versions, 2, sumOf('code', { added: 1 }))).not.toContain('conflit');
     });
 });

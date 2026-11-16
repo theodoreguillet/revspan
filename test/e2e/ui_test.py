@@ -276,6 +276,8 @@ def screenshots(browser, fixed_time):
                 else:
                     page.wait_for_timeout(800)
                 page.screenshot(path=os.path.join(SHOTS, f'{name}-{scheme}-{width}.png'))
+                if name == 'pr-long':
+                    page.locator('.rv-tl').screenshot(path=os.path.join(SHOTS, f'timeline-{scheme}-{width}.png'))
                 if name != 'pr':
                     continue
                 page.evaluate('() => { const f = document.querySelector(".rv-diff .rv-file:not(.folded)") || document.querySelector(".rv-diff .rv-file");'
@@ -1342,14 +1344,14 @@ def run_checks(page):
             expect(gone).to_have_class(re.compile(r'\bgone\b'))
             expect(gone).to_have_attribute('aria-disabled', 'true')
             expect(gone.locator('.rv-dl')).to_have_text('indisponible')
-            assert 'Bitbucket a effacé ce commit' in (gone.get_attribute('title') or '')
+            assert 'écrasée par un force-push' in (gone.get_attribute('title') or '')
             # My review dates from v1 (unavailable): the default range starts from master.
             assert current_selection(page) == (0, 3), page.evaluate('location.hash')
             gone.click(force=True)  # aria-disabled: Playwright refuses the ordinary click, a user can click
             assert current_selection(page) == (0, 3), 'a click on an unavailable version must change nothing'
             page.click('.rv-v[data-i="2"]')
             assert current_selection(page) == (0, 2), page.evaluate('location.hash')
-            expect(page.locator('.rv-v[data-i="2"]')).to_have_attribute('title', re.compile('changements comptés depuis la base'))
+            expect(page.locator('.rv-v[data-i="2"]')).to_have_attribute('title', re.compile(r'^v2 · code \(\+\d+ −\d+\)\n'))
         purged(page)
 
         @check('erased version, Versions tab: the v2 row shows v2 since the base; Enter and Space')
