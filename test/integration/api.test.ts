@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, Settings, Summary } from '../../src/shared/api.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
 import {
@@ -393,6 +393,54 @@ describe('actions', () => {
         ]);
         expect(fake.calls[0]?.body).toEqual({ content: { raw: 'Merci !' }, parent: { id: thread.id } });
         expect(fake.calls[1]?.body).toEqual({ content: { raw: 'Nit' }, inline: { path: 'src/Action.ts', to: 3 } });
+    });
+
+    it('PUT comments/:cid edits my comment', async () => {
+        const { fake } = await setup();
+        const mine = (await detail()).threads.flatMap((t) => t.comments).find((c) => c.mine && !c.deleted);
+        expect(mine).toBeTruthy();
+        const edited = await api<{ raw: string; html: string; mine: boolean }>('PUT', `${prPath()}/comments/${mine?.id}`, { raw: 'Reworded' });
+        expect(edited.status).toBe(200);
+        expect(edited.body).toMatchObject({ raw: 'Reworded', html: '<p>Reworded</p>', mine: true });
+        expect(fake.calls.map(shortCall)).toEqual([`PUT /comments/${mine?.id}`]);
+        expect(fake.calls[0]?.body).toEqual({ content: { raw: 'Reworded' } });
+        expect((await detail()).threads.flatMap((t) => t.comments).find((c) => c.id === mine?.id)?.raw).toBe('Reworded');
+    });
+
+    it('PUT on a deleted comment answers 404', async () => {
+        await setup();
+        const mine = (await detail()).threads.flatMap((t) => t.comments).find((c) => c.mine && !c.deleted);
+        await api('DELETE', `${prPath()}/comments/${mine?.id}`);
+        expect((await api('PUT', `${prPath()}/comments/${mine?.id}`, { raw: 'Too late' })).status).toBe(404);
+    });
+
+    it('PUT with an empty body answers 400', async () => {
+        const { fake } = await setup();
+        const mine = (await detail()).threads.flatMap((t) => t.comments).find((c) => c.mine && !c.deleted);
+        expect((await api('PUT', `${prPath()}/comments/${mine?.id}`, { raw: '   ' })).status).toBe(400);
+        expect((await api('PUT', `${prPath()}/comments/${mine?.id}`, {})).status).toBe(400);
+        expect(fake.calls).toEqual([]);
+    });
+
+    it('GET pulse makes one Bitbucket request', async () => {
+        const { fake } = await setup();
+        const before = fake.requests.length;
+        const light = await api<PrPulse>('GET', `${prPath()}/pulse`);
+        expect(fake.requests.length - before).toBe(1);
+        // Same fields as the detail read just after (built from the same PR read).
+        const { pulse } = await detail();
+        expect(light.body).toEqual(pulse);
+        expect(pulse.head).not.toBe('');
+        expect(pulse.participants).not.toBe('');
+    });
+
+    it('pulse changes after a comment', async () => {
+        await setup();
+        const before = (await api<PrPulse>('GET', `${prPath()}/pulse`)).body;
+        await api('POST', `${prPath()}/comments`, { raw: 'New remark' });
+        const after = (await api<PrPulse>('GET', `${prPath()}/pulse`)).body;
+        expect(after.commentCount).toBe(before.commentCount + 1);
+        expect(after.updatedOn).not.toBe(before.updatedOn);
     });
 
     it('a reply does not advance the last review', async () => {
@@ -1099,7 +1147,11 @@ describe('request budget', () => {
         expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBeNull();
         const updatedOn = fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.updated_on;
         await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/comments`, { raw: 'Looks good' });
-        expect(fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.updated_on).toBe(updatedOn);
+        // The fake bumps updated_on on every write: put it back to simulate Bitbucket keeping it.
+        const fakePr = fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr;
+        if (fakePr) {
+            fakePr.updated_on = updatedOn;
+        }
         expect(cardOf(await home(), FAKE_PRS.neverReviewed)?.lastReviewed).toBe(2);
     });
 

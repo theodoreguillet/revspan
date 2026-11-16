@@ -487,6 +487,14 @@ export class BitbucketClient {
         return created;
     }
 
+    async editComment(ws: string, repo: string, id: number, commentId: number, raw: string): Promise<BbComment> {
+        const edited = await this.json<BbComment>('PUT', `${this.prPath(ws, repo, id)}/comments/${commentId}`, { body: { content: { raw } } });
+        if (!edited) {
+            throw errorFor(502, 'comments', 'empty response');
+        }
+        return edited;
+    }
+
     async deleteComment(ws: string, repo: string, id: number, commentId: number): Promise<void> {
         await this.json('DELETE', `${this.prPath(ws, repo, id)}/comments/${commentId}`);
     }

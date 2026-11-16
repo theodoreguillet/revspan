@@ -12,6 +12,7 @@ import {
     type NewComment,
     type Ok,
     type PrDetail,
+    type PrPulse,
     type PrRef,
     type Settings,
     type SettingsUpdate,
@@ -101,11 +102,13 @@ export const api = {
     home: ({ fresh = false }: { fresh?: boolean } = {}) => request<Home>('GET', fresh ? '/home?fresh=1' : '/home'),
 
     pr: (ref: PrRef) => request<PrDetail>('GET', prPath(ref)),
+    pulse: (ref: PrRef) => request<PrPulse>('GET', `${prPath(ref)}/pulse`),
     summary: (ref: PrRef) => request<Summary>('GET', `${prPath(ref)}/summary`),
     compare: (ref: PrRef, from: number, to: number, context: number) =>
         request<Comparison>('GET', `${prPath(ref)}/compare?from=${from}&to=${to}&context=${context}`),
 
     comment: (ref: PrRef, body: NewComment) => request<Comment>('POST', `${prPath(ref)}/comments`, body),
+    editComment: (ref: PrRef, id: number, raw: string) => request<Comment>('PUT', `${prPath(ref)}/comments/${id}`, { raw }),
     deleteComment: (ref: PrRef, id: number) => request<Ok>('DELETE', `${prPath(ref)}/comments/${id}`),
     resolve: (ref: PrRef, threadId: number, resolved: boolean) =>
         request<Ok>(resolved ? 'POST' : 'DELETE', `${prPath(ref)}/comments/${threadId}/resolve`),

@@ -1,7 +1,7 @@
 // PR model built from raw Bitbucket data: versions, participants, threads, last review.
 // Pure functions (network loading lives in services/).
 import type {
-    Comment, Participant, PrInfo, PrRef, Review, ReviewSource, Thread, User, Version,
+    Comment, Participant, PrInfo, PrPulse, PrRef, Review, ReviewSource, Thread, User, Version,
 } from '../../shared/api.ts';
 import type { BbActivity, BbComment, BbPullRequest, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
@@ -200,6 +200,16 @@ export function computeReview(input: {
         lastReviewedSource: best?.source ?? null,
         lastReviewedAt: best?.at ?? null,
         viewed: { ...local?.viewed },
+    };
+}
+
+/** Cheap snapshot of a PR read: what the page compares to learn that something changed. */
+export function pulseOf(pr: BbPullRequest): PrPulse {
+    return {
+        updatedOn: pr.updated_on ?? '',
+        head: pr.source?.commit?.hash ?? '',
+        commentCount: pr.comment_count ?? 0,
+        participants: (pr.participants ?? []).map((p) => `${p.user?.uuid ?? ''}:${p.approved ? 1 : 0}:${p.state ?? ''}`).sort().join(','),
     };
 }
 

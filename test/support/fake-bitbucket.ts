@@ -530,6 +530,10 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             }
             return me;
         };
+        // Every write moves the PR's updated_on forward (strictly: two writes in the same millisecond still differ).
+        if (req.method !== 'GET') {
+            fake.pr.updated_on = new Date(Math.max(Date.now(), Date.parse(fake.pr.updated_on ?? '') + 1 || 0)).toISOString();
+        }
         let m: RegExpExecArray | null;
         if (sub === '' && req.method === 'GET') {
             return send(res, 200, fake.pr);
@@ -554,6 +558,16 @@ export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
             fake.activity.push({ comment: created });
             fake.pr.comment_count = fake.comments.filter((c) => !c.deleted).length;
             return send(res, 201, created);
+        }
+        if ((m = /^\/comments\/(\d+)$/.exec(sub)) && req.method === 'PUT') {
+            const target = findComment(m[1] ?? '');
+            if (!target || target.deleted) {
+                return send(res, 404, { error: { message: 'no comment' } });
+            }
+            const raw = String((body?.content as { raw?: string } | undefined)?.raw ?? '');
+            target.content = { raw, html: `<p>${escapeHtml(raw)}</p>` };
+            target.updated_on = fake.pr.updated_on ?? now;
+            return send(res, 200, target);
         }
         if ((m = /^\/comments\/(\d+)$/.exec(sub)) && req.method === 'DELETE') {
             const target = findComment(m[1] ?? '');

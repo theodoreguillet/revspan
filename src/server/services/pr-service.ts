@@ -1,11 +1,12 @@
 // One PR: versions, comparisons, summaries, and actions (comments, resolution, approval).
 import type {
-    Comment, Comparison, NewComment, Ok, PrDetail, PrRef, Summary, Thread, Version, VersionKind, VersionSummary, ViewedRequest,
+    Comment, Comparison, EditComment, NewComment, Ok, PrDetail, PrPulse, PrRef, Summary, Thread, Version, VersionKind, VersionSummary, ViewedRequest,
 } from '../../shared/api.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
+import type { BbComment } from '../bitbucket/types.ts';
 import { compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource } from '../core/compare.ts';
 import {
-    buildParticipants, buildThreads, buildVersions, computeReview, extractUpdates, isReadable, previousAvailable, prInfo, userOf, versionsAfter, type PushUpdate,
+    buildParticipants, buildThreads, buildVersions, computeReview, pulseOf, extractUpdates, isReadable, previousAvailable, prInfo, userOf, versionsAfter, type PushUpdate,
 } from '../core/model.ts';
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
@@ -145,17 +146,32 @@ export class PrService {
 
     async createComment(ref: PrRef, input: NewComment): Promise<Comment> {
         const created = await this.write(ref, (client) => client.createComment(ref.workspace, ref.repo, ref.id, input));
+        return this.commentOf(created, input.raw);
+    }
+
+    async editComment(ref: PrRef, commentId: number, { raw }: EditComment): Promise<Comment> {
+        const edited = await this.write(ref, (client) => client.editComment(ref.workspace, ref.repo, ref.id, commentId, raw));
+        return this.commentOf(edited, raw);
+    }
+
+    /** Light snapshot of the PR: one read (the client's live cache applies), never the loaded-PR cache. */
+    async pulse(ref: PrRef): Promise<PrPulse> {
+        const client = await this.session.getClient();
+        return pulseOf(await client.pullRequest(ref.workspace, ref.repo, ref.id));
+    }
+
+    private async commentOf(written: BbComment, fallbackRaw: string): Promise<Comment> {
         const me = await this.session.me().catch(() => null);
         return {
-            id: created.id,
-            user: userOf(created.user),
-            createdOn: created.created_on,
+            id: written.id,
+            user: userOf(written.user),
+            createdOn: written.created_on,
             version: null,
-            html: created.content?.html ?? '',
-            raw: created.content?.raw ?? input.raw,
+            html: written.content?.html ?? '',
+            raw: written.content?.raw ?? fallbackRaw,
             isNew: false,
             deleted: false,
-            mine: Boolean(me) && created.user?.uuid === me?.uuid,
+            mine: Boolean(me) && written.user?.uuid === me?.uuid,
         };
     }
 
@@ -288,7 +304,7 @@ export class PrService {
             updates,
             versions,
             detail: {
-                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase,
+                pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase, pulse: pulseOf(pr),
             },
         };
     }

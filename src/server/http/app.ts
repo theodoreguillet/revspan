@@ -14,7 +14,7 @@ import type { HomeService } from '../services/home-service.ts';
 import type { PrService } from '../services/pr-service.ts';
 import type { SettingsService } from '../services/settings-service.ts';
 import {
-    commentIdSchema, compareQuerySchema, newCommentSchema, parse, prRefSchema, reviewedSchema,
+    commentIdSchema, compareQuerySchema, editCommentSchema, newCommentSchema, parse, prRefSchema, reviewedSchema,
     settingsUpdateSchema, viewedSchema,
 } from './schemas.ts';
 
@@ -113,6 +113,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     app.get('/api/home', async (c) => c.json(await home.get({ fresh: c.req.query('fresh') === '1' })));
 
     app.get(PR_ROUTE, async (c) => c.json(await prs.detail(refOf(c))));
+    app.get(`${PR_ROUTE}/pulse`, async (c) => c.json(await prs.pulse(refOf(c))));
     app.get(`${PR_ROUTE}/summary`, async (c) => c.json(await prs.summary(refOf(c))));
     app.get(`${PR_ROUTE}/compare`, async (c) => {
         const { from, to, context } = parse(compareQuerySchema, c.req.query());
@@ -120,6 +121,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     });
 
     app.post(`${PR_ROUTE}/comments`, async (c) => c.json(await prs.createComment(refOf(c), parse(newCommentSchema, await jsonBody(c)))));
+    app.put(`${PR_ROUTE}/comments/:cid`, async (c) => c.json(await prs.editComment(refOf(c), parse(commentIdSchema, c.req.param('cid')), parse(editCommentSchema, await jsonBody(c)))));
     app.delete(`${PR_ROUTE}/comments/:cid`, async (c) => c.json(await prs.deleteComment(refOf(c), parse(commentIdSchema, c.req.param('cid')))));
     app.post(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), true)));
     app.delete(`${PR_ROUTE}/comments/:cid/resolve`, async (c) => c.json(await prs.resolve(refOf(c), parse(commentIdSchema, c.req.param('cid')), false)));

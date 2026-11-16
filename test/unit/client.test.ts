@@ -65,6 +65,18 @@ describe('BitbucketClient: retries', () => {
     });
 });
 
+describe('BitbucketClient: editComment', () => {
+    it('PUTs the new raw text on the comment', async () => {
+        const fetchImpl = mockFetch(jsonResponse(200, { id: 9, content: { raw: 'edited' } }));
+        const edited = await makeClient(fetchImpl).editComment('acme', 'records-api', 1, 9, 'edited');
+        expect(edited.id).toBe(9);
+        const [url, init] = fetchImpl.mock.calls[0] ?? [];
+        expect(String(url)).toBe(`${BASE}/repositories/acme/records-api/pullrequests/1/comments/9`);
+        expect(init?.method).toBe('PUT');
+        expect(JSON.parse(String(init?.body))).toEqual({ content: { raw: 'edited' } });
+    });
+});
+
 describe('BitbucketClient: file paths', () => {
     it.each(['a/../b', '../x', './x', 'a//b', 'a/.'])('rejects %s without a network call', async (filePath) => {
         const fetchImpl = mockFetch(new Response('x'));

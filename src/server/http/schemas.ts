@@ -1,6 +1,6 @@
 // Validation of HTTP inputs (zod). The produced types match the src/shared/api.ts contract.
 import { z } from 'zod';
-import type { NewComment, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
+import type { EditComment, NewComment, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
 import { badRequest } from '../errors.ts';
 
 const NAME = /^[A-Za-z0-9._-]+$/;
@@ -33,10 +33,16 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
     }).partial().optional(),
 });
 
+const commentRawSchema = z.string().trim().min(1, 'The comment is empty.').max(32000);
+
 export const newCommentSchema: z.ZodType<NewComment> = z.object({
-    raw: z.string().trim().min(1, 'The comment is empty.').max(32000),
+    raw: commentRawSchema,
     parentId: z.number().int().positive().optional(),
     inline: z.object({ path: z.string().min(1).max(4096), to: z.number().int().positive() }).optional(),
+});
+
+export const editCommentSchema: z.ZodType<EditComment> = z.object({
+    raw: commentRawSchema,
 });
 
 export const viewedSchema: z.ZodType<ViewedRequest> = z.object({

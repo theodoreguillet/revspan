@@ -282,6 +282,17 @@ export interface PrDetail {
     build: BuildCheck[] | null;
     /** Destination branch moved since the PR's base; null: not mine, or not computable. */
     needsRebase: boolean | null;
+    /** Snapshot of the PR as read for this detail (the page compares it to later pulses). */
+    pulse: PrPulse;
+}
+
+/** Cheap snapshot of a PR (one Bitbucket GET), compared by the page to what it shows. */
+export interface PrPulse {
+    updatedOn: string;
+    head: string;
+    commentCount: number;
+    /** `uuid:approved:state` of each participant, sorted: any approval or change request changes it. */
+    participants: string;
 }
 
 export type VersionKind = 'creation' | 'code' | 'deps' | 'rebase-only' | 'message-only' | 'none' | 'unavailable';
@@ -375,6 +386,10 @@ export interface NewComment {
     raw: string;
     parentId?: number;
     inline?: { path: string; to: number };
+}
+
+export interface EditComment {
+    raw: string;
 }
 
 export interface ViewedRequest {

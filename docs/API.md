@@ -34,9 +34,11 @@ Common rules:
 | POST | `/api/settings/test` | — | `ConnectionTest` |
 | GET | `/api/home[?fresh=1]` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key; see "Review queue contract"). `fresh=1` (the Refresh button) skips the home shared by the windows and re-reads live data |
 | GET | `/api/pr/:ws/:repo/:id` | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`; `build`: `[]` no build, `null` statuses unreadable) |
+| GET | `/api/pr/:ws/:repo/:id/pulse` | — | `PrPulse` (one Bitbucket read: `updatedOn`, `head`, `commentCount`, `participants`; the page compares it to `PrDetail.pulse`) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |
 | POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` |
+| PUT | `/api/pr/:ws/:repo/:id/comments/:cid` | `EditComment` | `Comment` (404 if the comment was deleted meanwhile) |
 | DELETE | `/api/pr/:ws/:repo/:id/comments/:cid` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/comments/:cid/resolve` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/approve` | — | `Ok` (POST re-approves if needed) |
