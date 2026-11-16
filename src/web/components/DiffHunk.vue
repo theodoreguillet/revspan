@@ -18,19 +18,19 @@ import ThreadCard from './ThreadCard.vue';
  * start), -1 if it is elsewhere.
  */
 const props = defineProps<{
-    path: string; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean;
+    path: string; view: 'unified' | 'split'; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean;
     fileIdx: number; hunkIdx: number; hits: readonly SearchHit[]; curLine: number; curStart: number;
 }>();
 const page = usePrPage();
 
 const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
-const rows = computed(() => (page.view === 'unified' ? unifiedRows(input.value) : []));
-const splitRows = computed(() => (page.view === 'split' ? sideBySideRows(input.value) : []));
+const rows = computed(() => (props.view === 'unified' ? unifiedRows(input.value) : []));
+const splitRows = computed(() => (props.view === 'split' ? sideBySideRows(input.value) : []));
 
 // syntax colors arrive after the first render; a side-by-side cell finds its tokens and matches by its index in the hunk
 const lang = computed(() => languageOf(props.path));
 const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near);
-const lineIndex = computed(() => ((tokens.value || props.hits.length) && page.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
+const lineIndex = computed(() => ((tokens.value || props.hits.length) && props.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
 const indexOf = (line: DiffLine): number => lineIndex.value?.get(line) ?? -1;
 const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, indexOf(line), side);
 

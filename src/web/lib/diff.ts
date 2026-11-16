@@ -209,6 +209,11 @@ export interface HunkViewInput {
 const threadsAt = (byLine: Map<number, PlacedThread[]>, line: DiffLine | null): PlacedThread[] =>
     (line && line.t !== '-' && line.n != null ? byLine.get(line.n) ?? [] : []);
 
+/** View of a file: an added or removed file has one empty side, so it is always unified. */
+export function fileView(file: Pick<FileDiff, 'status'>, view: 'unified' | 'split'): 'unified' | 'split' {
+    return file.status === 'added' || file.status === 'removed' ? 'unified' : view;
+}
+
 /** Lines of a hunk in unified view, with threads and composer to insert below. */
 export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkViewInput): LineView[] {
     return lines.map((line) => {

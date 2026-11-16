@@ -1021,7 +1021,9 @@ def run_checks(page):
         page.screenshot(path=os.path.join(SHOTS, 'diff-search.png'))
         # side-by-side: the same current match
         page.locator('.rv-seg button[data-seg="split"]').click()
-        expect(second_block.locator('.rv-sl mark.cur').first).to_be_attached()
+        second_added = next(f for f in full['files'] if f['path'] == second)['status'] == 'added'
+        # an added file stays unified in side-by-side view
+        expect(second_block.locator('.rv-l mark.cur' if second_added else '.rv-sl mark.cur').first).to_be_attached()
         page.locator('.rv-seg button[data-seg="unified"]').click()
         box.press('Shift+Enter')
         expect(page.locator(f'.rv-file[data-path="{first}"] mark.cur')).to_have_count(1)
@@ -1031,6 +1033,21 @@ def run_checks(page):
         expect(page.locator('mark')).to_have_count(0)
         expect(rows).to_have_count(len(all_paths))
     diff_search(page)
+
+    @check('added_file_unified: in side-by-side view, an added file stays unified, a modified one splits')
+    def added_file_unified(page):
+        full_files = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')['files']
+        added = next((f for f in full_files if f['status'] == 'added' and f['hunks']), None)
+        assert added, 'no added file in the PR'
+        page.locator('.rv-seg button[data-seg="split"]').click()
+        try:
+            block = page.locator(f'.rv-file[data-path="{added["path"]}"]')
+            expect(block.locator('.rv-l').first).to_be_attached()
+            expect(block.locator('.rv-sl')).to_have_count(0)
+            expect(page.locator('.rv-file.split .rv-sl').first).to_be_attached()
+        finally:
+            page.locator('.rv-seg button[data-seg="unified"]').click()
+    added_file_unified(page)
 
     @check('sticky_toolbar: the diff toolbar stays under the timeline, j/k lands the file header just under it')
     def sticky_toolbar(page):

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Thread } from '../../src/shared/api.ts';
 import {
-    composerKey, composerTargetFor, deletedLineComment, fileThreadCount, firstChangedLine, highlightParts, hunkRange, lastTouched,
+    composerKey, composerTargetFor, deletedLineComment, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange, lastTouched,
     placeFileThreads, sideBySideRows, splitRows, unifiedRows, viewedStatus,
 } from '../../src/web/lib/diff.ts';
 import { prLong } from './fixtures.ts';
@@ -146,5 +146,21 @@ describe('deletedLineComment', () => {
 
     it('code containing ```: other fence', () => {
         expect(deletedLineComment(fr, 'README.md', 1, 2, '```js', 'ok')).toBe('`README.md` — ligne supprimée (v1 → v2) :\n~~~\n```js\n~~~\nok');
+    });
+});
+
+describe('fileView', () => {
+    it('keeps split for a modified file', () => {
+        expect(fileView({ status: 'modified' }, 'split')).toBe('split');
+        expect(fileView({ status: 'renamed' }, 'split')).toBe('split');
+        expect(fileView({ status: 'modified' }, 'unified')).toBe('unified');
+    });
+
+    it('renders an added file unified in split view', () => {
+        expect(fileView({ status: 'added' }, 'split')).toBe('unified');
+    });
+
+    it('renders a removed file unified in split view', () => {
+        expect(fileView({ status: 'removed' }, 'split')).toBe('unified');
     });
 });

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
 import { useNearViewport } from '../composables/useNearViewport.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { FILE_STATUS_TAGS, fileThreadCount, firstChangedLine, lastTouched, placeFileThreads, viewedStatus } from '../lib/diff.ts';
+import { FILE_STATUS_TAGS, fileThreadCount, fileView, firstChangedLine, lastTouched, placeFileThreads, viewedStatus } from '../lib/diff.ts';
 import { t } from '../i18n/index.ts';
 import { MINUS } from '../lib/format.ts';
 import { isVsCode, openLocalFile, openNativeDiff } from '../services/host.ts';
@@ -19,6 +19,7 @@ const near = useNearViewport(root);
 const vstat = computed(() => viewedStatus(props.file, page.detail.review.viewed));
 const collapsed = computed(() => page.isCollapsed(props.file));
 const touched = computed(() => (page.summary ? lastTouched(page.sums, page.from, page.to, props.file.path) : null));
+const view = computed(() => fileView(props.file, page.view));
 const statusTag = computed(() => FILE_STATUS_TAGS[props.file.status]);
 const openThreads = computed(() => fileThreadCount(props.file, page.threadsById, false));
 const placed = computed(() => placeFileThreads(props.file, page.threadsById, page.showResolved));
@@ -55,7 +56,7 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
 <template>
     <section
         ref="root"
-        :class="['rv-file', { folded: collapsed, split: page.view === 'split', cur: idx === page.curFile }]"
+        :class="['rv-file', { folded: collapsed, split: view === 'split', cur: idx === page.curFile }]"
         :data-path="file.path"
         :data-idx="idx"
     >
@@ -104,6 +105,7 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                     :hunk="hunk"
                     :by-line="placed.byLine"
                     :near="near"
+                    :view="view"
                     :file-idx="idx"
                     :hunk-idx="k"
                     :hits="hits"
