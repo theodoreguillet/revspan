@@ -17,6 +17,9 @@ export interface SearchHit {
 
 const NO_MARKS: readonly [number, number][] = Object.freeze([]) as readonly [number, number][];
 
+/** The same empty list for every file or hunk without a match: what shows it does not render again. */
+export const NO_HITS: readonly SearchHit[] = Object.freeze([]);
+
 /** The path contains the query, ignoring case (a folder name matches its files). */
 export function fileNameMatches(path: string, query: string): boolean {
     return path.toLowerCase().includes(query.toLowerCase());
@@ -55,6 +58,20 @@ export function splitMatch(name: string, query: string): [string, string, string
     }
     const m = new RegExp(escapeRegExp(query), 'i').exec(name);
     return m ? [name.slice(0, m.index), m[0], name.slice(m.index + m[0].length)] : null;
+}
+
+/** Hits of one file grouped by hunk (index in file.hunks), in order. */
+export function hitsByHunk(hits: readonly SearchHit[]): Map<number, SearchHit[]> {
+    const out = new Map<number, SearchHit[]>();
+    for (const hit of hits) {
+        const list = out.get(hit.hunk);
+        if (list) {
+            list.push(hit);
+        } else {
+            out.set(hit.hunk, [hit]);
+        }
+    }
+    return out;
 }
 
 /** Order of a hit's line against (fileIdx, hunk, line). */

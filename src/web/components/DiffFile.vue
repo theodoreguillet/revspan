@@ -3,7 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
 import { useNearViewport } from '../composables/useNearViewport.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { FILE_STATUS_TAGS, fileThreadCount, fileView, firstChangedLine, lastTouched, placeFileThreads, viewedStatus } from '../lib/diff.ts';
+import { useRowBudget } from '../composables/useRowBudget.ts';
+import {
+    FILE_STATUS_TAGS, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, hunkRowLimits, lastTouched, placeFileThreads, viewedStatus,
+} from '../lib/diff.ts';
+import { hitsByHunk, NO_HITS } from '../lib/search.ts';
 import { t } from '../i18n/index.ts';
 import { MINUS } from '../lib/format.ts';
 import { isVsCode, openLocalFile, openNativeDiff } from '../services/host.ts';
@@ -23,9 +27,16 @@ const view = computed(() => fileView(props.file, page.view));
 const statusTag = computed(() => FILE_STATUS_TAGS[props.file.status]);
 const openThreads = computed(() => fileThreadCount(props.file, page.threadsById, false));
 const placed = computed(() => placeFileThreads(props.file, page.threadsById, page.showResolved));
-// search: the file's matches and, when it is here, the current match
+// search: the file's matches by hunk (a hunk without any keeps the same empty list) and, when it is here, the current match
 const hits = computed(() => page.search.fileHits(props.idx));
+const hunkHits = computed(() => hitsByHunk(hits.value));
 const curHit = computed(() => (page.search.currentHit?.fileIdx === props.idx ? page.search.currentHit : null));
+// a large file renders progressively; its hunks get their share of the lines rendered so far
+const totalLines = computed(() => props.file.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0));
+const budget = useRowBudget(root, () => totalLines.value, () => !collapsed.value, () => props.file.hunks);
+const limits = computed(() => hunkRowLimits(props.file.hunks, budget.value));
+// size of the block while the browser skips it off screen (content-visibility, app.css): header + lines
+const sizeStyle = computed(() => (collapsed.value ? undefined : { containIntrinsicSize: `auto ${40 + estimatedLinesHeight(props.file)}px` }));
 const title = computed(() => (props.file.status === 'renamed' && props.file.oldPath ? `${props.file.oldPath} → ${props.file.path}` : props.file.path));
 
 function toggle(): void {
@@ -59,6 +70,7 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
         :class="['rv-file', { folded: collapsed, split: view === 'split', cur: idx === page.curFile }]"
         :data-path="file.path"
         :data-idx="idx"
+        :style="sizeStyle"
     >
         <div class="rv-fh">
             <button type="button" class="tog" :aria-expanded="!collapsed" :title="collapsed ? t('file.expand') : t('file.collapse')" @click="toggle">{{ collapsed ? '▸' : '▾' }}</button>
@@ -108,7 +120,8 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                     :view="view"
                     :file-idx="idx"
                     :hunk-idx="k"
-                    :hits="hits"
+                    :hits="hunkHits.get(k) ?? NO_HITS"
+                    :limit="limits[k] ?? 0"
                     :cur-line="curHit?.hunk === k ? curHit.line : -1"
                     :cur-start="curHit?.hunk === k ? curHit.start : -1"
                 />

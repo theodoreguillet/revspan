@@ -1,10 +1,12 @@
 // Syntax highlighting with shiki, loaded on first use: JavaScript regex engine (no WASM, fits the page CSP), the two
-// default VS Code themes, one lazy chunk per language. Tokenizing runs one hunk at a time and yields to the page.
+// default VS Code themes, one lazy chunk per language. Tokenizing runs one hunk at a time and yields to the page; the
+// next hunk is the one closest to the window (after a fast scroll, the file on screen before those passed on the way).
 import { computed, ref, type ComputedRef } from 'vue';
 import type { GrammarState, HighlighterCore, LanguageRegistration, ThemeRegistration } from 'shiki/core';
 import type { DiffLine } from '../../shared/api.ts';
 import {
-    FIRST_CHUNK_LINES, MAX_HIGHLIGHT_LINES, codeThemeFor, hunkCacheKey, nextChunkSize, tokenizeHunk, type CodeTheme, type CodeToken, type HunkTokens, type SideTokenizer,
+    FIRST_CHUNK_LINES, MAX_HIGHLIGHT_LINES, codeThemeFor, hunkCacheKey, nextChunkSize, nextJob, tokenizeHunk,
+    type CodeTheme, type CodeToken, type HunkTokens, type SideTokenizer,
 } from '../lib/highlight.ts';
 
 type LangModule = Promise<{ default: LanguageRegistration[] }>;
@@ -51,7 +53,20 @@ const CACHE_SIZE = 400;
 let core: Promise<HighlighterCore> | null = null;
 const loads = new Map<string, Promise<void>>();
 const cache = new Map<string, HunkTokens>();
-let queue: Promise<unknown> = Promise.resolve();
+
+/** A hunk waiting for its tokens. distance: how far it is from the window (px, 0 on screen; lower runs first). */
+interface Job {
+    key: string;
+    lines: readonly DiffLine[];
+    lang: string;
+    theme: CodeTheme;
+    signal?: AbortSignal;
+    distance?: () => number;
+    resolve: (tokens: HunkTokens | null) => void;
+}
+
+const pending: Job[] = [];
+let working = false;
 let sliceStart = 0;
 let warned = false;
 
@@ -133,11 +148,49 @@ export function cachedHunkTokens(lines: readonly DiffLine[], lang: string, theme
     return cache.get(hunkCacheKey(lines, lang, theme));
 }
 
+async function tokens(job: Job): Promise<HunkTokens | null> {
+    const done = cache.get(job.key);
+    if (done || job.signal?.aborted) {
+        return done ?? null;
+    }
+    try {
+        const hl = await ready(job.lang, job.theme);
+        const result = await tokenizeHunk(job.lines, sideTokenizer(hl, job.lang, job.theme, job.signal));
+        remember(job.key, result);
+        return result;
+    } catch (error) {
+        if (!(error instanceof Aborted) && !warned) {
+            warned = true;
+            console.warn('Revspan: syntax highlighting unavailable', error);
+        }
+        return null;
+    }
+}
+
+/** Works through the waiting hunks one at a time, the closest to the window first (in request order when equal). */
+async function work(): Promise<void> {
+    if (working) {
+        return;
+    }
+    working = true;
+    try {
+        while (pending.length) {
+            const job = pending.splice(nextJob(pending.map((p) => (p.signal?.aborted ? -1 : p.distance?.() ?? 0))), 1)[0]!;
+            job.resolve(await tokens(job));
+        }
+    } finally {
+        working = false;
+    }
+}
+
 /**
  * Tokens of a hunk, computed in the background (one hunk at a time, yielding to the page between chunks).
+ * distance: how far the hunk is from the window, read when the next hunk is chosen.
  * null: stays plain (unknown language, hunk too large, aborted, or shiki could not load).
  */
-export function highlightHunk(lines: readonly DiffLine[], lang: string, theme: CodeTheme, signal?: AbortSignal): Promise<HunkTokens | null> {
+export function highlightHunk(
+    lines: readonly DiffLine[], lang: string, theme: CodeTheme, signal?: AbortSignal, distance?: () => number,
+): Promise<HunkTokens | null> {
     if (lines.length > MAX_HIGHLIGHT_LINES || !LANGS[lang] || signal?.aborted) {
         return Promise.resolve(null);
     }
@@ -146,24 +199,10 @@ export function highlightHunk(lines: readonly DiffLine[], lang: string, theme: C
     if (hit) {
         return Promise.resolve(hit);
     }
-    const job = queue.then(async (): Promise<HunkTokens | null> => {
-        const done = cache.get(key);
-        if (done || signal?.aborted) {
-            return done ?? null;
-        }
-        const hl = await ready(lang, theme);
-        const tokens = await tokenizeHunk(lines, sideTokenizer(hl, lang, theme, signal));
-        remember(key, tokens);
-        return tokens;
-    }).catch((error: unknown) => {
-        if (!(error instanceof Aborted) && !warned) {
-            warned = true;
-            console.warn('Revspan: syntax highlighting unavailable', error);
-        }
-        return null;
+    return new Promise((resolve) => {
+        pending.push({ key, lines, lang, theme, signal, distance, resolve });
+        void work();
     });
-    queue = job;
-    return job;
 }
 
 const theme = ref<CodeTheme>('light-plus');

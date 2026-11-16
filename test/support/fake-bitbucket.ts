@@ -37,6 +37,13 @@ export const FAKE_PRS = {
     waiting: 49,
 } as const;
 
+/**
+ * Large PR served only with `startFakeBitbucket({ bigPr: true })` (performance run): 45 files, among which
+ * src/big/Fixtures.ts (new, 5 000 lines: one hunk) and src/big/Generated.ts (2 750 changed lines in 125 hunks).
+ * Kept out of FAKE_PRS: the other tests do not see it.
+ */
+export const FAKE_BIG_PR = 50;
+
 /** PR of the main scenario (backward compatibility of the tests). */
 export const PR_ID = FAKE_PRS.main;
 
@@ -342,6 +349,76 @@ function simplePr(b: FakeBuilder, id: number, key: string, title: string, author
     b.pr(id, { title, author, participants, plan, events });
 }
 
+/** Line `i` of a generated TypeScript file (`salt` changes the values: modified lines). */
+function codeLine(i: number, salt = ''): string {
+    switch (i % 8) {
+        case 0: return `export function handler${i}${salt}(input: Record<string, number>): number {`;
+        case 1: return `    const value = input['key${i}${salt}'] ?? ${i};`;
+        case 2: return `    // compute the weight of item ${i}${salt ? ` (${salt})` : ''}`;
+        case 3: return `    const weight = Math.max(value * ${i % 7}, ${i % 13}) + compute(${i}, 'label ${i}${salt}');`;
+        case 4: return `    if (weight > ${i * 3}${salt ? ' + 1' : ''}) {`;
+        case 5: return `        return weight - ${i % 5}${salt ? ' + 1' : ''};`;
+        case 6: return `    }${salt ? ' // checked' : ''}`;
+        default: return `    return value + weight${salt ? ' * 2' : ''}; }`;
+    }
+}
+
+/**
+ * #50 (perf run only): many files, a new one of 5 000 lines and one with 11 lines replaced every 40 lines (the server's
+ * diff gives up beyond 3 000 changed lines and shows a single hunk: that case is the new file).
+ */
+function bigPr(b: FakeBuilder): void {
+    const title = 'DEMO-50 - refactor(big): regenerate the handlers';
+    const ts = (count: number, changed: (i: number) => boolean): string => lines(Array.from({ length: count }, (_, i) => codeLine(i, changed(i) ? 'v2' : '')));
+    const vue = (n: number, salt: string): string => lines([
+        '<script setup lang="ts">',
+        "import { computed, ref } from 'vue';",
+        ...Array.from({ length: 50 }, (_, i) => `const item${i} = ref<number>(${(i * n) % 17}${i % 9 === 0 ? salt : ''});`),
+        '</script>',
+        '',
+        '<template>',
+        ...Array.from({ length: 60 }, (_, i) => `    <div class="row r${i}" :title="'item ${i}${i % 11 === 0 ? salt : ''}'">{{ item${i % 50} }}</div>`),
+        '</template>',
+    ]);
+    const md = (n: number, salt: string): string => lines(Array.from({ length: 80 }, (_, i) => (i % 10 === 0 ? `## Section ${i / 10} of note ${n}` : `Paragraph ${i} explains the *handler* \`h${i}\`${i % 13 === 0 ? salt : ''}.`)));
+    const json = (n: number, salt: string): string => lines(['{', ...Array.from({ length: 60 }, (_, i) => `    "setting${n}_${i}": ${i % 4 === 0 ? `"value ${i}${salt}"` : i},`), '    "end": true', '}']);
+    const base: Record<string, string> = {
+        'src/big/Generated.ts': ts(5000, () => false),
+    };
+    const head: Record<string, string> = {
+        'src/big/Generated.ts': ts(5000, (i) => i % 40 >= 10 && i % 40 < 21),
+        'src/big/Fixtures.ts': ts(5000, () => false),
+    };
+    for (let n = 0; n < 30; n++) {
+        const path = `src/modules/m${String(n).padStart(2, '0')}/Service.ts`;
+        base[path] = ts(160, () => false);
+        head[path] = ts(160, (i) => i % 40 >= 12 && i % 40 < 16);
+    }
+    for (let n = 0; n < 6; n++) {
+        base[`src/components/Panel${n}.vue`] = vue(n, '');
+        head[`src/components/Panel${n}.vue`] = vue(n, ' + 1');
+    }
+    for (let n = 0; n < 4; n++) {
+        base[`docs/note${n}.md`] = md(n, '');
+        head[`docs/note${n}.md`] = md(n, ' (updated)');
+    }
+    for (let n = 0; n < 3; n++) {
+        base[`config/settings${n}.json`] = json(n, '');
+        head[`config/settings${n}.json`] = json(n, ' v2');
+    }
+    b.commit('big:m0', base);
+    b.derive('big:v1', 'big:m0', head, title);
+    b.pr(FAKE_BIG_PR, {
+        title,
+        author: CAM,
+        participants: [
+            { user: ME, role: 'REVIEWER', approved: false, state: null },
+            { user: CAM, role: 'PARTICIPANT', approved: false, state: null },
+        ],
+        plan: [{ commit: 'big:v1', base: 'big:m0', date: '2026-10-22T09:00:00Z' }],
+    });
+}
+
 /** New push on a PR: commit `commit` (content of `from` modified by `changes`, same message) on base `base`. */
 export function pushVersion(data: FakeData, id: number, { commit, from, base, changes, date }: {
     commit: string;
@@ -365,7 +442,7 @@ export function pushVersion(data: FakeData, id: number, { commit, from, base, ch
     fake.activity.push({ update: { date, author: fake.pr.author, source, destination } });
 }
 
-export function buildFakeData(): FakeData {
+export function buildFakeData({ bigPr: withBigPr = false } = {}): FakeData {
     const b = new FakeBuilder();
     mainPr(b);
     longPr(b);
@@ -380,6 +457,9 @@ export function buildFakeData(): FakeData {
     simplePr(b, FAKE_PRS.waiting, 'waiting', 'DEMO-49 - fix(waiting): approved, waiting on the author', YAN,
         [{ user: ME, role: 'PARTICIPANT', approved: true, state: 'approved' }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 1,
         [{ approval: { date: '2026-10-12T09:00:00Z', user: ME } }]);
+    if (withBigPr) {
+        bigPr(b);
+    }
     const headOf = (id: number): string => {
         const prefix = b.prs.get(id)?.pr.source?.commit?.hash ?? '';
         return [...b.repo.commits.keys()].find((k) => k.startsWith(prefix)) ?? prefix;
@@ -445,8 +525,9 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown> |
     return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown> : null;
 }
 
-export function startFakeBitbucket({ port = 0 } = {}): Promise<FakeBitbucket> {
-    const data = buildFakeData();
+/** bigPr: also serves FAKE_BIG_PR (performance run only; the other tests keep the 8 PRs). */
+export function startFakeBitbucket({ port = 0, bigPr = false } = {}): Promise<FakeBitbucket> {
+    const data = buildFakeData({ bigPr });
     const calls: RecordedCall[] = [];
     const requests: RecordedRequest[] = [];
     const src = data.repo.source();

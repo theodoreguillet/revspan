@@ -40,6 +40,7 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:e2e": "npm run build && node --disable-warning=ExperimentalWarning test/e2e/run-against-fake.ts",
+        "test:perf": "npm run build && node --disable-warning=ExperimentalWarning test/e2e/run-against-fake.ts --perf",
         "test:extension": "npm run build:extension && node --disable-warning=ExperimentalWarning test/extension/run-smoke.ts",
         "test:live": "REVSPAN_LIVE=1 vitest run --project live",
         "clean": "node -e \"for (const dir of ['dist', 'extension/dist']) require('fs').rmSync(dir, { recursive: true, force: true })\""

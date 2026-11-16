@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Thread } from '../../src/shared/api.ts';
 import {
-    composerKey, composerTargetFor, deletedLineComment, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange, lastTouched,
-    placeFileThreads, sideBySideRows, splitRows, unifiedRows, viewedStatus,
+    composerKey, composerTargetFor, deletedLineComment, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange,
+    hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, placeFileThreads, PROGRESSIVE_LINES, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
+    sideBySideRows, splitRows, unifiedRows, viewedStatus, viewportDistance,
 } from '../../src/web/lib/diff.ts';
 import { prLong } from './fixtures.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
@@ -123,6 +124,55 @@ describe('firstChangedLine', () => {
         expect(firstChangedLine(file)).toBe(5);
         expect(firstChangedLine({ hunks: [{ oldStart: 1, oldLines: 1, newStart: 0, newLines: 0, header: '', lines: [line('-', 1, null, 'x')] }] })).toBeNull();
         expect(firstChangedLine({ hunks: [] })).toBeNull();
+    });
+});
+
+describe('large diffs (blocks of rows, progressive rendering)', () => {
+    const lines = (count: number): DiffLine[] => Array.from({ length: count }, (_, k) => line(' ', k + 1, k + 1));
+    const hunk = (count: number) => ({ oldStart: 1, oldLines: count, newStart: 1, newLines: count, header: '', lines: lines(count) });
+
+    it('estimates the height of the lines: a header and 20 px per line for each hunk', () => {
+        expect(estimatedLinesHeight({ hunks: [hunk(3), hunk(10)] })).toBe(21 + 60 + 21 + 200);
+        expect(estimatedLinesHeight({ hunks: [] })).toBe(0);
+    });
+
+    it('cuts the rows in blocks of ROW_BLOCK, the last one shorter', () => {
+        expect(rowBlocks(ROW_BLOCK * 2 + 3)).toEqual([
+            { start: 0, end: ROW_BLOCK }, { start: ROW_BLOCK, end: ROW_BLOCK * 2 }, { start: ROW_BLOCK * 2, end: ROW_BLOCK * 2 + 3 },
+        ]);
+        expect(rowBlocks(0)).toEqual([]);
+    });
+
+    it('renders a small file on screen at once, a large one from its first lines, a file off screen from none', () => {
+        expect(initialRowBudget(PROGRESSIVE_LINES, true)).toBe(Infinity);
+        expect(initialRowBudget(30, false)).toBe(0);
+        expect(initialRowBudget(0, false)).toBe(Infinity);
+        const first = initialRowBudget(5000, true);
+        expect(first).toBeLessThan(PROGRESSIVE_LINES);
+        let budget = first;
+        let frames = 0;
+        while (budget !== Infinity) {
+            const next = nextRowBudget(budget, ROWS_PER_FRAME, 5000);
+            expect(next).toBeGreaterThan(budget);
+            budget = next;
+            frames++;
+        }
+        expect(frames).toBe(Math.ceil((5000 - first) / ROWS_PER_FRAME));
+        expect(nextRowBudget(0, 10, 10)).toBe(Infinity);
+    });
+
+    it('measures how far a box is from the window, 0 when part of it shows', () => {
+        expect(viewportDistance(100, 50, 800)).toBe(0);
+        expect(viewportDistance(-500, 600, 800)).toBe(0);
+        expect(viewportDistance(1000, 50, 800)).toBe(200);
+        expect(viewportDistance(-300, 100, 800)).toBe(200);
+    });
+
+    it("gives each hunk its share of the file's budget, from 0 to all its lines", () => {
+        const hunks = [hunk(30), hunk(50), hunk(40)];
+        expect(hunkRowLimits(hunks, 60)).toEqual([30, 30, 0]);
+        expect(hunkRowLimits(hunks, Infinity)).toEqual([30, 50, 40]);
+        expect(hunkRowLimits(hunks, 0)).toEqual([0, 0, 0]);
     });
 });
 

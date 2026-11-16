@@ -31,6 +31,29 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         expect(scroll).toHaveBeenCalledWith({ top: window.scrollY + 800 - 196 });
     });
 
+    it('j/k: scrolls again while the blocks rendered on the way move the file', async () => {
+        let top = 800;
+        // the window scrolls where asked: the file lands under the toolbar
+        const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+            top = 196;
+        });
+        const n = nav(150, 40);
+        const file = at(0);
+        file.getBoundingClientRect = () => ({ top, bottom: top + 30, left: 0, right: 100, width: 100, height: 30, x: 0, y: top, toJSON: () => ({}) });
+        document.body.append(file);
+        n.registerFile('a.ts', file);
+        n.scrollToFile('a.ts');
+        expect(scroll).toHaveBeenCalledTimes(1);
+        // then a block above it renders 300 px taller than estimated: scrolled again, once
+        top = 196 + 300;
+        for (let k = 0; k < 4; k++) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+        expect(scroll).toHaveBeenCalledTimes(2);
+        expect(scroll).toHaveBeenLastCalledWith({ top: window.scrollY + 300 });
+        file.remove();
+    });
+
     it('current file: a header hidden by the toolbar counts as passed, one below it does not yet', () => {
         const n = nav(150, 40);
         n.registerFile('a.ts', at(-400));

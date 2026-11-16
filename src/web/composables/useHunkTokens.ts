@@ -4,7 +4,10 @@ import type { DiffLine } from '../../shared/api.ts';
 import type { HunkTokens } from '../lib/highlight.ts';
 import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../services/highlighter.ts';
 
-export function useHunkTokens(lines: () => readonly DiffLine[], lang: () => string | null, active: () => boolean): Readonly<Ref<HunkTokens | null>> {
+/** distance: how far the hunk is from the window (px), so that the hunks on screen get their colors first. */
+export function useHunkTokens(
+    lines: () => readonly DiffLine[], lang: () => string | null, active: () => boolean, distance?: () => number,
+): Readonly<Ref<HunkTokens | null>> {
     const theme = useCodeTheme();
     const tokens = shallowRef<HunkTokens | null>(null);
     let controller: AbortController | null = null;
@@ -23,7 +26,7 @@ export function useHunkTokens(lines: () => readonly DiffLine[], lang: () => stri
         }
         const request = new AbortController();
         controller = request;
-        void highlightHunk(current, language, codeTheme, request.signal).then((result) => {
+        void highlightHunk(current, language, codeTheme, request.signal, distance).then((result) => {
             if (!request.signal.aborted) {
                 tokens.value = result;
             }

@@ -1,27 +1,36 @@
 <script setup lang="ts">
 // A hunk in unified or side-by-side view, with the threads and composer inserted under their line.
-import { computed } from 'vue';
+// Its rows are grouped in blocks: the browser skips the blocks off screen (content-visibility), and a block renders
+// again only when something it shows changes (v-memo). A block off screen shows no search marks: typing a query only
+// renders the blocks on screen again, the others get their marks when they come into view. A large file gives each hunk
+// a `limit`: the blocks past it keep their height but stay empty until the next frames, except those holding a thread,
+// the composer or the current match.
+import { computed, reactive, ref } from 'vue';
 import type { DiffLine, Hunk } from '../../shared/api.ts';
 import { useHunkTokens } from '../composables/useHunkTokens.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { t } from '../i18n/index.ts';
-import { hunkRange, lineSign, sideBySideRows, unifiedRows, type ComposerTarget, type PlacedThread } from '../lib/diff.ts';
+import { locale, t } from '../i18n/index.ts';
+import {
+    LINE_PX, hunkRange, lineSign, rowBlocks, sideBySideRows, unifiedRows, viewportDistance, type ComposerTarget, type PlacedThread, type RowBlock,
+} from '../lib/diff.ts';
 import { languageOf, lineTokens } from '../lib/highlight.ts';
-import { lineMarks, type SearchHit } from '../lib/search.ts';
+import { lineMarks, NO_HITS, type SearchHit } from '../lib/search.ts';
 import { isVsCode, openLocalFile } from '../services/host.ts';
 import Composer from './Composer.vue';
 import DiffCode from './DiffCode.vue';
 import ThreadCard from './ThreadCard.vue';
 
 /**
- * hits: search matches of the file (ordered); curLine / curStart: current match in this hunk (index in hunk.lines and
- * start), -1 if it is elsewhere.
+ * hits: search matches of this hunk (ordered); curLine / curStart: current match in this hunk (index in hunk.lines and
+ * start), -1 if it is elsewhere. limit: lines of the hunk to render now (rows past it wait for the next frames).
  */
 const props = defineProps<{
     path: string; view: 'unified' | 'split'; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean;
-    fileIdx: number; hunkIdx: number; hits: readonly SearchHit[]; curLine: number; curStart: number;
+    fileIdx: number; hunkIdx: number; hits: readonly SearchHit[]; curLine: number; curStart: number; limit: number;
 }>();
 const page = usePrPage();
+/** The browser tells when it starts or stops skipping a block (content-visibility: auto). */
+const REPORTS_SKIPPED = typeof window !== 'undefined' && 'ContentVisibilityAutoStateChangeEvent' in window;
 
 const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
 const rows = computed(() => (props.view === 'unified' ? unifiedRows(input.value) : []));
@@ -29,16 +38,61 @@ const splitRows = computed(() => (props.view === 'split' ? sideBySideRows(input.
 
 // syntax colors arrive after the first render; a side-by-side cell finds its tokens and matches by its index in the hunk
 const lang = computed(() => languageOf(props.path));
-const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near);
+const head = ref<HTMLElement | null>(null);
+/** The hunks on screen are colored first (its rows are estimated from the header: they may not be rendered yet). */
+const distance = (): number => (head.value?.isConnected
+    ? viewportDistance(head.value.getBoundingClientRect().top, props.hunk.lines.length * LINE_PX, window.innerHeight)
+    : Infinity);
+const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near, distance);
 const lineIndex = computed(() => ((tokens.value || props.hits.length) && props.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
 const indexOf = (line: DiffLine): number => lineIndex.value?.get(line) ?? -1;
 const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, indexOf(line), side);
 
 // search: lines without a match get the same empty array, so that they do not render again on each keystroke
-const marksAt = (k: number) => lineMarks(props.hits, props.fileIdx, props.hunkIdx, k);
+const marksAt = (k: number, hits = props.hits) => lineMarks(hits, props.fileIdx, props.hunkIdx, k);
 const curAt = (k: number): number => (k === props.curLine ? props.curStart : -1);
 /** The line of the current match registers itself, to be scrolled into view. */
 const matchRef = (el: unknown): void => page.registerMatch(el);
+
+// blocks of rows
+const blocks = computed(() => rowBlocks(props.view === 'unified' ? rows.value.length : splitRows.value.length));
+/** Row of the current match (side by side: the row holding its line), -1 if it is elsewhere. */
+const curRow = computed(() => {
+    if (props.curLine < 0 || props.view === 'unified') {
+        return props.curLine;
+    }
+    const line = props.hunk.lines[props.curLine];
+    return splitRows.value.findIndex((row) => row.cells.some((cell) => cell.line === line));
+});
+/** Rows that must exist at once: threads (n/p, "View in diff") and the composer. */
+const pinnedRows = computed(() => (props.view === 'unified'
+    ? rows.value.flatMap((row, k) => (row.threads.length || row.composer ? [k] : []))
+    : splitRows.value.flatMap((row, k) => (row.threads.length || row.leftComposer || row.rightComposer ? [k] : []))));
+const inBlock = (block: RowBlock, row: number): boolean => row >= block.start && row < block.end;
+const rendered = (block: RowBlock): boolean => block.start < props.limit || inBlock(block, curRow.value) || pinnedRows.value.some((k) => inBlock(block, k));
+/**
+ * Blocks on screen, by first row, as the browser reports them (it skips the others). Without that report (older
+ * browser), every block counts as on screen.
+ */
+const onScreen = reactive(new Set<number>());
+const onBlockState = (block: RowBlock, event: Event): void => {
+    if ((event as ContentVisibilityAutoStateChangeEvent).skipped) {
+        onScreen.delete(block.start);
+    } else {
+        onScreen.add(block.start);
+    }
+};
+/** Search matches a block shows: none while it is off screen. */
+const blockHits = (block: RowBlock): readonly SearchHit[] => (!REPORTS_SKIPPED || onScreen.has(block.start) ? props.hits : NO_HITS);
+/** The current match, for the block that holds it only (the other blocks do not render again when it moves). */
+const curIn = (block: RowBlock): string => (inBlock(block, curRow.value) ? `${curRow.value}:${props.curStart}` : '');
+/** An empty block keeps the height of its rows; a rendered one gives it as its size while skipped off screen. */
+const blockStyle = (block: RowBlock): Record<string, string> => {
+    const height = `${(block.end - block.start) * LINE_PX}px`;
+    return rendered(block) ? { containIntrinsicSize: `auto ${height}` } : { height };
+};
+const unifiedIn = (block: RowBlock) => rows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
+const splitIn = (block: RowBlock) => splitRows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 
 const lineClass = (t: string): string => (t === '+' ? 'rv-l a' : t === '-' ? 'rv-l r' : 'rv-l');
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
@@ -47,82 +101,108 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
 </script>
 
 <template>
-    <div class="rv-hunk">{{ hunkRange(hunk) }}<span v-if="hunk.header" class="hh">{{ hunk.header }}</span></div>
-    <template v-for="(row, k) in rows" :key="k">
-        <div :ref="k === curLine ? matchRef : undefined" :class="lineClass(row.line.t)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
-            <span class="n">{{ row.line.o ?? '' }}</span>
-            <span class="n">{{ row.line.n ?? '' }}</span>
-            <span class="s">{{ lineSign(row.line.t) }}</span>
-            <DiffCode :line="row.line" :tokens="lineTokens(tokens, k, row.line.t === '-' ? 'old' : 'new')" :marks="marksAt(k)" :cur="curAt(k)" />
-            <button
-                v-if="isVsCode && row.line.n != null"
-                type="button"
-                class="rv-open-line"
-                tabindex="-1"
-                data-action="open-line"
-                :title="t('diff.openAtLineTitle', { line: row.line.n })"
-                @click="openLocalFile(page.ref, path, row.line.n)"
-            >
-                {{ t('diff.openAtLine') }}
-            </button>
-            <button
-                v-if="row.target"
-                type="button"
-                class="rv-plus"
-                tabindex="-1"
-                data-action="add-comment"
-                :title="plusTitle(row.target)"
-                @click="page.openComposer(row.target)"
-            >
-                +
-            </button>
-        </div>
-        <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
-        <Composer v-if="row.composer" :target="row.composer" />
-    </template>
-    <template v-for="(row, k) in splitRows" :key="k">
-        <div class="rv-sl">
-            <template v-for="cell in row.cells" :key="cell.side">
-                <div v-if="!cell.line" class="half e" />
-                <div
-                    v-else
-                    :ref="curLine >= 0 && indexOf(cell.line) === curLine ? matchRef : undefined"
-                    :class="['half', { r: cell.line.t !== ' ' && cell.side === 'old', a: cell.line.t !== ' ' && cell.side === 'new' }]"
-                    :data-o="cell.side === 'old' ? cell.line.o ?? '' : undefined"
-                    :data-n="cell.side === 'new' ? cell.line.n ?? '' : undefined"
-                >
-                    <span class="n">{{ (cell.side === 'old' ? cell.line.o : cell.line.n) ?? '' }}</span>
-                    <span class="s">{{ cell.line.t !== ' ' ? lineSign(cell.line.t) : '' }}</span>
-                    <DiffCode :line="cell.line" :tokens="splitTokens(cell.line, cell.side)" :marks="marksAt(indexOf(cell.line))" :cur="curAt(indexOf(cell.line))" />
-                    <button
-                        v-if="isVsCode && cell.side === 'new' && cell.line.n != null"
-                        type="button"
-                        class="rv-open-line"
-                        tabindex="-1"
-                        data-action="open-line"
-                        :title="t('diff.openAtLineTitle', { line: cell.line.n })"
-                        @click="openLocalFile(page.ref, path, cell.line.n)"
-                    >
-                        {{ t('diff.openAtLine') }}
-                    </button>
-                    <button
-                        v-if="cell.target"
-                        type="button"
-                        class="rv-plus"
-                        tabindex="-1"
-                        data-action="add-comment"
-                        :title="plusTitle(cell.target)"
-                        @click="page.openComposer(cell.target)"
-                    >
-                        +
-                    </button>
-                </div>
+    <div ref="head" class="rv-hunk">{{ hunkRange(hunk) }}<span v-if="hunk.header" class="hh">{{ hunk.header }}</span></div>
+    <template v-if="view === 'unified'">
+        <div
+            v-for="block in blocks"
+            :key="block.start"
+            v-memo="[rendered(block), rows, tokens, blockHits(block), curIn(block), locale]"
+            class="rv-blk"
+            :style="blockStyle(block)"
+            @contentvisibilityautostatechange="onBlockState(block, $event)"
+        >
+            <template v-if="rendered(block)">
+                <template v-for="{ row, k } in unifiedIn(block)" :key="k">
+                    <div :ref="k === curLine ? matchRef : undefined" :class="lineClass(row.line.t)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
+                        <span class="n">{{ row.line.o ?? '' }}</span>
+                        <span class="n">{{ row.line.n ?? '' }}</span>
+                        <span class="s">{{ lineSign(row.line.t) }}</span>
+                        <DiffCode :line="row.line" :tokens="lineTokens(tokens, k, row.line.t === '-' ? 'old' : 'new')" :marks="marksAt(k, blockHits(block))" :cur="curAt(k)" />
+                        <button
+                            v-if="isVsCode && row.line.n != null"
+                            type="button"
+                            class="rv-open-line"
+                            tabindex="-1"
+                            data-action="open-line"
+                            :title="t('diff.openAtLineTitle', { line: row.line.n })"
+                            @click="openLocalFile(page.ref, path, row.line.n)"
+                        >
+                            {{ t('diff.openAtLine') }}
+                        </button>
+                        <button
+                            v-if="row.target"
+                            type="button"
+                            class="rv-plus"
+                            tabindex="-1"
+                            data-action="add-comment"
+                            :title="plusTitle(row.target)"
+                            @click="page.openComposer(row.target)"
+                        >
+                            +
+                        </button>
+                    </div>
+                    <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
+                    <Composer v-if="row.composer" :target="row.composer" />
+                </template>
             </template>
         </div>
-        <div v-if="row.leftComposer" class="rv-split-left"><Composer :target="row.leftComposer" /></div>
-        <div v-if="row.threads.length" class="rv-split-right">
-            <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
+    </template>
+    <template v-else>
+        <div
+            v-for="block in blocks"
+            :key="block.start"
+            v-memo="[rendered(block), splitRows, tokens, blockHits(block), curIn(block), locale]"
+            class="rv-blk"
+            :style="blockStyle(block)"
+            @contentvisibilityautostatechange="onBlockState(block, $event)"
+        >
+            <template v-if="rendered(block)">
+                <template v-for="{ row, k } in splitIn(block)" :key="k">
+                    <div class="rv-sl">
+                        <template v-for="cell in row.cells" :key="cell.side">
+                            <div v-if="!cell.line" class="half e" />
+                            <div
+                                v-else
+                                :ref="curLine >= 0 && indexOf(cell.line) === curLine ? matchRef : undefined"
+                                :class="['half', { r: cell.line.t !== ' ' && cell.side === 'old', a: cell.line.t !== ' ' && cell.side === 'new' }]"
+                                :data-o="cell.side === 'old' ? cell.line.o ?? '' : undefined"
+                                :data-n="cell.side === 'new' ? cell.line.n ?? '' : undefined"
+                            >
+                                <span class="n">{{ (cell.side === 'old' ? cell.line.o : cell.line.n) ?? '' }}</span>
+                                <span class="s">{{ cell.line.t !== ' ' ? lineSign(cell.line.t) : '' }}</span>
+                                <DiffCode :line="cell.line" :tokens="splitTokens(cell.line, cell.side)" :marks="marksAt(indexOf(cell.line), blockHits(block))" :cur="curAt(indexOf(cell.line))" />
+                                <button
+                                    v-if="isVsCode && cell.side === 'new' && cell.line.n != null"
+                                    type="button"
+                                    class="rv-open-line"
+                                    tabindex="-1"
+                                    data-action="open-line"
+                                    :title="t('diff.openAtLineTitle', { line: cell.line.n })"
+                                    @click="openLocalFile(page.ref, path, cell.line.n)"
+                                >
+                                    {{ t('diff.openAtLine') }}
+                                </button>
+                                <button
+                                    v-if="cell.target"
+                                    type="button"
+                                    class="rv-plus"
+                                    tabindex="-1"
+                                    data-action="add-comment"
+                                    :title="plusTitle(cell.target)"
+                                    @click="page.openComposer(cell.target)"
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                    <div v-if="row.leftComposer" class="rv-split-left"><Composer :target="row.leftComposer" /></div>
+                    <div v-if="row.threads.length" class="rv-split-right">
+                        <ThreadCard v-for="item in row.threads" :key="item.thread.id" :thread="item.thread" :placement="item.placement" />
+                    </div>
+                    <div v-if="row.rightComposer" class="rv-split-right"><Composer :target="row.rightComposer" /></div>
+                </template>
+            </template>
         </div>
-        <div v-if="row.rightComposer" class="rv-split-right"><Composer :target="row.rightComposer" /></div>
     </template>
 </template>

@@ -248,6 +248,77 @@ export function deletedLineComment(tr: Translator, path: string, from: number, t
     return `${quote}\n${fence}\n${code}\n${fence}\n${text}`;
 }
 
+/** Heights of a diff line and of a hunk header (px, see app.css .rv-l and .rv-hunk). */
+export const LINE_PX = 20;
+const HUNK_HEADER_PX = 21;
+
+/**
+ * Estimated height of a file's lines (px): the size of its block while the browser skips it off screen
+ * (content-visibility), until it has been rendered once.
+ */
+export function estimatedLinesHeight(file: Pick<FileDiff, 'hunks'>): number {
+    return file.hunks.reduce((sum, hunk) => sum + HUNK_HEADER_PX + hunk.lines.length * LINE_PX, 0);
+}
+
+/** Rows of a hunk grouped in blocks: the browser skips the blocks off screen, a large file renders block by block. */
+export const ROW_BLOCK = 50;
+
+export interface RowBlock {
+    /** Index of the block's first row, and the row after its last one. */
+    start: number;
+    end: number;
+}
+
+/** Blocks of ROW_BLOCK rows covering `count` rows. */
+export function rowBlocks(count: number): RowBlock[] {
+    const out: RowBlock[] = [];
+    for (let start = 0; start < count; start += ROW_BLOCK) {
+        out.push({ start, end: Math.min(start + ROW_BLOCK, count) });
+    }
+    return out;
+}
+
+/** Distance (px) between a box from `top` to `top + height` and the window [0, viewport]: 0 when part of it shows. */
+export function viewportDistance(top: number, height: number, viewport: number): number {
+    if (top + height < 0) {
+        return -(top + height);
+    }
+    return top > viewport ? top - viewport : 0;
+}
+
+/**
+ * Progressive rendering: a file on screen above PROGRESSIVE_LINES lines shows its FIRST_ROWS first lines at once; the
+ * rest of it, and the whole of a file off screen when its content changes, come ROWS_PER_FRAME lines per frame, shared
+ * by all the files (the closest to the window first).
+ */
+export const PROGRESSIVE_LINES = 400;
+const FIRST_ROWS = 100;
+export const ROWS_PER_FRAME = 250;
+
+/** Lines of a file rendered at once (Infinity: all of them). */
+export function initialRowBudget(totalLines: number, onScreen: boolean): number {
+    if (!onScreen) {
+        return totalLines ? 0 : Infinity;
+    }
+    return totalLines > PROGRESSIVE_LINES ? FIRST_ROWS : Infinity;
+}
+
+/** Lines rendered once `rows` more are given (Infinity once the file is complete). */
+export function nextRowBudget(budget: number, rows: number, totalLines: number): number {
+    const next = budget + rows;
+    return next >= totalLines ? Infinity : next;
+}
+
+/** Lines of each hunk within the file's budget (from 0 to all its lines): the hunks already complete keep their value. */
+export function hunkRowLimits(hunks: readonly Pick<Hunk, 'lines'>[], budget: number): number[] {
+    let start = 0;
+    return hunks.map((hunk) => {
+        const limit = Math.max(0, Math.min(hunk.lines.length, budget - start));
+        start += hunk.lines.length;
+        return limit;
+    });
+}
+
 /** First added line (new side) of the file, to open it at the right place; null if there is none. */
 export function firstChangedLine(file: Pick<FileDiff, 'hunks'>): number | null {
     for (const hunk of file.hunks) {

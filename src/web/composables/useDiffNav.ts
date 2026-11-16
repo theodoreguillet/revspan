@@ -8,9 +8,31 @@ export interface ThreadEntry {
     inDiff: boolean;
 }
 
-/** Scrolls to place el at `offset` px from the top of the window. */
+/** Frames during which a scroll is corrected (blocks rendered as they come into view settle in two or three). */
+const SETTLE_FRAMES = 8;
+/** The latest scroll: a new one stops correcting the previous one. */
+let lastScroll = 0;
+
+/**
+ * Scrolls to place el at `offset` px from the top of the window. The browser renders the diff blocks only once they
+ * come near the window (content-visibility), at their real height instead of an estimate: the scroll is set again over
+ * the next frames while el moves.
+ */
 function scrollToElement(el: Element, offset: number): void {
-    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset });
+    const place = (): void => window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset });
+    place();
+    const id = ++lastScroll;
+    let frames = 0;
+    const settle = (): void => {
+        if (id !== lastScroll || !el.isConnected || ++frames > SETTLE_FRAMES) {
+            return;
+        }
+        if (Math.abs(el.getBoundingClientRect().top - offset) > 1) {
+            place();
+        }
+        requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
 }
 
 /** Briefly highlights an element (thread reached by keyboard, "View in diff"). */
@@ -119,7 +141,7 @@ export function useDiffNav() {
             .sort((a, b) => a.top - b.top);
         const target = dir > 0 ? ordered.find((t) => t.top > y + 2) : ordered.reverse().find((t) => t.top < y - 2);
         if (target) {
-            window.scrollBy({ top: target.top - y });
+            scrollToElement(target.el, y);
             flash(target.el);
         }
     }

@@ -1,12 +1,10 @@
 // Search in the diff: the box text, the debounced query, the hits of the displayed comparison and the current hit.
 import { computed, onScopeDispose, ref, watch, type ComputedRef } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
-import { fileNameMatches, findHits, MIN_QUERY, stepHit, type SearchHit } from '../lib/search.ts';
+import { fileNameMatches, findHits, MIN_QUERY, NO_HITS, stepHit, type SearchHit } from '../lib/search.ts';
 
 /** Delay between the last keystroke and the search. */
 export const SEARCH_DEBOUNCE_MS = 150;
-
-const NO_HITS: readonly SearchHit[] = Object.freeze([]);
 
 export interface DiffSearchHooks {
     /** Shows the file of a hit (expanded, current) before its line is scrolled into view. */

@@ -50,6 +50,17 @@ export function nextChunkSize(size: number, spentMs: number): number {
     return spentMs > SLOW_CHUNK_MS ? Math.max(1, Math.floor(size / 2)) : size;
 }
 
+/** Index of the job to run next: the lowest priority value, the first one when equal (aborted jobs give -1: dropped first). */
+export function nextJob(priorities: readonly number[]): number {
+    let best = 0;
+    priorities.forEach((value, k) => {
+        if (value < priorities[best]!) {
+            best = k;
+        }
+    });
+    return best;
+}
+
 const FONT_ITALIC = 1;
 const FONT_BOLD = 2;
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHighlighterCore } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import type { DiffLine } from '../../src/shared/api.ts';
-import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, partStyle, tokenizeHunk } from '../../src/web/lib/highlight.ts';
+import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, nextJob, partStyle, tokenizeHunk } from '../../src/web/lib/highlight.ts';
 import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../../src/web/services/highlighter.ts';
 
 const line = (t: DiffLine['t'], text: string, hl: [number, number][] = []): DiffLine => ({ t, o: null, n: null, text, hl });
@@ -140,6 +140,15 @@ describe('nextChunkSize', () => {
     });
 });
 
+describe('nextJob', () => {
+    it('runs the hunk closest to the window first, the oldest request when equal', () => {
+        expect(nextJob([900, 0, 0, 40])).toBe(1);
+        expect(nextJob([0, 0])).toBe(0);
+        expect(nextJob([500, -1, 0])).toBe(1);
+        expect(nextJob([7])).toBe(0);
+    });
+});
+
 describe('highlighter service', () => {
     it('colors a TypeScript hunk with the theme, without the default text color, then serves it from the cache', async () => {
         const lines = [line(' ', '// note'), line('+', 'const label = "a";\r')];
@@ -165,6 +174,19 @@ describe('highlighter service', () => {
     it('leaves very large hunks plain', async () => {
         const lines = Array.from({ length: 2001 }, (_, k) => line('+', `const a${k} = ${k};`));
         expect(await highlightHunk(lines, 'typescript', 'dark-plus')).toBeNull();
+    });
+
+    it('colors the hunk closest to the window before those requested earlier', async () => {
+        const order: string[] = [];
+        const far = [line('+', 'const far = 1;')];
+        const near = [line('+', 'const near = 2;')];
+        const other = [line('+', 'const other = 3;')];
+        // the first request starts at once; the two others wait, and the nearest one goes first
+        const first = highlightHunk(other, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('other'));
+        const late = highlightHunk(far, 'typescript', 'light-plus', undefined, () => 5000).then(() => order.push('far'));
+        const soon = highlightHunk(near, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('near'));
+        await Promise.all([first, late, soon]);
+        expect(order).toEqual(['other', 'near', 'far']);
     });
 
     it('stops when the request is aborted', async () => {

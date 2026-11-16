@@ -3,7 +3,7 @@ import { computed, effectScope, nextTick, shallowRef } from 'vue';
 import type { DiffLine, FileDiff, Hunk } from '../../src/shared/api.ts';
 import { SEARCH_DEBOUNCE_MS, useDiffSearch } from '../../src/web/composables/useDiffSearch.ts';
 import { mergeTokens } from '../../src/web/lib/highlight.ts';
-import { fileNameMatches, findHits, lineMarks, splitMatch, stepHit, type SearchHit } from '../../src/web/lib/search.ts';
+import { fileNameMatches, findHits, hitsByHunk, lineMarks, splitMatch, stepHit, type SearchHit } from '../../src/web/lib/search.ts';
 
 const line = (t: DiffLine['t'], text: string): DiffLine => ({ t, o: null, n: null, text, hl: [] });
 const hunk = (...lines: DiffLine[]): Hunk => ({ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, header: '', lines });
@@ -70,6 +70,17 @@ describe('lineMarks', () => {
         expect(lineMarks(hits, 1, 1, 2)).toEqual([[0, 1]]);
         expect(lineMarks(hits, 0, 0, 2)).toEqual([]);
         expect(lineMarks([], 0, 0, 0)).toEqual([]);
+    });
+});
+
+describe('hitsByHunk', () => {
+    it('groups the hits of a file by hunk, in order; a hunk without any is absent', () => {
+        const hits = [hit(1, 0, 2, 0, 4), hit(1, 0, 2, 6, 9), hit(1, 2, 0, 1, 2)];
+        const byHunk = hitsByHunk(hits);
+        expect(byHunk.get(0)).toEqual([hits[0], hits[1]]);
+        expect(byHunk.get(2)).toEqual([hits[2]]);
+        expect(byHunk.has(1)).toBe(false);
+        expect(hitsByHunk([]).size).toBe(0);
     });
 });
 
