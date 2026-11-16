@@ -14,7 +14,7 @@ import { api, ApiError } from '../services/api.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
 import I18nText from '../components/I18nText.vue';
 import PrCardRow from '../components/PrCardRow.vue';
-import TopNav from '../components/TopNav.vue';
+import NavTools from '../components/NavTools.vue';
 import UrlInput from '../components/UrlInput.vue';
 
 const router = useRouter();
@@ -100,7 +100,6 @@ onMounted(() => load());
 </script>
 
 <template>
-    <TopNav />
     <main class="rv-home">
         <div class="rv-home-top">
             <h1>{{ t('home.title') }}</h1>
@@ -108,6 +107,7 @@ onMounted(() => load());
             <button :class="['rv-btn', { busy: loading }]" type="button" :title="t('home.reloadTitle')" :disabled="loading" :aria-busy="loading" @click="load({ fresh: true })">
                 {{ loading ? t('home.refresh') : `↻ ${t('home.refresh')}` }}
             </button>
+            <NavTools />
         </div>
 
         <ErrorPanel v-if="error" :error="error" />

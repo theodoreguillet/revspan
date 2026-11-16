@@ -107,6 +107,15 @@ def run() -> None:
         page.screenshot(path=f'{SHOTS}/02b-mes-pr-contributeur.png')
         view_title = ' '.join(page.locator('.pane-header .title').all_text_contents())
         check('view title localized from package.nls.json', 'my prs' in view_title.lower(), view_title)
+        actions = page.locator('.pane-header .actions .action-label').evaluate_all('els => els.map((el) => el.getAttribute("aria-label") || el.title || "")')
+        check('"My PRs" title bar: no "Open a PR (URL)" action, home button still there', not any('Open a PR' in a for a in actions) and any('Home' in a or 'home' in a for a in actions), str(actions))
+        page.keyboard.press('F1')
+        page.locator('.quick-input-widget input').first.wait_for(timeout=10000)
+        page.keyboard.type('Revspan: Open a PR')
+        time.sleep(1)
+        palette = ' | '.join(page.locator('.quick-input-widget .monaco-list-row').all_inner_texts())
+        check('command palette still offers "Open a PR (URL)"', 'Open a PR (URL)' in palette, palette[:300])
+        page.keyboard.press('Escape')
 
         # PR panel.
         row.click()

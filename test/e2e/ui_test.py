@@ -1030,12 +1030,28 @@ def run_checks(page):
                 overlay.locator('button', has_text='Fermer').click()  # do not block the following checks
     shortcuts_focus(page)
 
+    @check('home: one URL field, no top bar; ? opens the shortcuts, ⚙ goes to settings')
+    def home_header(page):
+        page.goto(url(''))
+        expect(page.locator('.rv-home-top .rv-btn')).to_be_visible(timeout=20000)
+        expect(page.locator('.rv-url')).to_have_count(1)
+        expect(page.locator('.rv-nav')).to_have_count(0)
+        page.locator('.rv-home-top button[aria-label="Raccourcis clavier"]').click()
+        overlay = page.locator('.rv-overlay')
+        expect(overlay).to_be_visible()
+        overlay.locator('button', has_text='Fermer').click()
+        expect(overlay).to_have_count(0)
+        page.locator('.rv-home-top a[aria-label="Réglages"]').click()
+        expect(page).to_have_url(re.compile('#/settings'))
+        page.goto(url(''))
+    home_header(page)
+
     @check('pasting a Bitbucket URL in the top bar')
     def url_paste(page):
         ws, repo, pid = MAIN_PR.split('/')
         page.goto(url(''))
-        page.fill('.rv-nav .rv-url', f'https://bitbucket.org/{ws}/{repo}/pull-requests/{pid}/diff')
-        page.press('.rv-nav .rv-url', 'Enter')
+        page.fill('.rv-home-top .rv-url', f'https://bitbucket.org/{ws}/{repo}/pull-requests/{pid}/diff')
+        page.press('.rv-home-top .rv-url', 'Enter')
         expect(page).to_have_url(re.compile(f'#/pr/{ws}/{repo}/{pid}'))
         wait_pr_ready(page)
     url_paste(page)
@@ -1413,7 +1429,7 @@ def run_language_checks(page, fr_page):
         titles = {'To review', 'To rebase', 'My PRs', 'Waiting on the author', 'Other open PRs'}
         for title in page.locator('.rv-lgrp').evaluate_all('els => els.map((el) => el.textContent.trim())'):
             assert title.split(' · ')[0] in titles or title.rsplit(' · ', 1)[0] in titles, f'untranslated group title: {title}'
-        expect(page.locator('.rv-nav .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')
+        expect(page.locator('.rv-home-top .rv-url')).to_have_attribute('placeholder', 'Paste a Bitbucket PR URL…')
     en_home(page)
 
     if FAKE_PRS:
