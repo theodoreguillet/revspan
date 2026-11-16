@@ -22,6 +22,9 @@ const touched = computed(() => (page.summary ? lastTouched(page.sums, page.from,
 const statusTag = computed(() => FILE_STATUS_TAGS[props.file.status]);
 const openThreads = computed(() => fileThreadCount(props.file, page.threadsById, false));
 const placed = computed(() => placeFileThreads(props.file, page.threadsById, page.showResolved));
+// search: the file's matches and, when it is here, the current match
+const hits = computed(() => page.search.fileHits(props.idx));
+const curHit = computed(() => (page.search.currentHit?.fileIdx === props.idx ? page.search.currentHit : null));
 const title = computed(() => (props.file.status === 'renamed' && props.file.oldPath ? `${props.file.oldPath} → ${props.file.path}` : props.file.path));
 
 function toggle(): void {
@@ -94,7 +97,19 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                 {{ file.status === 'renamed' ? t('file.renamedOnly') : t('file.noLines') }}
             </div>
             <template v-else>
-                <DiffHunk v-for="(hunk, k) in file.hunks" :key="k" :path="file.path" :hunk="hunk" :by-line="placed.byLine" :near="near" />
+                <DiffHunk
+                    v-for="(hunk, k) in file.hunks"
+                    :key="k"
+                    :path="file.path"
+                    :hunk="hunk"
+                    :by-line="placed.byLine"
+                    :near="near"
+                    :file-idx="idx"
+                    :hunk-idx="k"
+                    :hits="hits"
+                    :cur-line="curHit?.hunk === k ? curHit.line : -1"
+                    :cur-start="curHit?.hunk === k ? curHit.start : -1"
+                />
             </template>
         </template>
     </section>

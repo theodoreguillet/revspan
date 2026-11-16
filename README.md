@@ -217,13 +217,17 @@ one request per interval even once finished (see "Build status").
   Syntax highlighting with the VS Code themes (Dark+ / Light+, following the VS Code or browser theme), for the
   common languages (TypeScript, JavaScript, Vue, JSON, YAML, Markdown, CSS, HTML, Python, Java, Go, Rust, shell, PHP,
   Ruby, Kotlin, C#, SQL, XML, Dockerfile, Makefile).
+- **Search** (box at the top of the file list, `/`): the list keeps the files whose path contains the text, or whose
+  lines shown contain it (case-insensitive, at least 2 characters; with "whole file" on, the whole file is searched).
+  Each file shows its match count; Enter / Shift+Enter go to the next / previous match across files (a collapsed or
+  seen file opens), Esc clears. All in the page: no request to Bitbucket.
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution;
   comment on a line of the latest version.
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
   An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve.
 
-Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `[`/`]` version, `?` help. On AZERTY keyboards, `[` and `]` typed with
-Option or AltGr work too.
+Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `[`/`]` version, `/` search, `?` help. On AZERTY keyboards, `[`
+and `]` typed with Option or AltGr work too.
 
 ## Develop
 

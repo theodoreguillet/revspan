@@ -8,6 +8,7 @@ import { useResizableWidth } from '../composables/useResizableWidth.ts';
 import { fileThreadCount, viewedStatus, type ViewedStatus } from '../lib/diff.ts';
 import { t } from '../i18n/index.ts';
 import { basename, MINUS } from '../lib/format.ts';
+import DiffSearch from './DiffSearch.vue';
 
 const STATUS_ICONS = {
     none: { icon: '○', cls: '', title: 'files.notViewed' },
@@ -32,31 +33,43 @@ const seenCount = computed(() => files.value.filter((f) => viewedStatus(f, page.
 const groupOf = (file: FileDiff): GroupKey => (file.category === 'deps' ? 'deps' : 'code');
 /** Collapsed folders, as "group:path" (a folder may exist in both groups). */
 const collapsed = ref(new Set<string>());
+/** While searching, the folders start expanded: the folds of the search, forgotten when the query changes. */
+const searchCollapsed = ref(new Set<string>());
+watch(() => page.search.query, () => {
+    searchCollapsed.value = new Set();
+});
+const folds = () => (page.search.active ? searchCollapsed : collapsed);
 const dirKey = (group: GroupKey, path: string): string => `${group}:${path}`;
 
+// while searching: only the files whose name matches or that contain matches
 const groups = computed(() => {
-    const entries = files.value.map((file, idx): Entry => ({ path: file.path, file, idx }));
+    const entries = files.value.map((file, idx): Entry => ({ path: file.path, file, idx })).filter((e) => page.search.listed(e.idx));
+    const folded = folds().value;
+    const isDirCollapsed = (group: GroupKey, path: string): boolean => folded.has(dirKey(group, path));
     return ([['code', 'files.code'], ['deps', 'files.deps']] as const)
         .map(([key, label]) => ({ key, label, entries: entries.filter((e) => groupOf(e.file) === key) }))
         .filter((g) => g.entries.length)
-        .map((g) => ({ ...g, rows: visibleTreeRows(buildFileTree(g.entries), (path) => collapsed.value.has(dirKey(g.key, path))) }));
+        .map((g) => ({ ...g, rows: visibleTreeRows(buildFileTree(g.entries), (path) => isDirCollapsed(g.key, path)) }));
 });
+const hitCount = (idx: number): number => page.search.fileHits(idx).length;
 
 function toggleDir(group: GroupKey, path: string): void {
-    const next = new Set(collapsed.value);
+    const set = folds();
+    const next = new Set(set.value);
     const key = dirKey(group, path);
     if (!next.delete(key)) {
         next.add(key);
     }
-    collapsed.value = next;
+    set.value = next;
 }
 
 /** Expands the collapsed folders that contain the file. */
 function reveal(file: FileDiff): void {
+    const set = folds();
     const prefix = dirKey(groupOf(file), '');
-    const hiding = [...collapsed.value].filter((key) => key.startsWith(prefix) && file.path.startsWith(`${key.slice(prefix.length)}/`));
+    const hiding = [...set.value].filter((key) => key.startsWith(prefix) && file.path.startsWith(`${key.slice(prefix.length)}/`));
     if (hiding.length) {
-        collapsed.value = new Set([...collapsed.value].filter((key) => !hiding.includes(key)));
+        set.value = new Set([...set.value].filter((key) => !hiding.includes(key)));
     }
 }
 
@@ -96,8 +109,10 @@ watch(() => page.curFile, async (idx) => {
                 <div v-for="(width, k) in SKELETON_ROWS" :key="k" class="rv-skel" :style="{ width }" />
             </div>
             <template v-else>
+                <DiffSearch />
                 <div class="rv-prog">
                     <span class="cnt">{{ t('files.progress', { seen: seenCount, total: files.length }) }}</span>
+                    <span v-if="page.search.active" class="nmc" data-name-matches :title="t('search.nameMatchesTitle')">{{ t('search.nameMatches', { count: page.search.nameMatches.size }) }}</span>
                     <span class="rv-bar"><i :style="{ width: `${files.length ? (100 * seenCount) / files.length : 0}%` }" /></span>
                 </div>
                 <template v-for="group in groups" :key="group.key">
@@ -138,6 +153,7 @@ watch(() => page.curFile, async (idx) => {
                         >
                             <span :class="['ck', status(row.item.file).cls]" :title="t(status(row.item.file).title)">{{ status(row.item.file).icon }}</span>
                             <span class="nm"><span class="base">{{ basename(row.item.path) }}</span></span>
+                            <span v-if="hitCount(row.item.idx)" class="hits" data-hits :title="t('search.fileHits', { count: hitCount(row.item.idx) })">{{ hitCount(row.item.idx) }}</span>
                             <span v-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
                             <span v-if="threads(row.item.file)" class="cm" :title="t('common.threads', { count: threads(row.item.file) })">💬{{ threads(row.item.file) }}</span>
                             <span class="ad">+{{ row.item.file.added }}</span>
@@ -146,6 +162,7 @@ watch(() => page.curFile, async (idx) => {
                     </template>
                 </template>
                 <div v-if="!files.length" class="rv-grp">{{ t('files.none') }}</div>
+                <div v-else-if="!groups.length" class="rv-grp">{{ t('search.noFiles') }}</div>
                 <div v-if="masterOnly.length" class="rv-masked">
                     {{ t('files.masterOnly', { count: masterOnly.length }) }}
                     <button type="button" class="rv-link" @click="page.showMasterOnly = !page.showMasterOnly">{{ page.showMasterOnly ? t('files.hide') : t('files.show') }}</button>

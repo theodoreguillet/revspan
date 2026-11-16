@@ -30,6 +30,8 @@ export function useDiffNav() {
     const files = new Map<string, HTMLElement>();
     const threads = new Map<HTMLElement, ThreadEntry>();
     let tabs: HTMLElement | null = null;
+    /** Line of the current search match (the last one rendered as current). */
+    let match: HTMLElement | null = null;
 
     function registerFile(path: string, el: HTMLElement | null): void {
         if (el) {
@@ -49,6 +51,19 @@ export function useDiffNav() {
 
     function unregisterThread(el: HTMLElement): void {
         threads.delete(el);
+    }
+
+    function registerMatch(el: unknown): void {
+        if (el instanceof HTMLElement) {
+            match = el;
+        }
+    }
+
+    /** Scrolls the line of the current search match under the timeline and the sticky file header. */
+    function scrollToMatch(): void {
+        if (match?.isConnected) {
+            scrollToElement(match, tlHeight.value + 60);
+        }
     }
 
     function scrollToFile(path: string): void {
@@ -117,7 +132,7 @@ export function useDiffNav() {
 
     return {
         tlHeight, curFile,
-        registerFile, registerTabs, registerThread, unregisterThread,
-        scrollToFile, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
+        registerFile, registerTabs, registerThread, unregisterThread, registerMatch,
+        scrollToFile, scrollToMatch, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
     };
 }

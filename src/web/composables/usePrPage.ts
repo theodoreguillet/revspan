@@ -6,6 +6,7 @@ import { viewedStatus } from '../lib/diff.ts';
 import { PREFETCH_CONTEXT } from '../lib/prefetch.ts';
 import { useDiffNav } from './useDiffNav.ts';
 import { useDiffOptions } from './useDiffOptions.ts';
+import { useDiffSearch } from './useDiffSearch.ts';
 import { useDiscussion } from './useDiscussion.ts';
 import { usePrLoad } from './usePrLoad.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
@@ -48,7 +49,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         }
     });
 
-    async function gotoFile(idx: number, { expand = false } = {}): Promise<void> {
+    async function gotoFile(idx: number, { expand = false, scroll = true } = {}): Promise<void> {
         const file = files.value[idx];
         if (!file) {
             return;
@@ -58,7 +59,22 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         }
         nav.curFile.value = idx;
         await nextTick();
-        nav.scrollToFile(file.path);
+        if (scroll) {
+            nav.scrollToFile(file.path);
+        }
+    }
+
+    // a match's file is shown expanded, then its line (not the file head) is scrolled under the timeline
+    const search = useDiffSearch(files, {
+        showFile: (idx) => gotoFile(idx, { expand: true, scroll: false }),
+        scrollToMatch: nav.scrollToMatch,
+    });
+
+    /** "/": the search box of the file list, on the Diff tab. */
+    async function focusSearch(): Promise<void> {
+        options.tab.value = 'diff';
+        await nextTick();
+        search.focus();
     }
 
     function updateCurrentFromScroll(): void {
@@ -93,7 +109,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         nav.revealThread(threadId);
     }
 
-    /** Shortcuts: j/k file, n/p thread, v seen, [ ] version, Escape closes the composer. Returns true if the key is handled. */
+    /** Shortcuts: j/k file, n/p thread, v seen, [ ] version, / search, Escape closes the composer. Returns true if the key is handled. */
     function handleKey(key: string): boolean {
         // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it
         const inDiff = options.tab.value === 'diff' && load.diffMode.value !== 'skeleton';
@@ -116,6 +132,12 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
                 }
                 void review.setViewed(current, viewedStatus(current, load.detail.value.review.viewed) !== 'seen');
                 return true;
+            case '/':
+                if (load.diffMode.value === 'skeleton') {
+                    return false;
+                }
+                void focusSearch();
+                return true;
             case '[':
                 return range.stepVersion(-1);
             case ']':
@@ -135,7 +157,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     return reactive({
         ref: prRef,
         ...load, ...range, ...options, ...nav, ...discussion, ...review,
-        threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, handleKey,
+        search, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, handleKey,
     });
 }
 

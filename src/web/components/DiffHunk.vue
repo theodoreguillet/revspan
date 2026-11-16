@@ -7,23 +7,38 @@ import { usePrPage } from '../composables/usePrPage.ts';
 import { t } from '../i18n/index.ts';
 import { hunkRange, lineSign, sideBySideRows, unifiedRows, type ComposerTarget, type PlacedThread } from '../lib/diff.ts';
 import { languageOf, lineTokens } from '../lib/highlight.ts';
+import { lineMarks, type SearchHit } from '../lib/search.ts';
 import { isVsCode, openLocalFile } from '../services/host.ts';
 import Composer from './Composer.vue';
 import DiffCode from './DiffCode.vue';
 import ThreadCard from './ThreadCard.vue';
 
-const props = defineProps<{ path: string; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean }>();
+/**
+ * hits: search matches of the file (ordered); curLine / curStart: current match in this hunk (index in hunk.lines and
+ * start), -1 if it is elsewhere.
+ */
+const props = defineProps<{
+    path: string; hunk: Hunk; byLine: Map<number, PlacedThread[]>; near: boolean;
+    fileIdx: number; hunkIdx: number; hits: readonly SearchHit[]; curLine: number; curStart: number;
+}>();
 const page = usePrPage();
 
 const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
 const rows = computed(() => (page.view === 'unified' ? unifiedRows(input.value) : []));
 const splitRows = computed(() => (page.view === 'split' ? sideBySideRows(input.value) : []));
 
-// syntax colors arrive after the first render; a side-by-side cell finds its tokens by its index in the hunk
+// syntax colors arrive after the first render; a side-by-side cell finds its tokens and matches by its index in the hunk
 const lang = computed(() => languageOf(props.path));
 const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near);
-const lineIndex = computed(() => (tokens.value && page.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
-const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, lineIndex.value?.get(line) ?? -1, side);
+const lineIndex = computed(() => ((tokens.value || props.hits.length) && page.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
+const indexOf = (line: DiffLine): number => lineIndex.value?.get(line) ?? -1;
+const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, indexOf(line), side);
+
+// search: lines without a match get the same empty array, so that they do not render again on each keystroke
+const marksAt = (k: number) => lineMarks(props.hits, props.fileIdx, props.hunkIdx, k);
+const curAt = (k: number): number => (k === props.curLine ? props.curStart : -1);
+/** The line of the current match registers itself, to be scrolled into view. */
+const matchRef = (el: unknown): void => page.registerMatch(el);
 
 const lineClass = (t: string): string => (t === '+' ? 'rv-l a' : t === '-' ? 'rv-l r' : 'rv-l');
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
@@ -34,11 +49,11 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
 <template>
     <div class="rv-hunk">{{ hunkRange(hunk) }}<span v-if="hunk.header" class="hh">{{ hunk.header }}</span></div>
     <template v-for="(row, k) in rows" :key="k">
-        <div :class="lineClass(row.line.t)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
+        <div :ref="k === curLine ? matchRef : undefined" :class="lineClass(row.line.t)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
             <span class="n">{{ row.line.o ?? '' }}</span>
             <span class="n">{{ row.line.n ?? '' }}</span>
             <span class="s">{{ lineSign(row.line.t) }}</span>
-            <DiffCode :line="row.line" :tokens="lineTokens(tokens, k, row.line.t === '-' ? 'old' : 'new')" />
+            <DiffCode :line="row.line" :tokens="lineTokens(tokens, k, row.line.t === '-' ? 'old' : 'new')" :marks="marksAt(k)" :cur="curAt(k)" />
             <button
                 v-if="isVsCode && row.line.n != null"
                 type="button"
@@ -71,13 +86,14 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                 <div v-if="!cell.line" class="half e" />
                 <div
                     v-else
+                    :ref="curLine >= 0 && indexOf(cell.line) === curLine ? matchRef : undefined"
                     :class="['half', { r: cell.line.t !== ' ' && cell.side === 'old', a: cell.line.t !== ' ' && cell.side === 'new' }]"
                     :data-o="cell.side === 'old' ? cell.line.o ?? '' : undefined"
                     :data-n="cell.side === 'new' ? cell.line.n ?? '' : undefined"
                 >
                     <span class="n">{{ (cell.side === 'old' ? cell.line.o : cell.line.n) ?? '' }}</span>
                     <span class="s">{{ cell.line.t !== ' ' ? lineSign(cell.line.t) : '' }}</span>
-                    <DiffCode :line="cell.line" :tokens="splitTokens(cell.line, cell.side)" />
+                    <DiffCode :line="cell.line" :tokens="splitTokens(cell.line, cell.side)" :marks="marksAt(indexOf(cell.line))" :cur="curAt(indexOf(cell.line))" />
                     <button
                         v-if="isVsCode && cell.side === 'new' && cell.line.n != null"
                         type="button"

@@ -902,6 +902,74 @@ def run_checks(page):
         handle.dblclick()
     file_list_resize(page)
 
+    @check('diff_search: a file name fragment filters the list, a word gives counts, Enter walks the matches, Escape restores')
+    def diff_search(page):
+        # full version against master: three files, enough words shared by two of them
+        open_pr(page, MAIN_PR, f'?from=0&to={n}')
+        full = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')
+        box = page.locator('[data-search]')
+        rows = page.locator('.rv-files .rv-f')
+        all_paths = sorted(rows.evaluate_all('els => els.map(e => e.dataset.path)'))
+        lines_of = [[ln['text'].lower() for h in f['hunks'] for ln in h['lines']] for f in full['files']]
+
+        def listed(query):
+            q = query.lower()
+            return sorted(f['path'] for f, lines in zip(full['files'], lines_of) if q in f['path'].lower() or any(q in t for t in lines))
+
+        page.locator('body').click(position={'x': 5, 'y': 5})
+        page.keyboard.press('/')
+        expect(box).to_be_focused()
+        # file names (case-insensitive): only the matching rows, plus the files containing the fragment
+        stem = code_file['path'].rsplit('/', 1)[1].split('.')[0]
+        frag = stem[:max(4, len(stem) // 2)].upper()
+        box.fill(frag)
+        page.wait_for_function('n => document.querySelectorAll(".rv-files .rv-f").length === n', arg=len(listed(frag)))
+        assert sorted(rows.evaluate_all('els => els.map(e => e.dataset.path)')) == listed(frag)
+        by_name = sum(1 for f in full['files'] if frag.lower() in f['path'].lower())
+        expect(page.locator('.rv-prog [data-name-matches]')).to_contain_text(str(by_name))
+        # contents: a word found once in a first file and in a second one, in no other file
+        words = sorted({w for lines in lines_of for t in lines for w in re.findall(r'[a-z_]{4,}', t)})
+        word, first, second = None, None, None
+        for w in words:
+            counts = [sum(t.count(w) for t in lines) for lines in lines_of]
+            found = [i for i, c in enumerate(counts) if c]
+            if len(found) == 2 and counts[found[0]] == 1:
+                word, first, second = w, full['files'][found[0]]['path'], full['files'][found[1]]['path']
+                total = sum(counts)
+                break
+        assert word, 'no word found once in one file and in exactly one other file'
+        box.fill(word)
+        expect(rows).to_have_count(len(listed(word)))
+        expect(page.locator(f'.rv-f[data-path="{first}"] [data-hits]')).to_have_text('1')
+        expect(page.locator(f'.rv-f[data-path="{second}"] [data-hits]')).to_have_text(str(total - 1))
+        expect(page.locator('[data-search-status]')).to_contain_text(str(total))
+        box.press('Enter')
+        expect(page.locator(f'.rv-file[data-path="{first}"] mark.cur')).to_have_count(1)
+        box.press('Enter')
+        second_block = page.locator(f'.rv-file[data-path="{second}"]')
+        expect(second_block).not_to_have_class(re.compile(r'\bfolded\b'))
+        cur = second_block.locator('mark.cur')
+        expect(cur).to_have_count(1)
+        expect(page.locator('mark.cur')).to_have_count(1)
+        assert cur.inner_text().lower() == word
+        expect(cur).to_be_in_viewport()
+        expect(page.locator('[data-search-status]')).to_have_text(f'2 / {total}')
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', second)
+        expect(box).to_be_focused()
+        page.screenshot(path=os.path.join(SHOTS, 'diff-search.png'))
+        # side-by-side: the same current match
+        page.locator('.rv-seg button[data-seg="split"]').click()
+        expect(second_block.locator('.rv-sl mark.cur').first).to_be_attached()
+        page.locator('.rv-seg button[data-seg="unified"]').click()
+        box.press('Shift+Enter')
+        expect(page.locator(f'.rv-file[data-path="{first}"] mark.cur')).to_have_count(1)
+        box.press('Escape')
+        expect(box).to_have_value('')
+        expect(box).not_to_be_focused()
+        expect(page.locator('mark')).to_have_count(0)
+        expect(rows).to_have_count(len(all_paths))
+    diff_search(page)
+
     @check('shortcuts help: focus trapped in the box, returned to the button on close')
     def shortcuts_focus(page):
         opener = page.locator('.rv-nav button[aria-label="Raccourcis clavier"]')

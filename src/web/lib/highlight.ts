@@ -17,6 +17,15 @@ export interface Part {
     italic?: boolean;
     bold?: boolean;
     hl: boolean;
+    /** Search match: 'cur' is the current one. */
+    mark?: 'hit' | 'cur';
+}
+
+/** A search match to mark in a line: [start, end[. */
+export interface TextMark {
+    start: number;
+    end: number;
+    kind: 'hit' | 'cur';
 }
 
 export type CodeTheme = 'dark-plus' | 'light-plus';
@@ -117,8 +126,11 @@ function part(text: string, token: CodeToken | null, hl: boolean): Part {
     return out;
 }
 
-/** Parts of a line: token colors, split at the boundaries of the word-level change ranges `hl`. */
-export function mergeTokens(text: string, tokens: readonly CodeToken[], hl: readonly [number, number][]): Part[] {
+/**
+ * Parts of a line: token colors, split at the boundaries of the word-level change ranges `hl`, then at the search
+ * marks (sorted, not overlapping).
+ */
+export function mergeTokens(text: string, tokens: readonly CodeToken[], hl: readonly [number, number][], search: readonly TextMark[] = []): Part[] {
     if (!text) {
         return [];
     }
@@ -144,6 +156,33 @@ export function mergeTokens(text: string, tokens: readonly CodeToken[], hl: read
             s++;
             sOff = 0;
         }
+    }
+    return search.length ? splitAtMarks(out, search) : out;
+}
+
+/** Cuts the parts at the boundaries of the marks and tags the pieces inside a mark. */
+function splitAtMarks(parts: readonly Part[], marks: readonly TextMark[]): Part[] {
+    const out: Part[] = [];
+    let pos = 0;
+    let m = 0;
+    for (const p of parts) {
+        const end = pos + p.text.length;
+        let at = pos;
+        while (at < end) {
+            while (m < marks.length && marks[m]!.end <= at) {
+                m++;
+            }
+            const mark = marks[m];
+            const inside = !!mark && mark.start <= at;
+            const stop = Math.min(end, !mark ? end : inside ? mark.end : mark.start);
+            const piece: Part = { ...p, text: p.text.slice(at - pos, stop - pos) };
+            if (inside) {
+                piece.mark = mark.kind;
+            }
+            out.push(piece);
+            at = stop;
+        }
+        pos = end;
     }
     return out;
 }

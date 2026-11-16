@@ -13,6 +13,8 @@
     --accent-bg: var(--accent); --accent-fg: #fff;
     /* input fields */
     --input-bg: var(--bg-secondary); --input-border: var(--border); --input-fg: var(--text-primary);
+    /* search matches in the diff (current one stronger) */
+    --rv-match-bg: rgba(255,196,0,.38); --rv-match-cur-bg: rgba(255,140,0,.62); --rv-match-cur-border: #d18616;
     --tl-h: 150px;
 }
 @media (prefers-color-scheme: dark) {
@@ -24,6 +26,7 @@
         --rv-del: #f85149; --rv-del-bg: rgba(248,81,73,.15); --rv-del-hl: rgba(248,81,73,.40);
         --rv-rebase: #f0883e; --rv-rebase-bg: rgba(240,136,62,.18); --rv-new: #58a6ff; --rv-range: rgba(56,139,253,.16); --rv-star: #e3b341;
         --rv-ok: #238636; --rv-ok-hover: #2ea043; --rv-danger-bg: rgba(248,81,73,.12); --rv-danger-border: rgba(248,81,73,.4);
+        --rv-match-bg: rgba(255,210,0,.26); --rv-match-cur-bg: rgba(255,150,0,.55); --rv-match-cur-border: #f0883e;
     }
 }
 
@@ -226,6 +229,12 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-f .cm { font-family: var(--rv-font); font-size: 10.5px; color: var(--rv-new); flex-shrink: 0; }
 .rv-f .cf { font-family: var(--rv-font); font-size: 10.5px; color: var(--rv-rebase); flex-shrink: 0; }
 .rv-f .ad { color: var(--rv-add); flex-shrink: 0; } .rv-f .dl { color: var(--rv-del); flex-shrink: 0; }
+/* search box at the top of the file list, match counts */
+.rv-search { display: flex; align-items: center; gap: 6px; padding: 0 6px 8px; }
+.rv-search input { flex: 1; min-width: 0; border: 1px solid var(--input-border); border-radius: 6px; padding: 4px 8px; background: var(--input-bg); color: var(--input-fg); font-size: 12px; }
+.rv-search .st { font-size: 11px; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rv-prog .nmc { color: var(--text-primary); }
+.rv-f .hits { font-family: var(--rv-font); font-size: 10.5px; color: var(--text-primary); background: var(--rv-match-bg); border-radius: 8px; padding: 0 5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .rv-masked { margin: 10px 6px 0; padding: 8px; border: 1px dashed var(--border); border-radius: 6px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
 .rv-masked ul { margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--rv-mono); font-size: 10.5px; max-height: 260px; overflow-y: auto; }
 .rv-masked li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
@@ -263,6 +272,8 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-l.r, .rv-sl .r { background: var(--rv-del-bg); } .rv-l.r .s, .rv-sl .r.s { color: var(--rv-del); }
 .rv-l.a .c em, .rv-sl .a em { font-style: normal; background: var(--rv-add-hl); border-radius: 2px; }
 .rv-l.r .c em, .rv-sl .r em { font-style: normal; background: var(--rv-del-hl); border-radius: 2px; }
+.rv-l .c mark, .rv-sl .c mark { color: inherit; background: var(--rv-match-bg); border-radius: 2px; }
+.rv-l .c mark.cur, .rv-sl .c mark.cur { background: var(--rv-match-cur-bg); box-shadow: 0 0 0 1px var(--rv-match-cur-border); }
 .rv-noeol { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); font-family: var(--rv-font); font-size: 10.5px; line-height: 16px; user-select: none; cursor: help; white-space: nowrap; vertical-align: 1px; }
 .rv-plus { position: absolute; left: 80px; top: 2px; width: 18px; height: 16px; border-radius: 4px; border: none; background: var(--accent-bg); color: var(--accent-fg); font-size: 13px; line-height: 15px; font-weight: 700; padding: 0; cursor: pointer; visibility: hidden; z-index: 2; }
 .rv-l:hover .rv-plus, .rv-sl .half:hover .rv-plus { visibility: visible; }
@@ -551,6 +562,9 @@ body.vscode-light, body.vscode-dark, body.vscode-high-contrast {
     --rv-danger-border: var(--vscode-inputValidation-errorBorder, var(--rv-del));
     --rv-mono: var(--vscode-editor-font-family, ui-monospace, Menlo, monospace);
     --rv-font: var(--vscode-font-family, system-ui, sans-serif);
+    --rv-match-bg: var(--vscode-editor-findMatchHighlightBackground, rgba(234,92,0,.33));
+    --rv-match-cur-bg: var(--vscode-editor-findMatchBackground, rgba(81,92,106,.8));
+    --rv-match-cur-border: var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder, transparent));
 }
 body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
 body.vscode-dark, body.vscode-high-contrast:not(.vscode-high-contrast-light) { color-scheme: dark; }
