@@ -1032,6 +1032,52 @@ def run_checks(page):
         expect(rows).to_have_count(len(all_paths))
     diff_search(page)
 
+    @check('sticky_toolbar: the diff toolbar stays under the timeline, j/k lands the file header just under it')
+    def sticky_toolbar(page):
+        # a short window: the last file can reach the top (the tail below the diff is 55vh)
+        page.set_viewport_size({'width': 1440, 'height': 520})
+        try:
+            open_pr(page, MAIN_PR, f'?from=0&to={n}')
+            count = page.locator('.rv-diff .rv-file').count()
+            assert count >= 2, f'{count} files: j/k needs two'
+            page.evaluate('() => { const f = [...document.querySelectorAll(".rv-diff .rv-file")].pop(); window.scrollTo(0, f.getBoundingClientRect().top + scrollY); }')
+            bars = '() => { const r = s => document.querySelector(s).getBoundingClientRect(); return {tl: r(".rv-tl").bottom, top: r(".rv-dtb").top, bottom: r(".rv-dtb").bottom}; }'
+            expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(count - 1))
+            box = page.evaluate(bars)
+            assert abs(box['top'] - box['tl']) <= 1, f'toolbar not right under the timeline: {box}'
+            assert box['bottom'] - box['top'] > 20, box
+            expect(page.locator('.rv-dtb [data-seg="split"]')).to_be_in_viewport()
+            page.evaluate('document.activeElement && document.activeElement.blur()')
+
+            def header_under_toolbar(key, idx):
+                page.keyboard.press(key)
+                expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(idx))
+                page.wait_for_timeout(100)
+                pos = page.evaluate('''i => {
+                    const fh = document.querySelectorAll(".rv-diff .rv-file")[i].querySelector(".rv-fh").getBoundingClientRect();
+                    const at = document.elementFromPoint(fh.left + 20, fh.top + fh.height / 2);
+                    return {fh: fh.top, toolbar: document.querySelector(".rv-dtb").getBoundingClientRect().bottom,
+                            visible: !!at && !!at.closest(".rv-fh"), atEnd: scrollY >= document.documentElement.scrollHeight - innerHeight - 1};
+                }''', idx)
+                assert pos['visible'] and pos['fh'] >= pos['toolbar'] - 0.5, f'{key}: file header hidden behind the toolbar: {pos}'
+                assert pos['atEnd'] or pos['fh'] <= pos['toolbar'] + 12, f'{key}: file header not just under the toolbar: {pos}'
+                now = page.evaluate(bars)
+                assert abs(now['top'] - now['tl']) <= 1, f'{key}: toolbar no longer under the timeline: {now}'
+
+            header_under_toolbar('k', count - 2)
+            header_under_toolbar('j', count - 1)
+            header_under_toolbar('k', count - 2)
+            # narrow window (file list above the diff): same sticky toolbar, no horizontal scroll
+            page.set_viewport_size({'width': 760, 'height': 520})
+            page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
+            page.wait_for_timeout(100)
+            box = page.evaluate(bars)
+            assert abs(box['top'] - box['tl']) <= 1, f'narrow: toolbar not right under the timeline: {box}'
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'narrow: horizontal scroll'
+        finally:
+            page.set_viewport_size({'width': 1440, 'height': 900})
+    sticky_toolbar(page)
+
     @check('shortcuts help: focus trapped in the box, returned to the button on close')
     def shortcuts_focus(page):
         opener = page.locator('.rv-nav button[aria-label="Raccourcis clavier"]')

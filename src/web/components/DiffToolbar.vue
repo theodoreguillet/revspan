@@ -1,14 +1,22 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { useStickyHeight } from '../composables/useStickyHeight.ts';
 import { t } from '../i18n/index.ts';
 
 const page = usePrPage();
+const root = ref<HTMLElement | null>(null);
+
+// sticky under the timeline: the file headers stick under it, the scroll offsets add its height
+useStickyHeight(root, '--dtb-h', (height) => {
+    page.toolbarHeight = height;
+});
 
 const VIEWS = [['unified', 'diff.unified'], ['split', 'diff.split']] as const;
 </script>
 
 <template>
-    <div class="rv-dtb">
+    <div ref="root" class="rv-dtb">
         <span class="rv-seg" role="group" :aria-label="t('diff.views')">
             <button
                 v-for="[key, label] in VIEWS"

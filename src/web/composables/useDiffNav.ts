@@ -1,6 +1,6 @@
 // Navigation under the sticky timeline: components declare their elements (files, tabs, threads),
 // this module scrolls to them and tracks the current file. No lookup by CSS selector.
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 export interface ThreadEntry {
     threadId: number;
@@ -25,6 +25,10 @@ const isVisible = (el: HTMLElement): boolean => el.offsetParent !== null;
 export function useDiffNav() {
     /** Height of the sticky timeline (measured by Timeline). */
     const tlHeight = ref(0);
+    /** Height of the sticky diff toolbar, stuck under the timeline (measured by DiffToolbar; 0 outside the Diff tab). */
+    const toolbarHeight = ref(0);
+    /** What the sticky bars cover at the top of the window: the diff content is read below it. */
+    const stickyHeight = computed(() => tlHeight.value + toolbarHeight.value);
     /** Index of the current file in the diff list. */
     const curFile = ref(0);
     const files = new Map<string, HTMLElement>();
@@ -59,29 +63,30 @@ export function useDiffNav() {
         }
     }
 
-    /** Scrolls the line of the current search match under the timeline and the sticky file header. */
+    /** Scrolls the line of the current search match under the sticky bars and the sticky file header. */
     function scrollToMatch(): void {
         if (match?.isConnected) {
-            scrollToElement(match, tlHeight.value + 60);
+            scrollToElement(match, stickyHeight.value + 60);
         }
     }
 
     function scrollToFile(path: string): void {
         const el = files.get(path);
         if (el) {
-            scrollToElement(el, tlHeight.value + 6);
+            scrollToElement(el, stickyHeight.value + 6);
         }
     }
 
     /** A file that was just collapsed must not leave the page lower than it. */
     function keepFileInView(path: string): void {
         const el = files.get(path);
-        if (el && el.getBoundingClientRect().top < tlHeight.value) {
-            scrollToElement(el, tlHeight.value + 6);
+        if (el && el.getBoundingClientRect().top < stickyHeight.value) {
+            scrollToElement(el, stickyHeight.value + 6);
         }
     }
 
-    /** After a range change: scrolls back to the top of the tabs if we were reading further down. */
+    /** After a range change: scrolls back to the top of the tabs if we were reading further down.
+     *  The tabs are above the diff toolbar, which is not stuck yet there: only the timeline covers them. */
     function scrollToTabsIfBelow(): void {
         if (!tabs) {
             return;
@@ -92,9 +97,9 @@ export function useDiffNav() {
         }
     }
 
-    /** Index (in `paths`) of the last file whose header went under the timeline. */
+    /** Index (in `paths`) of the last file whose header went under the sticky bars. */
     function fileUnderTimeline(paths: string[]): number {
-        const limit = tlHeight.value + 48;
+        const limit = stickyHeight.value + 48;
         let cur = 0;
         paths.forEach((path, idx) => {
             const el = files.get(path);
@@ -107,7 +112,7 @@ export function useDiffNav() {
 
     /** Next (1) or previous (-1) thread relative to the reading line, below the sticky headers. */
     function nextThread(dir: 1 | -1): void {
-        const y = tlHeight.value + 60;
+        const y = stickyHeight.value + 60;
         const ordered = [...threads.keys()]
             .filter(isVisible)
             .map((el) => ({ el, top: el.getBoundingClientRect().top }))
@@ -123,7 +128,7 @@ export function useDiffNav() {
     function revealThread(threadId: number): void {
         for (const [el, entry] of threads) {
             if (entry.inDiff && entry.threadId === threadId) {
-                scrollToElement(el, tlHeight.value + 60);
+                scrollToElement(el, stickyHeight.value + 60);
                 flash(el);
                 return;
             }
@@ -131,7 +136,7 @@ export function useDiffNav() {
     }
 
     return {
-        tlHeight, curFile,
+        tlHeight, toolbarHeight, stickyHeight, curFile,
         registerFile, registerTabs, registerThread, unregisterThread, registerMatch,
         scrollToFile, scrollToMatch, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
     };

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { useStickyHeight } from '../composables/useStickyHeight.ts';
 import { t, tr } from '../i18n/index.ts';
 import { PRESET_LABELS, readout } from '../lib/selection.ts';
 import { inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
@@ -44,25 +45,15 @@ function hiddenTitle(list: number[]): string {
     return t('timeline.hiddenTitle', { count: list.length, versions: list.map((i) => `v${i}`).join(', ') });
 }
 
-// the (sticky) timeline height offsets the sticky elements below it: file headers, file list
-let observer: ResizeObserver | null = null;
+// the (sticky) timeline height offsets the sticky elements below it: diff toolbar, file headers, file list
+useStickyHeight(root, '--tl-h', (height) => {
+    page.tlHeight = height;
+});
 onMounted(async () => {
-    observer = new ResizeObserver(() => {
-        const height = root.value?.offsetHeight ?? 0;
-        page.tlHeight = height;
-        document.documentElement.style.setProperty('--tl-h', `${height}px`);
-    });
-    if (root.value) {
-        observer.observe(root.value);
-    }
     await nextTick();
     if (track.value) {
         track.value.scrollLeft = track.value.scrollWidth; // the latest versions first
     }
-});
-onBeforeUnmount(() => {
-    observer?.disconnect();
-    document.documentElement.style.removeProperty('--tl-h');
 });
 </script>
 

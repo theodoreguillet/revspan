@@ -15,7 +15,8 @@
     --input-bg: var(--bg-secondary); --input-border: var(--border); --input-fg: var(--text-primary);
     /* search matches in the diff (current one stronger) */
     --rv-match-bg: rgba(255,196,0,.38); --rv-match-cur-bg: rgba(255,140,0,.62); --rv-match-cur-border: #d18616;
-    --tl-h: 150px;
+    /* sticky bars, measured: timeline, diff toolbar (0 outside the Diff tab); the diff is read below both */
+    --tl-h: 150px; --dtb-h: 0px; --sticky-h: calc(var(--tl-h) + var(--dtb-h));
 }
 @media (prefers-color-scheme: dark) {
     :root {
@@ -253,7 +254,8 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-masked ul { margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--rv-mono); font-size: 10.5px; max-height: 260px; overflow-y: auto; }
 .rv-masked li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
 .rv-diff { flex: 1; min-width: 0; padding: 12px 16px; }
-.rv-dtb { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 11.5px; color: var(--text-secondary); }
+/* sticky under the timeline, across the whole diff column (negative margins over its padding), opaque */
+.rv-dtb { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin: -6px -16px 10px; padding: 6px 16px; font-size: 11.5px; color: var(--text-secondary); position: sticky; top: var(--tl-h); z-index: 10; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
 .rv-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .rv-seg button { border: none; background: var(--bg-secondary); padding: 3px 9px; font-size: 11.5px; cursor: pointer; color: var(--text-secondary); }
 .rv-seg button + button { border-left: 1px solid var(--border); }
@@ -264,9 +266,9 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-msgdiff { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; overflow: hidden; }
 .rv-msgdiff .t { padding: 6px 10px; background: var(--bg-primary); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
 
-.rv-file { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; scroll-margin-top: calc(var(--tl-h) + 8px); }
+.rv-file { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; scroll-margin-top: calc(var(--sticky-h) + 8px); }
 .rv-file.cur { border-color: var(--accent); }
-.rv-fh { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; background: var(--bg-primary); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; font-family: var(--rv-mono); font-size: 12px; position: sticky; top: var(--tl-h); z-index: 5; }
+.rv-fh { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; background: var(--bg-primary); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; font-family: var(--rv-mono); font-size: 12px; position: sticky; top: var(--sticky-h); z-index: 5; }
 .rv-file.folded .rv-fh { border-bottom: none; border-radius: 6px; }
 .rv-fh .tog { border: none; background: none; cursor: pointer; padding: 0 2px; color: var(--text-secondary); font-size: 11px; width: 16px; }
 .rv-fh .path { min-width: 0; overflow-wrap: anywhere; cursor: pointer; }
@@ -560,7 +562,10 @@ details.rv-list:not([open]) > summary { border-bottom: none; }
     .rv-banner, .rv-pulse { margin-left: 12px; margin-right: 12px; }
     .rv-body { flex-direction: column; }
     .rv-files { position: static; width: auto; max-height: 40vh; align-self: stretch; border-right: none; border-bottom: 1px solid var(--border); padding: 8px 12px; }
+    /* the list spans the page above the diff: nothing to resize (the handle stuck out on the right: horizontal scroll) */
+    .rv-resize { display: none; }
     .rv-diff { padding: 12px 10px; }
+    .rv-dtb { margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
     .rv-th, .rv-comp { margin-left: 12px; margin-right: 8px; }
     .rv-split-right .rv-th, .rv-split-right .rv-comp { margin-left: 12px; }
     .rv-split-left .rv-comp { margin-right: 12px; }
