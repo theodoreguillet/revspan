@@ -253,6 +253,7 @@ and `]` typed with Option or AltGr work too.
 | `npm run dev:fake` | server wired to the fake Bitbucket (no real call); then `npm run dev:web` |
 | `npm run check` | lint + types + unit and integration tests (Vitest) |
 | `npm run test:e2e` | build then Playwright UI tests on the real server wired to the fake Bitbucket |
+| `npm run test:perf` | build then measures the diff's long tasks on a large PR of the fake Bitbucket (file switch, j/k, big file, search, context); `REVSPAN_PERF_CPU=4` slows the CPU, not part of `check` |
 | `npm run test:live` | real read-only test on a PR of your choice (`REVSPAN_LIVE_PR` = URL, `REVSPAN_LIVE_EMAIL`, `REVSPAN_KEYCHAIN_SERVICE`) |
 | `npm run build:extension` / `npm run test:extension` | builds the VS Code extension / smoke test in an isolated VS Code (fake Bitbucket) |
 | `npm run package:extension` / `npm run extension:install` | `.vsix` in `dist/` (vsce) / builds it and installs it in VS Code |

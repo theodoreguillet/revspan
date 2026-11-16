@@ -278,6 +278,14 @@ export function rowBlocks(count: number): RowBlock[] {
     return out;
 }
 
+/**
+ * Memo key of the current search match for a block: its line and start when the block holds its row, '' otherwise.
+ * The line, not the row: side by side, a removed line and the added one paired with it share a row.
+ */
+export function currentMatchKey(block: RowBlock, curRow: number, curLine: number, curStart: number): string {
+    return curRow >= block.start && curRow < block.end ? `${curLine}:${curStart}` : '';
+}
+
 /** Distance (px) between a box from `top` to `top + height` and the window [0, viewport]: 0 when part of it shows. */
 export function viewportDistance(top: number, height: number, viewport: number): number {
     if (top + height < 0) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Thread } from '../../src/shared/api.ts';
 import {
-    composerKey, composerTargetFor, deletedLineComment, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange,
+    composerKey, composerTargetFor, currentMatchKey, deletedLineComment, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange,
     hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, placeFileThreads, PROGRESSIVE_LINES, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
     sideBySideRows, splitRows, unifiedRows, viewedStatus, viewportDistance,
 } from '../../src/web/lib/diff.ts';
@@ -159,6 +159,15 @@ describe('large diffs (blocks of rows, progressive rendering)', () => {
         }
         expect(frames).toBe(Math.ceil((5000 - first) / ROWS_PER_FRAME));
         expect(nextRowBudget(0, 10, 10)).toBe(Infinity);
+    });
+
+    it('keys the current match of a block by its line: side by side, the paired removed and added lines share a row', () => {
+        const block = { start: 50, end: 100 };
+        // the same row 60, the same column 8: the removed line 12, then the added line 13
+        expect(currentMatchKey(block, 60, 12, 8)).not.toBe(currentMatchKey(block, 60, 13, 8));
+        expect(currentMatchKey(block, 60, 12, 8)).toBe('12:8');
+        expect(currentMatchKey(block, 120, 70, 8)).toBe('');
+        expect(currentMatchKey(block, -1, -1, -1)).toBe('');
     });
 
     it('measures how far a box is from the window, 0 when part of it shows', () => {

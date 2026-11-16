@@ -1034,6 +1034,68 @@ def run_checks(page):
         expect(rows).to_have_count(len(all_paths))
     diff_search(page)
 
+    @check('diff_search side by side: Enter moves the current match from a removed line to the added one on its row')
+    def diff_search_split_pair(page):
+        full = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')
+        # a removed line and the added line paired with it (same row side by side) starting with the same words
+        pair = None
+        for f in full['files']:
+            if f['status'] != 'modified':
+                continue
+            for h in f['hunks']:
+                lines = h['lines']
+                k = 0
+                while k < len(lines) and not pair:
+                    if lines[k]['t'] != '-':
+                        k += 1
+                        continue
+                    removed = []
+                    while k < len(lines) and lines[k]['t'] == '-':
+                        removed.append(lines[k]['text'])
+                        k += 1
+                    added = []
+                    while k < len(lines) and lines[k]['t'] == '+':
+                        added.append(lines[k]['text'])
+                        k += 1
+                    for old, new in zip(removed, added):
+                        common = os.path.commonprefix([old, new])
+                        query = common.strip()
+                        if len(query) >= 4 and old.lower().find(query.lower()) == new.lower().find(query.lower()) == common.index(query):
+                            pair = (old, new, query)
+                            break
+        assert pair, 'no removed / added pair starting with the same words'
+        old, new, query = pair
+        pattern = re.compile(re.escape(query), re.I)
+        hits = [(ln['t'], ln['text']) for f in full['files'] for h in f['hunks'] for ln in h['lines'] for _ in pattern.finditer(ln['text'])]
+        at = next(i for i, (t, text) in enumerate(hits) if t == '-' and text == old)
+        assert hits[at + 1] == ('+', new), f'the two matches of "{query}" do not follow each other: {hits}'
+        open_pr(page, MAIN_PR, f'?from=0&to={n}')
+        page.locator('.rv-seg button[data-seg="split"]').click()
+        box = page.locator('[data-search]')
+        # a match cut by the syntax colors is several <mark> elements: count the cells holding the current one
+        cur_removed = page.locator('.rv-sl .half.r:has(mark.cur)')
+        cur_added = page.locator('.rv-sl .half.a:has(mark.cur)')
+        try:
+            status = page.locator('[data-search-status]')
+            box.fill(query)
+            for _ in range(at + 1):
+                box.press('Enter')
+            expect(status).to_have_text(f'{at + 1} / {len(hits)}')
+            expect(cur_removed).to_have_count(1)
+            expect(cur_added).to_have_count(0)
+            box.press('Enter')
+            expect(status).to_have_text(f'{at + 2} / {len(hits)}')
+            expect(cur_added).to_have_count(1)
+            expect(cur_removed).to_have_count(0)
+            expect(page.locator('.rv-sl:has(mark.cur)')).to_have_count(1)
+            box.press('Shift+Enter')
+            expect(cur_removed).to_have_count(1)
+            expect(cur_added).to_have_count(0)
+        finally:
+            box.fill('')
+            page.locator('.rv-seg button[data-seg="unified"]').click()
+    diff_search_split_pair(page)
+
     @check('added_file_unified: in side-by-side view, an added file stays unified, a modified one splits')
     def added_file_unified(page):
         full_files = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')['files']

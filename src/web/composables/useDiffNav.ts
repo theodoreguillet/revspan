@@ -10,26 +10,44 @@ export interface ThreadEntry {
 
 /** Frames during which a scroll is corrected (blocks rendered as they come into view settle in two or three). */
 const SETTLE_FRAMES = 8;
-/** The latest scroll: a new one stops correcting the previous one. */
+/** The latest scroll: a new one, or the user scrolling by hand, stops correcting the previous one. */
 let lastScroll = 0;
+let listening = false;
+
+/** The user takes over (wheel, touch, keyboard, click): the scroll set by the page is no longer corrected. */
+function stopCorrectingOnInput(): void {
+    if (listening || typeof window === 'undefined') {
+        return;
+    }
+    listening = true;
+    const stop = (): void => {
+        lastScroll++;
+    };
+    for (const type of ['wheel', 'touchstart', 'keydown', 'mousedown']) {
+        window.addEventListener(type, stop, { capture: true, passive: true });
+    }
+}
 
 /**
  * Scrolls to place el at `offset` px from the top of the window. The browser renders the diff blocks only once they
- * come near the window (content-visibility), at their real height instead of an estimate: the scroll is set again over
- * the next frames while el moves.
+ * come near the window (content-visibility), at their real height instead of an estimate: while el moves over the next
+ * frames, the scroll is set again (not when it only stays short of the place, at the end of the page).
  */
 function scrollToElement(el: Element, offset: number): void {
-    const place = (): void => window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset });
-    place();
+    stopCorrectingOnInput();
+    const place = (): number => {
+        window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset });
+        return el.getBoundingClientRect().top;
+    };
+    let last = place();
     const id = ++lastScroll;
     let frames = 0;
     const settle = (): void => {
         if (id !== lastScroll || !el.isConnected || ++frames > SETTLE_FRAMES) {
             return;
         }
-        if (Math.abs(el.getBoundingClientRect().top - offset) > 1) {
-            place();
-        }
+        const top = el.getBoundingClientRect().top;
+        last = Math.abs(top - last) > 1 && Math.abs(top - offset) > 1 ? place() : top;
         requestAnimationFrame(settle);
     };
     requestAnimationFrame(settle);

@@ -54,6 +54,38 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         file.remove();
     });
 
+    it('j/k: no new scroll when the file stays short of its place (end of the page) or once the user scrolls', async () => {
+        const frames = async (count: number): Promise<void> => {
+            for (let k = 0; k < count; k++) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+        };
+        let top = 800;
+        const file = at(0);
+        file.getBoundingClientRect = () => ({ top, bottom: top + 30, left: 0, right: 100, width: 100, height: 30, x: 0, y: top, toJSON: () => ({}) });
+        document.body.append(file);
+        const n = nav(150, 40);
+        n.registerFile('a.ts', file);
+        // end of the page: the window cannot go further, the file stays at 500 px
+        const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+            top = 500;
+        });
+        n.scrollToFile('a.ts');
+        await frames(4);
+        expect(scroll).toHaveBeenCalledTimes(1);
+        // the user turns the wheel: a block rendered above then moves the file, the page leaves it alone
+        top = 800;
+        scroll.mockImplementation(() => {
+            top = 196;
+        });
+        n.scrollToFile('a.ts');
+        window.dispatchEvent(new Event('wheel'));
+        top = 496;
+        await frames(4);
+        expect(scroll).toHaveBeenCalledTimes(2);
+        file.remove();
+    });
+
     it('current file: a header hidden by the toolbar counts as passed, one below it does not yet', () => {
         const n = nav(150, 40);
         n.registerFile('a.ts', at(-400));

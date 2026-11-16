@@ -11,7 +11,8 @@ import { useHunkTokens } from '../composables/useHunkTokens.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { locale, t } from '../i18n/index.ts';
 import {
-    LINE_PX, hunkRange, lineSign, rowBlocks, sideBySideRows, unifiedRows, viewportDistance, type ComposerTarget, type PlacedThread, type RowBlock,
+    LINE_PX, currentMatchKey, hunkRange, lineSign, rowBlocks, sideBySideRows, unifiedRows, viewportDistance,
+    type ComposerTarget, type PlacedThread, type RowBlock,
 } from '../lib/diff.ts';
 import { languageOf, lineTokens } from '../lib/highlight.ts';
 import { lineMarks, NO_HITS, type SearchHit } from '../lib/search.ts';
@@ -69,7 +70,6 @@ const pinnedRows = computed(() => (props.view === 'unified'
     ? rows.value.flatMap((row, k) => (row.threads.length || row.composer ? [k] : []))
     : splitRows.value.flatMap((row, k) => (row.threads.length || row.leftComposer || row.rightComposer ? [k] : []))));
 const inBlock = (block: RowBlock, row: number): boolean => row >= block.start && row < block.end;
-const rendered = (block: RowBlock): boolean => block.start < props.limit || inBlock(block, curRow.value) || pinnedRows.value.some((k) => inBlock(block, k));
 /**
  * Blocks on screen, by first row, as the browser reports them (it skips the others). Without that report (older
  * browser), every block counts as on screen.
@@ -84,8 +84,14 @@ const onBlockState = (block: RowBlock, event: Event): void => {
 };
 /** Search matches a block shows: none while it is off screen. */
 const blockHits = (block: RowBlock): readonly SearchHit[] => (!REPORTS_SKIPPED || onScreen.has(block.start) ? props.hits : NO_HITS);
+/**
+ * A block renders its rows once the file's progressive rendering reaches it, or at once when it holds a thread, the
+ * composer or the current match, or comes on screen (a jump deep into a large file still filling).
+ */
+const rendered = (block: RowBlock): boolean => block.start < props.limit || onScreen.has(block.start) || inBlock(block, curRow.value)
+    || pinnedRows.value.some((k) => inBlock(block, k));
 /** The current match, for the block that holds it only (the other blocks do not render again when it moves). */
-const curIn = (block: RowBlock): string => (inBlock(block, curRow.value) ? `${curRow.value}:${props.curStart}` : '');
+const curIn = (block: RowBlock): string => currentMatchKey(block, curRow.value, props.curLine, props.curStart);
 /** An empty block keeps the height of its rows; a rendered one gives it as its size while skipped off screen. */
 const blockStyle = (block: RowBlock): Record<string, string> => {
     const height = `${(block.end - block.start) * LINE_PX}px`;
