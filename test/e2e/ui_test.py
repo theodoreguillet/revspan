@@ -916,9 +916,17 @@ def run_checks(page):
             q = query.lower()
             return sorted(f['path'] for f, lines in zip(full['files'], lines_of) if q in f['path'].lower() or any(q in t for t in lines))
 
+        status = page.locator('[data-search-status]')
+        expect(status).to_have_text('')  # live region present before any search
+        expect(box).to_have_attribute('aria-keyshortcuts', '/')
         page.locator('body').click(position={'x': 5, 'y': 5})
         page.keyboard.press('/')
         expect(box).to_be_focused()
+        # a file name found in no line: the status says so and tells the name matches; the fragment is highlighted
+        name_only = next(b for b in (f['path'].rsplit('/', 1)[1] for f in full['files']) if not any(b.lower() in t for lines in lines_of for t in lines))
+        box.fill(name_only)
+        expect(status).to_contain_text('Aucun résultat dans le contenu')
+        expect(page.locator('.rv-files .rv-f .nm mark')).to_have_text(name_only)
         # file names (case-insensitive): only the matching rows, plus the files containing the fragment
         stem = code_file['path'].rsplit('/', 1)[1].split('.')[0]
         frag = stem[:max(4, len(stem) // 2)].upper()
@@ -942,7 +950,7 @@ def run_checks(page):
         expect(rows).to_have_count(len(listed(word)))
         expect(page.locator(f'.rv-f[data-path="{first}"] [data-hits]')).to_have_text('1')
         expect(page.locator(f'.rv-f[data-path="{second}"] [data-hits]')).to_have_text(str(total - 1))
-        expect(page.locator('[data-search-status]')).to_contain_text(str(total))
+        expect(status).to_contain_text(str(total))
         box.press('Enter')
         expect(page.locator(f'.rv-file[data-path="{first}"] mark.cur')).to_have_count(1)
         box.press('Enter')
@@ -953,9 +961,11 @@ def run_checks(page):
         expect(page.locator('mark.cur')).to_have_count(1)
         assert cur.inner_text().lower() == word
         expect(cur).to_be_in_viewport()
-        expect(page.locator('[data-search-status]')).to_have_text(f'2 / {total}')
+        expect(status).to_have_text(f'2 / {total}')
         expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', second)
         expect(box).to_be_focused()
+        expect(box).to_be_in_viewport()
+        assert box.evaluate('e => getComputedStyle(e.parentElement).position') == 'sticky'
         page.screenshot(path=os.path.join(SHOTS, 'diff-search.png'))
         # side-by-side: the same current match
         page.locator('.rv-seg button[data-seg="split"]').click()

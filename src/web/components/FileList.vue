@@ -8,6 +8,7 @@ import { useResizableWidth } from '../composables/useResizableWidth.ts';
 import { fileThreadCount, viewedStatus, type ViewedStatus } from '../lib/diff.ts';
 import { t } from '../i18n/index.ts';
 import { basename, MINUS } from '../lib/format.ts';
+import { splitMatch } from '../lib/search.ts';
 import DiffSearch from './DiffSearch.vue';
 
 const STATUS_ICONS = {
@@ -52,6 +53,8 @@ const groups = computed(() => {
         .map((g) => ({ ...g, rows: visibleTreeRows(buildFileTree(g.entries), (path) => isDirCollapsed(g.key, path)) }));
 });
 const hitCount = (idx: number): number => page.search.fileHits(idx).length;
+/** File name in parts, the searched fragment (if the name holds it) being the second one, highlighted. */
+const nameParts = (path: string): string[] => (page.search.active && splitMatch(basename(path), page.search.query)) || [basename(path)];
 
 function toggleDir(group: GroupKey, path: string): void {
     const set = folds();
@@ -152,8 +155,11 @@ watch(() => page.curFile, async (idx) => {
                             @keydown.enter.space.prevent="page.gotoFile(row.item.idx, { expand: true })"
                         >
                             <span :class="['ck', status(row.item.file).cls]" :title="t(status(row.item.file).title)">{{ status(row.item.file).icon }}</span>
-                            <span class="nm"><span class="base">{{ basename(row.item.path) }}</span></span>
-                            <span v-if="hitCount(row.item.idx)" class="hits" data-hits :title="t('search.fileHits', { count: hitCount(row.item.idx) })">{{ hitCount(row.item.idx) }}</span>
+                            <span class="nm"><span class="base"><template v-for="(part, k) in nameParts(row.item.path)" :key="k"><mark v-if="k === 1">{{ part }}</mark><template v-else>{{ part }}</template></template></span></span>
+                            <span v-if="hitCount(row.item.idx)" class="hits" :title="t('search.fileHits', { count: hitCount(row.item.idx) })">
+                                <span data-hits aria-hidden="true">{{ hitCount(row.item.idx) }}</span>
+                                <span class="rv-sr-only">{{ t('search.count', { count: hitCount(row.item.idx) }) }}</span>
+                            </span>
                             <span v-if="row.item.file.conflict" class="cf" :title="t('files.conflictTitle')">⚠</span>
                             <span v-if="threads(row.item.file)" class="cm" :title="t('common.threads', { count: threads(row.item.file) })">💬{{ threads(row.item.file) }}</span>
                             <span class="ad">+{{ row.item.file.added }}</span>

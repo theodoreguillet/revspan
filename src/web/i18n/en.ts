@@ -324,6 +324,7 @@ export const en = {
     'search.position': '{cur} / {total}',
     'search.count': { one: '{count} match', other: '{count} matches' },
     'search.none': 'No match',
+    'search.noneInContent': { one: 'No match in the content · {count} file by name', other: 'No match in the content · {count} files by name' },
     'search.statusTitle': 'Matches in the lines shown (Enter: next, Shift+Enter: previous)',
     'search.nameMatches': { one: '{count} by name', other: '{count} by name' },
     'search.nameMatchesTitle': 'Files whose path contains the search',

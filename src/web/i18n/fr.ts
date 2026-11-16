@@ -323,6 +323,7 @@ export const fr: Catalog = {
     'search.position': '{cur} / {total}',
     'search.count': { one: '{count} résultat', other: '{count} résultats' },
     'search.none': 'Aucun résultat',
+    'search.noneInContent': { one: 'Aucun résultat dans le contenu · {count} fichier par nom', other: 'Aucun résultat dans le contenu · {count} fichiers par nom' },
     'search.statusTitle': 'Résultats dans les lignes affichées (Entrée : suivant, Maj+Entrée : précédent)',
     'search.nameMatches': { one: '{count} par nom', other: '{count} par nom' },
     'search.nameMatchesTitle': 'Fichiers dont le chemin contient la recherche',

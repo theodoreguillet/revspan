@@ -3,7 +3,7 @@ import { computed, effectScope, nextTick, shallowRef } from 'vue';
 import type { DiffLine, FileDiff, Hunk } from '../../src/shared/api.ts';
 import { SEARCH_DEBOUNCE_MS, useDiffSearch } from '../../src/web/composables/useDiffSearch.ts';
 import { mergeTokens } from '../../src/web/lib/highlight.ts';
-import { fileNameMatches, findHits, lineMarks, stepHit, type SearchHit } from '../../src/web/lib/search.ts';
+import { fileNameMatches, findHits, lineMarks, splitMatch, stepHit, type SearchHit } from '../../src/web/lib/search.ts';
 
 const line = (t: DiffLine['t'], text: string): DiffLine => ({ t, o: null, n: null, text, hl: [] });
 const hunk = (...lines: DiffLine[]): Hunk => ({ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, header: '', lines });
@@ -19,6 +19,14 @@ describe('fileNameMatches', () => {
         expect(fileNameMatches('src/web/components/FileList.vue', 'filelist')).toBe(true);
         expect(fileNameMatches('src/web/components/FileList.vue', 'WEB/COMP')).toBe(true);
         expect(fileNameMatches('src/web/components/FileList.vue', 'server')).toBe(false);
+    });
+});
+
+describe('splitMatch', () => {
+    it('splitMatch cuts a name around the first match, ignoring case', () => {
+        expect(splitMatch('FileList.vue', 'list')).toEqual(['File', 'List', '.vue']);
+        expect(splitMatch('FileList.vue', 'xyz')).toBeNull();
+        expect(splitMatch('FileList.vue', 'l')).toBeNull();
     });
 });
 

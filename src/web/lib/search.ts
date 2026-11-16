@@ -48,6 +48,15 @@ export function findHits(files: readonly FileDiff[], query: string): SearchHit[]
     return hits;
 }
 
+/** A name cut around its first match (before, match, after); null without a match or under 2 characters. */
+export function splitMatch(name: string, query: string): [string, string, string] | null {
+    if (query.length < MIN_QUERY) {
+        return null;
+    }
+    const m = new RegExp(escapeRegExp(query), 'i').exec(name);
+    return m ? [name.slice(0, m.index), m[0], name.slice(m.index + m[0].length)] : null;
+}
+
 /** Order of a hit's line against (fileIdx, hunk, line). */
 function compareLine(h: SearchHit, fileIdx: number, hunk: number, line: number): number {
     return h.fileIdx - fileIdx || h.hunk - hunk || h.line - line;

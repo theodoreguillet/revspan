@@ -199,7 +199,7 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 /* ---------- Diff ---------- */
 .rv-body { display: flex; min-height: 360px; }
 .rv-files { width: 280px; min-width: 180px; max-width: 50vw; flex-shrink: 0; border-right: 1px solid var(--border); align-self: flex-start; position: sticky; top: var(--tl-h); }
-.rv-files-in { padding: 10px 8px; max-height: calc(100vh - var(--tl-h)); overflow-y: auto; }
+.rv-files-in { padding: 10px 8px; max-height: calc(100vh - var(--tl-h)); overflow-y: auto; scroll-padding-top: 46px; }
 /* drag handle on the right edge, like the VS Code sidebar; double-click resets the width */
 .rv-resize { position: absolute; top: 0; bottom: 0; right: -4px; width: 7px; cursor: col-resize; z-index: 3; touch-action: none; }
 .rv-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 3px; background: transparent; transition: background .1s .15s; }
@@ -230,10 +230,12 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-f .cf { font-family: var(--rv-font); font-size: 10.5px; color: var(--rv-rebase); flex-shrink: 0; }
 .rv-f .ad { color: var(--rv-add); flex-shrink: 0; } .rv-f .dl { color: var(--rv-del); flex-shrink: 0; }
 /* search box at the top of the file list, match counts */
-.rv-search { display: flex; align-items: center; gap: 6px; padding: 0 6px 8px; }
+/* sticky over the scrolling list: the box and « 3 / 17 » stay visible while Enter walks the matches */
+.rv-search { display: flex; align-items: center; gap: 6px; padding: 10px 6px 8px; margin-top: -10px; position: sticky; top: -10px; z-index: 2; background: var(--bg-secondary); }
 .rv-search input { flex: 1; min-width: 0; border: 1px solid var(--input-border); border-radius: 6px; padding: 4px 8px; background: var(--input-bg); color: var(--input-fg); font-size: 12px; }
 .rv-search .st { font-size: 11px; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rv-prog .nmc { color: var(--text-primary); }
+.rv-f .nm mark { color: inherit; background: var(--rv-match-bg); border-radius: 2px; }
 .rv-f .hits { font-family: var(--rv-font); font-size: 10.5px; color: var(--text-primary); background: var(--rv-match-bg); border-radius: 8px; padding: 0 5px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .rv-masked { margin: 10px 6px 0; padding: 8px; border: 1px dashed var(--border); border-radius: 6px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
 .rv-masked ul { margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--rv-mono); font-size: 10.5px; max-height: 260px; overflow-y: auto; }
