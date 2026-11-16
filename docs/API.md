@@ -44,7 +44,7 @@ Common rules:
 | POST / DELETE | `/api/pr/:ws/:repo/:id/approve` | — | `Ok` (POST re-approves if needed) |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/request-changes` | — | `Ok` |
 | POST | `/api/pr/:ws/:repo/:id/reviewed` | `{ version }` | `Ok` (local "reviewed" mark) |
-| POST | `/api/pr/:ws/:repo/:id/viewed` | `ViewedRequest` | `Ok` |
+| POST | `/api/pr/:ws/:repo/:id/viewed` | `ViewedRequest`: one file `{ path, contentHash?, viewed }`, or several `{ files: [{ path, contentHash? }] (1 to 2000), viewed }` | `Ok` (local state, no Bitbucket call) |
 
 ## Review queue contract
 

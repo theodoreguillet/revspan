@@ -16,12 +16,19 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
 
     /** Ticks "Seen" for a file in the local state (fingerprint, or undefined = not seen), without touching other files. */
     function patchViewed(path: string, contentHash: string | undefined): void {
+        patchViewedMany([[path, contentHash]]);
+    }
+
+    /** Same for several files in one update. */
+    function patchViewedMany(changes: readonly (readonly [string, string | undefined])[]): void {
         const review = load.detail.value.review;
         const viewed = { ...review.viewed };
-        if (contentHash === undefined) {
-            delete viewed[path];
-        } else {
-            viewed[path] = contentHash;
+        for (const [path, contentHash] of changes) {
+            if (contentHash === undefined) {
+                delete viewed[path];
+            } else {
+                viewed[path] = contentHash;
+            }
         }
         load.patchReview({ ...review, viewed });
     }
@@ -44,5 +51,26 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
         }
     }
 
-    return { setApproved, toggleRequestChanges, markReviewed, setViewed };
+    /**
+     * "Mark all as viewed" (or not viewed) for these files: every file at once, one request, the files collapse like a
+     * single "Seen". On failure only these files are rolled back.
+     */
+    async function setAllViewed(files: readonly FileDiff[], viewed: boolean): Promise<void> {
+        if (!files.length) {
+            return;
+        }
+        const previous = files.map((file): [string, string | undefined] => [file.path, load.detail.value.review.viewed[file.path]]);
+        patchViewedMany(files.map((file) => [file.path, viewed ? file.contentHash : undefined]));
+        for (const file of files) {
+            options.collapsed.delete(file.path);
+        }
+        try {
+            await api.viewed(prRef, { files: files.map(({ path, contentHash }) => ({ path, contentHash })), viewed });
+        } catch (error) {
+            patchViewedMany(previous);
+            showError(error);
+        }
+    }
+
+    return { setApproved, toggleRequestChanges, markReviewed, setViewed, setAllViewed };
 }

@@ -9,6 +9,7 @@ export const SHORTCUTS = [
     { keys: 'shortcuts.keysFile', label: 'shortcuts.file' },
     { keys: 'shortcuts.keysThread', label: 'shortcuts.thread' },
     { keys: 'shortcuts.keysViewed', label: 'shortcuts.viewed' },
+    { keys: 'shortcuts.keysAllViewed', label: 'shortcuts.allViewed' },
     { keys: 'shortcuts.keysSearch', label: 'shortcuts.search' },
     { keys: 'shortcuts.keysVersion', label: 'shortcuts.version' },
     { keys: 'shortcuts.keysExtend', label: 'shortcuts.extend' },

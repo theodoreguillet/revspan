@@ -878,6 +878,36 @@ def run_checks(page):
         expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', path)
     file_tree(page)
 
+    @check('mark all as viewed: one click ticks every file, the same button undoes it, no Bitbucket call')
+    def mark_all_viewed(page):
+        open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
+        rows = page.locator('.rv-files .rv-f')
+        total = page.locator('.rv-diff .rv-file').count()
+        before = len(bitbucket_requests())
+        if page.locator('[data-action="unmark-all-viewed"]').count():
+            page.locator('[data-action="unmark-all-viewed"]').click()
+        expect(page.locator('[data-action="mark-all-viewed"]')).to_be_visible()
+        page.locator('[data-action="mark-all-viewed"]').click()
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(rows.count())
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'{total} / {total}')
+        expect(page.locator('[data-action="unmark-all-viewed"]')).to_have_text('Tout marquer non vu')
+        page.reload()  # persisted by the server
+        wait_pr_ready(page)
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'{total} / {total}')
+        page.locator('[data-action="unmark-all-viewed"]').click()
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(0)
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'0 / {total}')
+        page.keyboard.press('Shift+V')
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'{total} / {total}')
+        assert [r for r in bitbucket_requests()[before:] if r.get('method') != 'GET'] == [], 'a write reached Bitbucket'
+        # back to the state the next checks expect: only the code file seen
+        page.locator('[data-action="unmark-all-viewed"]').click()
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(0)
+        page.locator(f'.rv-file[data-path="{code_file["path"]}"] input[data-action="viewed"]').check()
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'1 / {total}')
+        wait_api(lambda: list(api(pr_api(MAIN_PR))['review']['viewed']) == [code_file['path']], 'review.viewed restored')
+    mark_all_viewed(page)
+
     @check('file list: width dragged from its edge, remembered after a reload, reset by double-click')
     def file_list_resize(page):
         panel = page.locator('.rv-files')

@@ -469,6 +469,22 @@ describe('actions', () => {
         expect(fake.calls.map(shortCall)).toEqual(['POST /approve', 'DELETE /approve', 'POST /approve']);
     });
 
+    it('POST viewed with files marks them all in one update', async () => {
+        const { fake } = await setup();
+        const before = fake.calls.length;
+        const files = [{ path: 'src/A.ts', contentHash: 'ha' }, { path: 'src/B.ts', contentHash: 'hb' }, { path: 'src/C.ts' }];
+        expect((await api('POST', `${prPath()}/viewed`, { files, viewed: true })).status).toBe(200);
+        expect((await detail()).review.viewed).toEqual({ 'src/A.ts': 'ha', 'src/B.ts': 'hb', 'src/C.ts': '' });
+        expect((await api('POST', `${prPath()}/viewed`, { files: files.slice(0, 2), viewed: false })).status).toBe(200);
+        expect((await detail()).review.viewed).toEqual({ 'src/C.ts': '' });
+        expect(fake.calls.slice(before).map(shortCall).filter((c) => !c.startsWith('GET'))).toEqual([]);
+    });
+
+    it('POST viewed with files rejects an empty list', async () => {
+        await setup();
+        expect((await api('POST', `${prPath()}/viewed`, { files: [], viewed: true })).status).toBe(400);
+    });
+
     it('local state: seen files and "reviewed" mark persisted', async () => {
         const { dir } = await setup();
         expect((await api('POST', `${prPath()}/viewed`, { path: 'src/Action.ts', contentHash: 'abc', viewed: true })).status).toBe(200);

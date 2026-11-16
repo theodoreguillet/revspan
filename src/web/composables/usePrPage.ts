@@ -109,7 +109,16 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         nav.revealThread(threadId);
     }
 
-    /** Shortcuts: j/k file, n/p thread, v seen, [ ] version, / search, Escape closes the composer. Returns true if the key is handled. */
+    /** Files the "mark all" button applies to: the listed ones (all, or the filtered ones while searching). */
+    const listedFiles = computed(() => files.value.filter((_, idx) => search.listed(idx)));
+
+    /** "Mark all as viewed" (or not): the files not seen yet (all the listed ones to unmark). */
+    function markAllViewed(viewed: boolean): Promise<void> {
+        const seen = load.detail.value.review.viewed;
+        return review.setAllViewed(viewed ? listedFiles.value.filter((f) => viewedStatus(f, seen) !== 'seen') : listedFiles.value, viewed);
+    }
+
+    /** Shortcuts: j/k file, n/p thread, v seen, Shift+V all seen, [ ] version, / search, Escape closes the composer. Returns true if the key is handled. */
     function handleKey(key: string): boolean {
         // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it
         const inDiff = options.tab.value === 'diff' && load.diffMode.value !== 'skeleton';
@@ -131,6 +140,12 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
                     return false;
                 }
                 void review.setViewed(current, viewedStatus(current, load.detail.value.review.viewed) !== 'seen');
+                return true;
+            case 'V':
+                if (!inDiff) {
+                    return false;
+                }
+                void markAllViewed(true);
                 return true;
             case '/':
                 if (load.diffMode.value === 'skeleton') {
@@ -157,7 +172,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     return reactive({
         ref: prRef,
         ...load, ...range, ...options, ...nav, ...discussion, ...review,
-        search, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, handleKey,
+        search, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, handleKey,
     });
 }
 

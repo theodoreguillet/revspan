@@ -275,6 +275,33 @@ describe('optimistic "Seen"', () => {
         expect(showError).toHaveBeenCalledOnce();
     });
 
+    it('setAllViewed ticks every file then rolls back only them on failure', async () => {
+        const { load, review } = setup();
+        const files = [fileDiff('src/A.ts', 'ha'), fileDiff('src/B.ts', 'hb')];
+        const all = deferred<{ ok: true }>();
+        api.viewed.mockReturnValue(all.promise);
+
+        const marking = review.setAllViewed(files, true);
+        await nextTick();
+        expect(load.detail.value.review.viewed).toEqual({ 'src/C.ts': 'hc-old', 'src/A.ts': 'ha', 'src/B.ts': 'hb' });
+        // a tick made meanwhile on another file stays
+        load.patchReview({ ...load.detail.value.review, viewed: { ...load.detail.value.review.viewed, 'src/D.ts': 'hd' } });
+        all.reject(new Error('refusé'));
+        await marking;
+
+        expect(api.viewed).toHaveBeenCalledOnce();
+        expect(api.viewed).toHaveBeenCalledWith(ref, { files: [{ path: 'src/A.ts', contentHash: 'ha' }, { path: 'src/B.ts', contentHash: 'hb' }], viewed: true });
+        expect(load.detail.value.review.viewed).toEqual({ 'src/C.ts': 'hc-old', 'src/D.ts': 'hd' });
+        expect(showError).toHaveBeenCalledOnce();
+    });
+
+    it('setAllViewed unticks every file in one request', async () => {
+        const { load, review } = setup();
+        api.viewed.mockResolvedValue({ ok: true });
+        await review.setAllViewed([fileDiff('src/C.ts', 'hc-old')], false);
+        expect(load.detail.value.review.viewed).toEqual({});
+    });
+
     it('untick refused: the file gets its tick and fingerprint back', async () => {
         const { load, review } = setup();
         api.viewed.mockRejectedValue(new Error('refusé'));

@@ -31,6 +31,16 @@ const files = computed(() => page.compare?.files ?? []);
 const masterOnly = computed(() => page.compare?.masterOnly ?? []);
 const seenCount = computed(() => files.value.filter((f) => viewedStatus(f, page.detail.review.viewed) === 'seen').length);
 
+const listedFiles = computed(() => page.listedFiles);
+const allListedSeen = computed(() => listedFiles.value.length > 0 && listedFiles.value.every((f) => viewedStatus(f, page.detail.review.viewed) === 'seen'));
+/** Button of the progress line: marks the listed files (all, or the filtered ones) as viewed, or not viewed when they all are. */
+const markAll = computed(() => {
+    const unmark = allListedSeen.value;
+    const filtered = page.search.active;
+    const count = unmark ? listedFiles.value.length : listedFiles.value.filter((f) => viewedStatus(f, page.detail.review.viewed) !== 'seen').length;
+    const key = `${unmark ? 'un' : ''}mark${filtered ? 'Listed' : 'All'}` as 'markAll' | 'unmarkAll' | 'markListed' | 'unmarkListed';
+    return { unmark, label: t(`files.${key}`, { count }), title: t(`files.${key}Title`) };
+});
 const groupOf = (file: FileDiff): GroupKey => (file.category === 'deps' ? 'deps' : 'code');
 /** Collapsed folders, as "group:path" (a folder may exist in both groups). */
 const collapsed = ref(new Set<string>());
@@ -116,6 +126,16 @@ watch(() => page.curFile, async (idx) => {
                 <div class="rv-prog">
                     <span class="cnt">{{ t('files.progress', { seen: seenCount, total: files.length }) }}</span>
                     <span v-if="page.search.active" class="nmc" data-name-matches :title="t('search.nameMatchesTitle')">{{ t('search.nameMatches', { count: page.search.nameMatches.size }) }}</span>
+                    <button
+                        v-if="listedFiles.length"
+                        type="button"
+                        class="rv-markall"
+                        :data-action="markAll.unmark ? 'unmark-all-viewed' : 'mark-all-viewed'"
+                        :title="markAll.title"
+                        @click="page.markAllViewed(!markAll.unmark)"
+                    >
+                        {{ markAll.label }}
+                    </button>
                     <span class="rv-bar"><i :style="{ width: `${files.length ? (100 * seenCount) / files.length : 0}%` }" /></span>
                 </div>
                 <template v-for="group in groups" :key="group.key">

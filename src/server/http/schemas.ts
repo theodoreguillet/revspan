@@ -45,11 +45,15 @@ export const editCommentSchema: z.ZodType<EditComment> = z.object({
     raw: commentRawSchema,
 });
 
-export const viewedSchema: z.ZodType<ViewedRequest> = z.object({
+const viewedFileSchema = z.object({
     path: z.string().min(1).max(4096),
     contentHash: z.string().max(128).optional(),
-    viewed: z.boolean(),
 });
+
+export const viewedSchema: z.ZodType<ViewedRequest> = z.union([
+    viewedFileSchema.extend({ viewed: z.boolean() }),
+    z.object({ files: z.array(viewedFileSchema).min(1).max(2000), viewed: z.boolean() }),
+]);
 
 export const reviewedSchema = z.object({ version: z.number().int().positive() });
 

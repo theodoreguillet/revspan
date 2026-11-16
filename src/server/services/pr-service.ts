@@ -249,12 +249,15 @@ export class PrService {
         return { ok: true };
     }
 
-    markViewed(ref: PrRef, { path, contentHash, viewed }: ViewedRequest): Ok {
+    markViewed(ref: PrRef, request: ViewedRequest): Ok {
+        const files = 'files' in request ? request.files : [request];
         this.store.updatePrState(prKeyOf(ref), (state) => {
-            if (viewed) {
-                state.viewed[path] = contentHash ?? '';
-            } else {
-                delete state.viewed[path];
+            for (const { path, contentHash } of files) {
+                if (request.viewed) {
+                    state.viewed[path] = contentHash ?? '';
+                } else {
+                    delete state.viewed[path];
+                }
             }
         });
         return { ok: true };

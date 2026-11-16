@@ -396,11 +396,13 @@ export interface EditComment {
     raw: string;
 }
 
-export interface ViewedRequest {
+export interface ViewedFile {
     path: string;
     contentHash?: string;
-    viewed: boolean;
 }
+
+/** One file, or several at once ("mark all as viewed"): one local update either way. */
+export type ViewedRequest = (ViewedFile & { viewed: boolean }) | { files: ViewedFile[]; viewed: boolean };
 
 export interface Ok {
     ok: true;

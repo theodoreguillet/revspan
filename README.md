@@ -226,7 +226,7 @@ one request per interval even once finished (see "Build status").
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
   An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve.
 
-Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `[`/`]` version, `/` search, `?` help. On AZERTY keyboards, `[`
+Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `Shift+V` all files seen, `[`/`]` version, `/` search, `?` help. On AZERTY keyboards, `[`
 and `]` typed with Option or AltGr work too.
 
 ## Develop
