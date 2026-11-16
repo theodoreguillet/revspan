@@ -33,7 +33,7 @@ Common rules:
 | PUT | `/api/settings` | `SettingsUpdate` | `Settings` |
 | POST | `/api/settings/test` | — | `ConnectionTest` |
 | GET | `/api/home[?fresh=1]` | — | `Home` (`groups`: ordered `{ key, prs }`, no title: each UI translates the key; see "Review queue contract"). `fresh=1` (the Refresh button) skips the home shared by the windows and re-reads live data |
-| GET | `/api/pr/:ws/:repo/:id` | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`; `build`: `[]` no build, `null` statuses unreadable) |
+| GET | `/api/pr/:ws/:repo/:id` (`?fresh=1`: always read Bitbucket; without it, a detail loaded less than `review.refreshMinutes` ago is reused) | — | `PrDetail` (a version whose commit Bitbucket erased has `available: false`; `build`: `[]` no build, `null` statuses unreadable) |
 | GET | `/api/pr/:ws/:repo/:id/pulse` | — | `PrPulse` (one Bitbucket read: `updatedOn`, `head`, `commentCount`, `participants`; the page compares it to `PrDetail.pulse`) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |

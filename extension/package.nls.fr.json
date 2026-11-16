@@ -19,7 +19,7 @@
     "configuration.notifications.newPullRequest": "Notifier quand un contributeur suivi, ou quelqu'un qui t'a désigné relecteur, ouvre une PR à relire.",
     "configuration.notifications.newVersion": "Notifier quand une PR que tu as relue ou approuvée reçoit une nouvelle version.",
     "configuration.notifications.buildFailed": "Notifier quand le build d'une de tes propres PR échoue.",
-    "configuration.refreshIntervalMinutes": "Minutes entre deux actualisations automatiques de « Mes PR », de 1 à 120.",
+    "configuration.refreshIntervalMinutes": "Minutes entre deux actualisations automatiques de « Mes PR », de 1 à 120. C’est aussi la fréquence de vérification d’une page de PR ouverte et la durée pendant laquelle une PR rouverte s’affiche sans rechargement.",
     "view.home": "Mes PR",
     "welcome.noToken": "Aucun jeton Bitbucket valide.\n[Configurer le jeton](command:revspan.openSettings)",
     "welcome.noRepos": "Aucun dépôt suivi.\n[Choisir les dépôts](command:revspan.openSettings)"

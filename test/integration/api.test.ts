@@ -422,6 +422,17 @@ describe('actions', () => {
         expect(fake.calls).toEqual([]);
     });
 
+    it('GET pr without fresh serves the cached detail, with fresh=1 reads again', async () => {
+        const { fake } = await setup();
+        await api('GET', `${prPath()}?fresh=1`);
+        const before = fake.requests.length;
+        const cached = await api<PrDetail>('GET', prPath());
+        expect(fake.requests.length - before).toBe(0);
+        expect(cached.body.freshness.refreshMinutes).toBe(5);
+        await api('GET', `${prPath()}?fresh=1`);
+        expect(fake.requests.length - before).toBeGreaterThan(0);
+    });
+
     it('GET pulse makes one Bitbucket request', async () => {
         const { fake } = await setup();
         const before = fake.requests.length;

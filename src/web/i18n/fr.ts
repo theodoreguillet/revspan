@@ -429,7 +429,7 @@ export const fr: Catalog = {
     'settings.followedEmpty': 'Personne n’est suivi pour l’instant.',
     'settings.followedRemove': 'Ne plus suivre {name}',
     'settings.refreshMinutes': 'Actualiser toutes les (minutes)',
-    'settings.refreshMinutesHelp': 'Fréquence d’actualisation de la liste des PR en arrière-plan (de 1 à 120).',
+    'settings.refreshMinutesHelp': 'Fréquence d’actualisation de la liste des PR en arrière-plan (de 1 à 120). Elle règle aussi la fréquence de vérification d’une page de PR ouverte, et la durée pendant laquelle une PR rouverte s’affiche sans rechargement.',
     'settings.invalidRefresh': 'L’intervalle d’actualisation doit être un nombre entier de minutes de 1 à 120.',
     'settings.notificationsTitle': 'Notifications',
     'settings.notifyNewPullRequest': 'Une nouvelle PR est à relire (contributeur suivi, ou je suis relecteur désigné)',

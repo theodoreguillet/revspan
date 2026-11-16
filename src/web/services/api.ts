@@ -101,7 +101,7 @@ export const api = {
     /** fresh: the Refresh button, which reads Bitbucket again instead of the home shared by the windows. */
     home: ({ fresh = false }: { fresh?: boolean } = {}) => request<Home>('GET', fresh ? '/home?fresh=1' : '/home'),
 
-    pr: (ref: PrRef) => request<PrDetail>('GET', prPath(ref)),
+    pr: (ref: PrRef, { fresh }: { fresh: boolean }) => request<PrDetail>('GET', `${prPath(ref)}${fresh ? '?fresh=1' : ''}`),
     pulse: (ref: PrRef) => request<PrPulse>('GET', `${prPath(ref)}/pulse`),
     summary: (ref: PrRef) => request<Summary>('GET', `${prPath(ref)}/summary`),
     compare: (ref: PrRef, from: number, to: number, context: number) =>

@@ -111,7 +111,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             const started = writes;
             let fresh: PrDetail;
             try {
-                fresh = await api.pr(prRef);
+                fresh = await api.pr(prRef, { fresh: true });
             } catch (error) {
                 showError(error);
                 return;

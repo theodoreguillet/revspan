@@ -17,13 +17,14 @@ let dir: string;
 let clock: number;
 let arm: () => void;
 let service: PrService;
+let store: Store;
 /** Held (once) before the comments of the PR are answered, to simulate a slow read in flight. */
 let gate: { release: () => void; reached: Promise<void> } | null = null;
 
 beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-prcache-'));
     fake = await startFakeBitbucket();
-    const store = new Store(dir);
+    store = new Store(dir);
     await store.saveConfig({ email: FAKE_EMAIL, repos: [`${WS}/${REPO}`] });
     const secrets = { kind: 'file', get: async () => FAKE_TOKEN, set: async () => undefined, remove: async () => undefined } as unknown as SecretStore;
     const cache = new Cache(null);
@@ -84,7 +85,7 @@ describe('PrService in-memory cache', () => {
         expect(fake.calls.filter((c) => c.method === 'POST')).toHaveLength(1);
     });
 
-    it('reloads after five minutes', async () => {
+    it('reloads after the refresh interval', async () => {
         await service.detail(ref);
         clock += 300_001;
         await service.compare(ref, 1, 2, 3);
@@ -127,5 +128,78 @@ describe('PrService in-memory cache', () => {
         expect(await service.sourceBranch(ref)).toBe(pr.sourceBranch);
         await service.sourceBranch(ref);
         expect(reads().pr).toBe(1);
+    });
+
+    describe('reopening a PR', () => {
+        const open = async (): Promise<void> => {
+            await service.detail(ref, { fresh: false });
+            await service.compare(ref, 1, 2, 3);
+        };
+
+        it('reopening within the refresh interval reads nothing from Bitbucket', async () => {
+            await service.detail(ref);
+            await service.compare(ref, 1, 2, 3);
+            const before = fake.requests.length;
+            clock += 299_000;
+            await open();
+            expect(fake.requests.length - before).toBe(0);
+        });
+
+        it('reopening after the interval reads Bitbucket again', async () => {
+            await service.detail(ref);
+            await service.compare(ref, 1, 2, 3);
+            const before = fake.requests.length;
+            clock += 300_001;
+            await open();
+            expect(fake.requests.length - before).toBeGreaterThan(0);
+            expect(reads().pr).toBe(2);
+        });
+
+        it('a write makes the next open read Bitbucket', async () => {
+            await service.detail(ref);
+            await service.compare(ref, 1, 2, 3);
+            await service.createComment(ref, { raw: 'hello' });
+            await open();
+            expect(reads().pr).toBe(2);
+        });
+
+        it('memoizes a comparison until the load is replaced', async () => {
+            await service.detail(ref);
+            const first = await service.compare(ref, 1, 2, 3);
+            expect(await service.compare(ref, 1, 2, 3)).toBe(first);
+            expect(await service.compare(ref, 1, 2, 4)).not.toBe(first);
+            await service.detail(ref);
+            expect(await service.compare(ref, 1, 2, 3)).not.toBe(first);
+        });
+
+        it('a reopen shows the files marked as seen', async () => {
+            await service.detail(ref);
+            service.markViewed(ref, { path: 'src/mine.ts', contentHash: 'abc', viewed: true });
+            expect((await service.detail(ref, { fresh: false })).review.viewed).toEqual({ 'src/mine.ts': 'abc' });
+            expect(reads().pr).toBe(1);
+        });
+
+        it('a reopen shows the new reviewed mark', async () => {
+            await service.detail(ref);
+            await service.markReviewed(ref, 1);
+            expect((await service.detail(ref, { fresh: false })).review.lastReviewed).toBe(1);
+        });
+
+        it('freshness carries the configured interval and the load time', async () => {
+            const first = await service.detail(ref);
+            expect(first.freshness).toEqual({ loadedAt: new Date(clock).toISOString(), refreshMinutes: 5 });
+            clock += 60_000;
+            const again = await service.detail(ref, { fresh: false });
+            expect(again.freshness.loadedAt).toBe(first.freshness.loadedAt);
+        });
+
+        it('follows a changed interval at once', async () => {
+            await service.detail(ref);
+            await store.saveConfig({ review: { ...store.config.review, refreshMinutes: 1 } });
+            clock += 61_000;
+            const detail = await service.detail(ref, { fresh: false });
+            expect(detail.freshness.refreshMinutes).toBe(1);
+            expect(reads().pr).toBe(2);
+        });
     });
 });

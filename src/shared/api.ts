@@ -286,6 +286,8 @@ export interface PrDetail {
     needsRebase: boolean | null;
     /** Snapshot of the PR as read for this detail (the page compares it to later pulses). */
     pulse: PrPulse;
+    /** When the PR was read from Bitbucket (a cached detail keeps its time) and the configured check interval. */
+    freshness: { loadedAt: string; refreshMinutes: number };
 }
 
 /** Cheap snapshot of a PR (one Bitbucket GET), compared by the page to what it shows. */

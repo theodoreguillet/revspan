@@ -17,7 +17,7 @@ document.title = `#${prRef.id} · Revspan`;
 
 onMounted(async () => {
     try {
-        detail.value = await api.pr(prRef);
+        detail.value = await api.pr(prRef, { fresh: false });
     } catch (e) {
         error.value = e;
     }

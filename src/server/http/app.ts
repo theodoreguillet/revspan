@@ -112,7 +112,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     // ?fresh=1: ignores the home page's short cache ("Refresh" button).
     app.get('/api/home', async (c) => c.json(await home.get({ fresh: c.req.query('fresh') === '1' })));
 
-    app.get(PR_ROUTE, async (c) => c.json(await prs.detail(refOf(c))));
+    app.get(PR_ROUTE, async (c) => c.json(await prs.detail(refOf(c), { fresh: c.req.query('fresh') === '1' })));
     app.get(`${PR_ROUTE}/pulse`, async (c) => c.json(await prs.pulse(refOf(c))));
     app.get(`${PR_ROUTE}/summary`, async (c) => c.json(await prs.summary(refOf(c))));
     app.get(`${PR_ROUTE}/compare`, async (c) => {

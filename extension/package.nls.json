@@ -19,7 +19,7 @@
     "configuration.notifications.newPullRequest": "Notify when a followed contributor, or someone who designated you as a reviewer, opens a PR that needs review.",
     "configuration.notifications.newVersion": "Notify when a PR you reviewed or approved receives a new version.",
     "configuration.notifications.buildFailed": "Notify when the build of one of your own PRs fails.",
-    "configuration.refreshIntervalMinutes": "Minutes between two automatic refreshes of “My PRs”, from 1 to 120.",
+    "configuration.refreshIntervalMinutes": "Minutes between two automatic refreshes of “My PRs”, from 1 to 120. Also the check interval of an open PR page and how long a reopened PR is shown without reloading.",
     "view.home": "My PRs",
     "welcome.noToken": "No valid Bitbucket token.\n[Set up the token](command:revspan.openSettings)",
     "welcome.noRepos": "No repositories followed.\n[Choose repositories](command:revspan.openSettings)"

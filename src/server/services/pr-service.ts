@@ -29,8 +29,7 @@ interface LoadOptions {
 /** The versions only (summary, version types, "reviewed" mark). */
 const VERSIONS_ONLY: LoadOptions = { comments: false };
 
-/** Freshness limit of a loaded PR kept in memory (a write or a detail read replaces it sooner). */
-const LOADED_MAX_AGE_MS = 5 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 
 /** What a loaded PR holds, from least to most: versions only, plus comments, plus build checks and needs-rebase. */
 const LEVELS = { versions: 0, comments: 1, health: 2 } as const;
@@ -51,6 +50,8 @@ interface LoadedPr {
     updates: PushUpdate[];
     versions: Version[];
     detail: PrDetail;
+    /** Comparisons computed from this load, by `from-to-context` (they depend on its threads: dropped with it). */
+    comparisons: Map<string, Promise<Comparison>>;
 }
 
 export class PrService {
@@ -70,8 +71,18 @@ export class PrService {
 
     // ---------- Reading ----------
 
-    async detail(ref: PrRef): Promise<PrDetail> {
-        return (await this.loadCached(ref, { health: true }, { fresh: true })).detail;
+    /**
+     * fresh: false reuses the PR loaded within review.refreshMinutes (reopening a page reads nothing), otherwise it is
+     * always read again.
+     */
+    async detail(ref: PrRef, { fresh = true }: { fresh?: boolean } = {}): Promise<PrDetail> {
+        const { detail } = await this.loadCached(ref, { health: true }, { fresh });
+        // The interval is the current setting, also for a detail loaded before it changed.
+        return { ...detail, freshness: { ...detail.freshness, refreshMinutes: this.refreshMinutes() } };
+    }
+
+    private refreshMinutes(): number {
+        return this.store.config.review.refreshMinutes;
     }
 
     /** Source branch of the PR, from the cached load (no new read when the PR was loaded lately). */
@@ -127,10 +138,20 @@ export class PrService {
     }
 
     async compare(ref: PrRef, from: number, to: number, context: number): Promise<Comparison> {
-        return this.withVersions(ref, async ({ versions, detail }, src) => {
+        return this.withVersions(ref, ({ versions, detail, comparisons }, src) => {
             assertComparable(versions, from, to);
-            const result = await compareVersions(src, versions, from, to, { context });
-            return placeThreads(src, versions, result, detail.threads);
+            const key = `${from}-${to}-${context}`;
+            let computed = comparisons.get(key);
+            if (!computed) {
+                computed = compareVersions(src, versions, from, to, { context }).then((result) => placeThreads(src, versions, result, detail.threads));
+                comparisons.set(key, computed);
+                computed.catch(() => {
+                    if (comparisons.get(key) === computed) {
+                        comparisons.delete(key);
+                    }
+                });
+            }
+            return computed;
         });
     }
 
@@ -219,6 +240,8 @@ export class PrService {
             state.reviewedHash = target.hash;
             state.reviewedAt = new Date().toISOString();
         });
+        // The review state (last reviewed version, new comments) is part of the loaded PR: a reopen must not show the old one.
+        this.dropLoaded(await this.session.getClient(), ref);
         return { ok: true };
     }
 
@@ -230,13 +253,25 @@ export class PrService {
                 delete state.viewed[path];
             }
         });
+        void this.patchViewed(ref);
         return { ok: true };
+    }
+
+    /** Seen files are part of the loaded PR's review: patched in place so a reopen shows them without a reload. */
+    private async patchViewed(ref: PrRef): Promise<void> {
+        const client = await this.session.getClient();
+        const entry = this.loaded.get(client)?.get(`${ref.workspace}/${ref.repo}#${ref.id}`);
+        const loaded = await entry?.promise.catch(() => null);
+        if (loaded && this.loaded.get(client)?.get(`${ref.workspace}/${ref.repo}#${ref.id}`) === entry) {
+            const { review } = loaded.detail;
+            loaded.detail = { ...loaded.detail, review: { ...review, viewed: { ...this.store.prState(prKeyOf(ref))?.viewed } } };
+        }
     }
 
     // ---------- Internal ----------
 
     /**
-     * The loaded PR kept in memory when fresh (under 5 minutes) and complete enough for the read, otherwise loaded and
+     * The loaded PR kept in memory when fresh (younger than review.refreshMinutes) and complete enough for the read, otherwise loaded and
      * kept. Concurrent reads share one load. fresh: always loads and replaces the entry, except with keepHigher, which
      * leaves a higher-level entry alone (the notifier's version check must not downgrade what the page loaded).
      */
@@ -248,7 +283,7 @@ export class PrService {
         const level = levelOf(options);
         const now = this.now();
         const kept = entries.get(key);
-        if (!fresh && kept && kept.level >= level && now - kept.at <= LOADED_MAX_AGE_MS) {
+        if (!fresh && kept && kept.level >= level && now - kept.at <= this.refreshMinutes() * MINUTE_MS) {
             return kept.promise;
         }
         // The client's 15 s live data must not answer in place of a load that is meant to be fresh.
@@ -273,6 +308,7 @@ export class PrService {
 
     private async load(ref: PrRef, { comments: withComments = true, health = false }: LoadOptions = {}): Promise<LoadedPr> {
         const client = await this.session.getClient();
+        const loadedAt = this.now();
         const [pr, activity, comments, me] = await Promise.all([
             client.pullRequest(ref.workspace, ref.repo, ref.id),
             client.activity(ref.workspace, ref.repo, ref.id),
@@ -303,8 +339,10 @@ export class PrService {
             client,
             updates,
             versions,
+            comparisons: new Map(),
             detail: {
                 pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase, pulse: pulseOf(pr),
+                freshness: { loadedAt: new Date(loadedAt).toISOString(), refreshMinutes: this.refreshMinutes() },
             },
         };
     }

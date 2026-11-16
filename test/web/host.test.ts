@@ -76,7 +76,7 @@ describe('in a VS Code panel', () => {
         reply({ type: 'response', id: 1, status: 409, body: { error: { code: 'NO_TOKEN', message: 'Aucun jeton.' } } });
         await expect(home).rejects.toBeInstanceOf(ApiError);
         await expect(home).rejects.toMatchObject({ status: 409, code: 'NO_TOKEN', message: 'Aucun jeton.' });
-        const pr = api.pr(ref);
+        const pr = api.pr(ref, { fresh: false });
         reply({ type: 'response', id: 2, status: 502, body: null });
         await expect(pr).rejects.toMatchObject({ status: 502, code: 'HTTP_502' });
     });

@@ -430,7 +430,7 @@ export const en = {
     'settings.followedEmpty': 'Nobody followed yet.',
     'settings.followedRemove': 'Stop following {name}',
     'settings.refreshMinutes': 'Refresh every (minutes)',
-    'settings.refreshMinutesHelp': 'How often the PR list is refreshed in the background (1 to 120).',
+    'settings.refreshMinutesHelp': 'How often the PR list is refreshed in the background (1 to 120). It also sets how often an open PR page checks for news, and how long a reopened PR is shown without reloading.',
     'settings.invalidRefresh': 'The refresh interval must be a whole number of minutes from 1 to 120.',
     'settings.notificationsTitle': 'Notifications',
     'settings.notifyNewPullRequest': 'A new PR needs my review (followed contributor, or I am a designated reviewer)',
