@@ -11,7 +11,7 @@ import SafeHtml from './SafeHtml.vue';
 const page = usePrPage();
 
 function add(): void {
-    if (!page.acting && page.taskDraft.trim()) {
+    if (!page.acting && page.tasks !== null && page.taskDraft.trim()) {
         void page.addTask(page.taskDraft);
     }
 }
@@ -80,12 +80,21 @@ async function toggle(task: PrTask, event: Event): Promise<void> {
                 </div>
             </template>
             <form class="rv-task-new" @submit.prevent="add">
-                <input v-model="page.taskDraft" type="text" data-new-task maxlength="32000" :placeholder="t('task.new')" :aria-label="t('task.new')">
+                <!-- until the list is read, a task added would have no list to show in -->
+                <input
+                    v-model="page.taskDraft"
+                    type="text"
+                    data-new-task
+                    maxlength="32000"
+                    :disabled="page.tasks === null"
+                    :placeholder="t('task.new')"
+                    :aria-label="t('task.new')"
+                >
                 <button
                     type="submit"
                     :class="['rv-btn rv-btn-sm rv-btn-primary', { busy: page.busy(taskActionKey.add) }]"
                     data-action="add-task"
-                    :disabled="!page.taskDraft.trim() || page.acting"
+                    :disabled="page.tasks === null || !page.taskDraft.trim() || page.acting"
                     :aria-busy="page.busy(taskActionKey.add)"
                 >
                     {{ t('task.add') }}

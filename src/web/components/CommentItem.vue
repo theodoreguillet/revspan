@@ -76,6 +76,7 @@ function onEditKeydown(event: KeyboardEvent): void {
                     v-model="text"
                     data-edit
                     rows="2"
+                    :readonly="saving"
                     :aria-label="t('comment.editLabel')"
                     @input="autosize"
                     @keydown="onEditKeydown"
