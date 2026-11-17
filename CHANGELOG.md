@@ -20,6 +20,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Mark all viewed (button of the file list or `Shift+V`): every listed file in one request.
 - Tasks tab: the PR's Bitbucket tasks, read when the tab is opened; add, tick, reopen and delete tasks, with the open
   count on the tab (only your own tasks can be deleted).
+- Approval count in the PR header, left of the reviewers: "1/2 approvals" (Bitbucket approvals other than the author's
+  against the required count of the repository), green once met, following your approval at once.
 - Rebase and merge-conflict chips in the PR header for any open PR: "Needs rebase on master" when the destination moved
   since the PR's base, "⚠ Conflicts with master · N files" when Bitbucket reports merge conflicts (a click opens the
   first conflicting file, marked in the file list).

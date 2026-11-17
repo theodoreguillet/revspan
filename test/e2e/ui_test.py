@@ -858,11 +858,17 @@ def run_checks(page):
     def approve(page):
         button = page.locator('[data-action="approve"]')
         expect(button).to_have_text(re.compile(f'Approuver v{n}$'))
+        count = page.locator('.rv-appr [data-appr-count]')
+        expect(count).to_have_text('1/2 approbation')
+        expect(count).not_to_have_class(re.compile(r'\bok\b'))
+        expect(count).to_have_attribute('title', 'Approbations requises pour ce dépôt : 2 (réglages)')
         calls.start()
         button.click()
         calls.wait(lambda c: c['method'] == 'POST' and c['path'].endswith('/approve'), 'POST approve')
         expect(page.locator('[data-action="unapprove"]')).to_have_text('Retirer l\'approbation', timeout=10000)
         expect(page.locator('.rv-appr')).to_contain_text(f'toi · sur v{n}')
+        expect(count).to_have_text('2/2 approbations')
+        expect(count).to_have_class(re.compile(r'\bok\b'))
         expect(page.locator('.rv-banner')).to_contain_text(f'Tu es à jour : v{n} relue')
     approve(page)
 

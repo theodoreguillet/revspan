@@ -12,10 +12,11 @@ function fixture<T>(name: string): T {
     return JSON.parse(fs.readFileSync(path.join(DIR, name), 'utf8')) as T;
 }
 
-/** The JSON fixtures predate the pulse and the freshness of the detail: neutral values are added. */
-const PULSE_DEFAULTS: Pick<PrDetail, 'pulse' | 'freshness'> = {
+/** The JSON fixtures predate the pulse, the freshness and the required approvals of the detail: neutral values are added. */
+const PULSE_DEFAULTS: Pick<PrDetail, 'pulse' | 'freshness' | 'requiredApprovals'> = {
     pulse: { updatedOn: '2026-11-16T10:00:00Z', head: 'head', commentCount: 0, participants: '', taskCount: 0 },
     freshness: { loadedAt: '2026-11-16T10:00:00Z', refreshMinutes: 5 },
+    requiredApprovals: 2,
 };
 
 export function loadPr(id: 'long' | 'rebase'): { data: PrDetail; sums: SummaryMap } {

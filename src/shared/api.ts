@@ -313,6 +313,8 @@ export interface PrDetail {
     pulse: PrPulse;
     /** When the PR was read from Bitbucket (a cached detail keeps its time) and the configured check interval. */
     freshness: { loadedAt: string; refreshMinutes: number };
+    /** Approvals the PR's repository needs (settings), the figure the header compares the participants' approvals to. */
+    requiredApprovals: number;
 }
 
 /** Cheap snapshot of a PR (one Bitbucket GET), compared by the page to what it shows. */

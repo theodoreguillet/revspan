@@ -92,7 +92,7 @@ first that matches wins:
 | 6 | You are a **designated reviewer** (and none of the above). | `to-do` |
 | 7 | You reviewed (approved or marked it) or requested changes, and only neutral versions arrived since. | `waiting` |
 | 8 | It needs review (fewer approvals than the minimum) and its author is followed, or you follow nobody. | `to-do` |
-| 9 | You reviewed or approved it and code or dependencies changed since (a version whose type is not computed yet counts as code). | `to-do` |
+| 9 | You reviewed, approved or requested changes and code or dependencies changed since (a version whose type is not computed yet counts as code). | `to-do` |
 | 10 | Anything else: enough approvals, nothing asked of you. | `others` |
 
 A designated reviewer who commented without approving stays in `to-do` (rule 6), since Bitbucket explicitly asks for
@@ -100,7 +100,7 @@ their approval.
 
 **Followed contributors narrow "To review".** While you follow nobody, every PR needing review is in "To review", so a
 new user never sees an empty list. Once you follow at least one person, "To review" keeps only the PRs of followed
-authors, the ones where you are a designated reviewer, and the ones you reviewed or approved whose code changed since
+authors, the ones where you are a designated reviewer, and the ones you reviewed, approved or requested changes on whose code changed since
 (you are already engaged with them); any other PR needing review goes to "Other open PRs". Follow someone from a PR row
 (☆ Follow), from the PR header, or from Settings › Followed contributors (**Add** lists the authors of the open PRs in
 your repositories).

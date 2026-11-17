@@ -266,5 +266,15 @@ describe('PrService in-memory cache', () => {
             expect(detail.freshness.refreshMinutes).toBe(1);
             expect(reads().pr).toBe(2);
         });
+
+        it('sends the required approvals of the repository, re-read from the settings on a cached detail', async () => {
+            const first = await service.detail(ref);
+            expect(first.requiredApprovals).toBe(store.config.review.requiredApprovals);
+            await store.saveConfig({ review: { ...store.config.review, requiredApprovals: 4, requiredApprovalsByRepo: { [`${ref.workspace}/${ref.repo}`]: 3 } } });
+            const reads0 = reads().pr;
+            const again = await service.detail(ref, { fresh: false });
+            expect(again.requiredApprovals).toBe(3);
+            expect(reads().pr).toBe(reads0);
+        });
     });
 });

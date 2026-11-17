@@ -115,6 +115,8 @@ export const en = {
     'pr.state.superseded': 'Superseded',
     'pr.onBitbucket': 'Bitbucket ↗',
     'pr.onVersion': 'on v{version}',
+    'pr.approvalsOf': { one: '{count}/{required} approval', other: '{count}/{required} approvals' },
+    'pr.approvalsRequired': 'Required approvals for this repository: {required} (settings)',
     'pr.stale': 'stale ({reason})',
     'pr.changesRequested': 'changes requested',
     'pr.changesRequestedOn': 'changes requested on v{version}',

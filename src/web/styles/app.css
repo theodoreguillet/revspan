@@ -99,6 +99,7 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-pill.SUPERSEDED { background: var(--bg-tertiary); color: var(--text-secondary); }
 .rv-appr { display: flex; gap: 14px; margin-top: 7px; font-size: 11.5px; color: var(--text-secondary); flex-wrap: wrap; }
 .rv-appr span b { color: var(--rv-add); font-weight: 600; }
+.rv-appr .rv-appr-count.ok { color: var(--rv-add); font-weight: 600; }
 .rv-appr .chg b { color: var(--rv-del); }
 .rv-appr .stale { color: var(--text-tertiary); }
 .rv-appr .stale b { color: var(--text-tertiary) !important; }

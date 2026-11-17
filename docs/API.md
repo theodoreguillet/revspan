@@ -78,6 +78,9 @@ Common rules:
   only when `needsRebase === true` (a PR based on the destination's head cannot conflict), once per pair of source
   and destination heads (kept in the cache); `null` otherwise, when unreadable, or when Bitbucket does not answer
   within 5 s (the detail never waits longer for it).
+- `PrDetail.requiredApprovals: number`: approvals the PR's repository needs (its override in the settings, otherwise the
+  global value), stamped from the current settings on every detail, also one served from the cache, with no Bitbucket
+  request. The PR header compares it to the participants' approvals other than the author (count computed on the page).
 - `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `hideUnfollowed`,
   `notifications`, `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
   by key); an invalid value is replaced by its default.

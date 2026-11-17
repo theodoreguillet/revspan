@@ -5,6 +5,13 @@ import type { Translator } from '../i18n/index.ts';
 import { displayName, vname } from './format.ts';
 import { CODE_KINDS, type SummaryMap } from './kinds.ts';
 
+/** Bitbucket approvals against the repository's required count (the author's own is not counted, as on the home). */
+export function approvalProgress(detail: Pick<PrDetail, 'participants' | 'pr' | 'requiredApprovals'>): { count: number; required: number; met: boolean } {
+    const authorUuid = detail.pr.author?.uuid;
+    const count = detail.participants.filter((p) => p.approved && p.user?.uuid !== authorUuid).length;
+    return { count, required: detail.requiredApprovals, met: count >= detail.requiredApprovals };
+}
+
 /** Versions with code (or dependency) changes after the approved one. */
 export interface StaleVersions {
     code: number[];

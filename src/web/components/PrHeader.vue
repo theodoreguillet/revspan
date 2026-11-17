@@ -7,7 +7,7 @@ import type { MessageKey } from '../i18n/index.ts';
 import { useFollow } from '../composables/useFollow.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { t, tr } from '../i18n/index.ts';
-import { approvalItems, myActions } from '../lib/approvals.ts';
+import { approvalItems, approvalProgress, myActions } from '../lib/approvals.ts';
 import { displayName, openedSince } from '../lib/format.ts';
 import { conflictChip, firstConflictIndex, rebaseChip } from '../lib/merge-conflicts.ts';
 import { api } from '../services/api.ts';
@@ -29,6 +29,7 @@ const page = usePrPage();
 const pr = computed(() => page.detail.pr);
 const n = computed(() => page.n);
 const approvals = computed(() => approvalItems(tr(), page.detail, page.sums, !!page.summary));
+const progress = computed(() => approvalProgress(page.detail));
 const mine = computed(() => myActions(page.detail, page.sums, !!page.summary));
 const hasMe = computed(() => !!page.detail.me);
 const build = computed(() => (page.detail.build ? summarizeBuild(page.detail.build) : null));
@@ -109,7 +110,12 @@ onMounted(async () => {
                 </template>
                 <BuildBadge v-if="build" :build="build" variant="header" @open="page.tab = 'builds'" />
             </div>
-            <div v-if="approvals.length" class="rv-appr">
+            <div class="rv-appr">
+                <span
+                    :class="['rv-appr-count', { ok: progress.met }]"
+                    data-appr-count
+                    :title="t('pr.approvalsRequired', { required: progress.required })"
+                >{{ t('pr.approvalsOf', { count: progress.count, required: progress.required }) }}</span>
                 <template v-for="item in approvals" :key="item.name">
                     <span v-if="item.kind === 'approved'" :class="{ stale: item.stale }" :title="item.title">
                         <b>✓</b> {{ item.name }}<template v-if="item.version != null"> · {{ t('pr.onVersion', { version: item.version }) }}</template>

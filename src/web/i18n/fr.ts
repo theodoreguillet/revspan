@@ -114,6 +114,8 @@ export const fr: Catalog = {
     'pr.state.superseded': 'Remplacée',
     'pr.onBitbucket': 'Bitbucket ↗',
     'pr.onVersion': 'sur v{version}',
+    'pr.approvalsOf': { one: '{count}/{required} approbation', other: '{count}/{required} approbations' },
+    'pr.approvalsRequired': 'Approbations requises pour ce dépôt : {required} (réglages)',
     'pr.stale': 'périmée ({reason})',
     'pr.changesRequested': 'modifs demandées',
     'pr.changesRequestedOn': 'modifs demandées sur v{version}',

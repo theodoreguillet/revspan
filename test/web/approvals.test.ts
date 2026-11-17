@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Participant } from '../../src/shared/api.ts';
-import { approvalHolds, approvalItems, myActions, staleness } from '../../src/web/lib/approvals.ts';
+import { approvalHolds, approvalItems, approvalProgress, myActions, staleness } from '../../src/web/lib/approvals.ts';
 import { makeSums, makeVersions, prLong } from './fixtures.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 
@@ -142,5 +142,35 @@ describe('approvals in English', () => {
             participants: data.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approved: true, state: 'approved' as const, approvedVersion: 7 } : p)),
         };
         expect(approvalItems(createTranslator('en'), approvedV7, sums, true).at(-1)?.title).toBe('You approved v7, but code changed in v10');
+    });
+});
+
+describe('approvalProgress: approvals against the required count', () => {
+    const { data } = prLong();
+
+    it('#212: two approvals of two required, met', () => {
+        expect(approvalProgress(data)).toEqual({ count: 2, required: 2, met: true });
+    });
+
+    it('the author is not counted, even when Bitbucket lists them as approved', () => {
+        const authorUuid = data.pr.author?.uuid;
+        const withAuthor = { ...data, participants: data.participants.map((p) => (p.user?.uuid === authorUuid ? { ...p, approved: true } : p)) };
+        expect(approvalProgress(withAuthor).count).toBe(2);
+    });
+
+    it('an optimistic approval of mine counts at once, and the count follows its rollback', () => {
+        const base = { ...data, requiredApprovals: 3 };
+        const approved = { ...base, participants: base.participants.map((p) => (p.user?.uuid === data.me?.uuid ? { ...p, approved: true } : p)) };
+        expect(approvalProgress(base)).toEqual({ count: 2, required: 3, met: false });
+        expect(approvalProgress(approved)).toEqual({ count: 3, required: 3, met: true });
+    });
+
+    it('no approval yet: 0 of the required, not met', () => {
+        const none = { ...data, participants: [] };
+        expect(approvalProgress(none)).toEqual({ count: 0, required: 2, met: false });
+    });
+
+    it('more approvals than required stays met', () => {
+        expect(approvalProgress({ ...data, requiredApprovals: 1 })).toEqual({ count: 2, required: 1, met: true });
     });
 });

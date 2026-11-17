@@ -11,6 +11,7 @@ import {
 import { AppError, badRequest } from '../errors.ts';
 import type { Cache } from '../infra/cache.ts';
 import { prKeyOf, type Store } from '../infra/config.ts';
+import { requiredApprovalsFor } from '../../shared/review-settings.ts';
 import { loadBuildChecks, loadRebaseState, NO_REBASE_STATE } from './pr-health.ts';
 import type { BitbucketSession } from './session.ts';
 
@@ -92,7 +93,12 @@ export class PrService {
             ...detail,
             review: { ...detail.review, viewed: { ...this.store.prState(prKeyOf(ref)).viewed } },
             freshness: { ...detail.freshness, refreshMinutes: this.refreshMinutes() },
+            requiredApprovals: this.requiredApprovals(ref),
         };
+    }
+
+    private requiredApprovals(ref: PrRef): number {
+        return requiredApprovalsFor(this.store.config.review, `${ref.workspace}/${ref.repo}`);
     }
 
     private refreshMinutes(): number {
@@ -393,6 +399,7 @@ export class PrService {
                 pr: info, me, versions, participants: buildParticipants(pr, activity, versions), review, threads, build, needsRebase, mergeConflicts,
                 pulse: pulseOf(pr),
                 freshness: { loadedAt: new Date(loadedAt).toISOString(), refreshMinutes: this.refreshMinutes() },
+                requiredApprovals: this.requiredApprovals(ref),
             },
         };
     }
