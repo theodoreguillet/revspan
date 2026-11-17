@@ -17,6 +17,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Edit your own comments. Reopen a resolved thread from its folded bar.
 - Search the diff (`/`): file names and the lines shown (or whole files), with a match count per file and Enter /
   Shift+Enter to move across matches.
+- Search PRs on the home page (`/` to focus, Esc to clear): by title, `#number`, repository or author, ignoring case and
+  accents. Groups without a match are hidden and the counts show the matches.
 - Mark all viewed (button of the file list or `Shift+V`): every listed file in one request.
 - Tasks tab: the PR's Bitbucket tasks, read when the tab is opened; add, tick, reopen and delete tasks, with the open
   count on the tab (only your own tasks can be deleted).

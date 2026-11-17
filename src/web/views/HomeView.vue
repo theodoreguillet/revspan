@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watchEffect } from 'vue';
+import { computed, nextTick, onMounted, ref, shallowRef, watchEffect } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import type { Home, HomeGroupKey, User } from '../../shared/api.ts';
 import { useFollow } from '../composables/useFollow.ts';
+import { useKeyboard } from '../composables/useKeyboard.ts';
 import { useLocalPref } from '../composables/useLocalPref.ts';
 import { t, tr, type MessageKey } from '../i18n/index.ts';
 import { errorText } from '../lib/errors.ts';
 import { withFollowedCards } from '../../shared/follow.ts';
 import { visibleGroups as filterHome } from '../../shared/home-filter.ts';
 import { GROUP_TITLES, emptyHome, truncatedNotice } from '../lib/home.ts';
+import { matchesPrQuery } from '../lib/home-search.ts';
 import { GROUPINGS, groupCards, groupingFor, isGrouping, type Grouping } from '../../shared/home-grouping.ts';
 import { api, ApiError } from '../services/api.ts';
 import ErrorPanel from '../components/ErrorPanel.vue';
@@ -67,12 +69,55 @@ const grouping = useLocalPref<Grouping>('home.grouping', 'repository', isGroupin
 /** The home without the PRs hidden by the unfollowed filter (display only: the server sends them all). */
 const filtered = computed(() => (home.value ? filterHome(home.value) : { groups: [], hidden: 0 }));
 
-const visibleGroups = computed(() => filtered.value.groups.filter((g) => g.prs.length > 0).map((group) => {
-    const mode = groupingFor(group.key, grouping.value);
-    return { ...group, mode, description: GROUP_DESCRIPTIONS[group.key] ?? null, subgroups: groupCards(group.prs, mode) };
-}));
+/** What is typed in the search field: in memory only, gone when the page is left. */
+const query = ref('');
+const searching = computed(() => query.value.trim() !== '');
+const searchInput = ref<HTMLInputElement | null>(null);
 
-const empty = computed(() => (home.value ? emptyHome({ repos: home.value.repos.length, shown: visibleGroups.value.length, hidden: filtered.value.hidden }) : null));
+/** The groups before the search (the filter above applied). */
+const baseGroups = computed(() => filtered.value.groups.filter((g) => g.prs.length > 0));
+
+/** The search applies on top of the unfollowed filter: groups and subgroups without a match are left out, counts show matches. */
+const visibleGroups = computed(() => baseGroups.value
+    .map((group) => ({ ...group, prs: searching.value ? group.prs.filter((card) => matchesPrQuery(card, query.value)) : group.prs }))
+    .filter((g) => g.prs.length > 0)
+    .map((group) => {
+        const mode = groupingFor(group.key, grouping.value);
+        return { ...group, mode, description: GROUP_DESCRIPTIONS[group.key] ?? null, subgroups: groupCards(group.prs, mode) };
+    }));
+
+const noMatch = computed(() => searching.value && baseGroups.value.length > 0 && visibleGroups.value.length === 0);
+
+/** The "Other open PRs" fold as the user left it (null: untouched). A search with matches in it opens it meanwhile. */
+const othersOpened = ref<boolean | null>(null);
+const othersOpen = computed(() => (searching.value ? true : (othersOpened.value ?? !home.value?.me)));
+
+/** A click on the fold's title (read before the browser flips it), not its `toggle` event: the search opens it too. */
+function onOthersClick(event: MouseEvent): void {
+    if (!searching.value) {
+        othersOpened.value = !(event.currentTarget as HTMLElement).closest('details')?.open;
+    }
+}
+
+/** Escape: clears the query, then (field already empty) leaves the field. */
+function onSearchEscape(): void {
+    if (query.value !== '') {
+        query.value = '';
+    } else {
+        searchInput.value?.blur();
+    }
+}
+
+/** "/" focuses the search field, like the PR page's file search (useKeyboard ignores typing and modifiers). */
+useKeyboard((key) => {
+    if (key !== '/') {
+        return false;
+    }
+    void nextTick(() => searchInput.value?.focus());
+    return true;
+});
+
+const empty = computed(() => (home.value ? emptyHome({ repos: home.value.repos.length, shown: baseGroups.value.length, hidden: filtered.value.hidden }) : null));
 
 /**
  * Follow from a row: the cards are marked from the saved list at once, then the home is read again quietly, since the
@@ -104,6 +149,18 @@ onMounted(() => load());
         <div class="rv-home-top">
             <h1>{{ t('home.title') }}</h1>
             <UrlInput />
+            <input
+                ref="searchInput"
+                v-model="query"
+                class="rv-home-search"
+                type="search"
+                data-home-search
+                :placeholder="t('home.search.placeholder')"
+                :aria-label="t('home.search.placeholder')"
+                autocomplete="off"
+                spellcheck="false"
+                @keydown.esc.prevent="onSearchEscape"
+            >
             <button :class="['rv-btn', { busy: loading }]" type="button" :title="t('home.reloadTitle')" :disabled="loading" :aria-busy="loading" @click="load({ fresh: true })">
                 {{ loading ? t('home.refresh') : `↻ ${t('home.refresh')}` }}
             </button>
@@ -136,7 +193,7 @@ onMounted(() => load());
                     <template #settings><RouterLink to="/settings">{{ t('home.settingsLink') }}</RouterLink></template>
                 </I18nText>
             </p>
-            <div v-if="visibleGroups.length" class="rv-home-bar">
+            <div v-if="baseGroups.length" class="rv-home-bar">
                 <span>{{ t('home.groupBy') }}</span>
                 <span class="rv-seg" role="group" :aria-label="t('home.groupBy')">
                     <button
@@ -158,9 +215,9 @@ onMounted(() => load());
                 :key="group.key"
                 class="rv-list"
                 :data-group="group.key"
-                :open="group.key === 'others' ? !home.me : undefined"
+                :open="group.key === 'others' ? othersOpen : undefined"
             >
-                <component :is="group.key === 'others' ? 'summary' : 'div'" class="rv-lgrp">
+                <component :is="group.key === 'others' ? 'summary' : 'div'" class="rv-lgrp" @click="group.key === 'others' ? onOthersClick($event) : undefined">
                     {{ t(GROUP_TITLES[group.key]) }} <span class="cnt">· {{ group.prs.length }}</span>
                     <span v-if="group.description" class="desc">{{ t(group.description) }}</span>
                 </component>
@@ -179,6 +236,7 @@ onMounted(() => load());
                     />
                 </template>
             </component>
+            <p v-if="noMatch" class="rv-hidden-note" data-testid="no-match">{{ t('home.search.noMatch') }}</p>
             <div v-if="empty === 'no-repos'" class="rv-panel-msg" data-testid="no-repos">
                 <h2>{{ t('home.noRepos') }}</h2>
                 <p>

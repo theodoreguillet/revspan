@@ -443,6 +443,7 @@ details > summary.rv-dgrp { cursor: pointer; list-style: revert; }
 .rv-home-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .rv-home-top h1 { font-size: 18px; margin: 0; flex: 1; }
 .rv-home-top .rv-url { flex: 0 1 460px; width: auto; max-width: none; min-width: 200px; padding: 6px 10px; font-size: 12.5px; }
+.rv-home-top .rv-home-search { flex: 0 1 220px; min-width: 160px; border: 1px solid var(--input-border); border-radius: 6px; padding: 6px 10px; background: var(--input-bg); color: var(--input-fg); font-size: 12.5px; }
 .rv-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; background: var(--bg-secondary); }
 .rv-lgrp { padding: 7px 16px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); background: var(--bg-primary); border-bottom: 1px solid var(--border); font-weight: 600; display: flex; gap: 8px; }
 .rv-lgrp .cnt { font-weight: 500; }

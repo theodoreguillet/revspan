@@ -437,6 +437,46 @@ def run_checks(page):
             expect(page.locator(f'.rv-roww[data-row="{fake_ref("mine")}"] .rv-row-more')).to_have_count(0)  # nobody to follow
         queue_groups(page)
 
+        @check('home_search: title part, #number, no match, Escape brings everything back')
+        def home_search(page):
+            page.goto(url(''))
+            page.reload()  # same-document goto: start from a fresh page, the fold is closed again
+            expect(page.locator('section[data-group="to-do"]')).to_be_visible(timeout=20000)
+            all_rows = page.locator('.rv-row').count()
+            assert all_rows > 1, all_rows
+            search = page.locator('[data-home-search]')
+            expect(search).to_have_attribute('placeholder', 'Rechercher une PR…')
+            page.locator('body').click(position={'x': 5, 'y': 5})
+            page.keyboard.press('/')
+            expect(search).to_be_focused()
+            search.fill('NOT reviewed')
+            only = page.locator(f'.rv-row[data-pr="{fake_ref("neverReviewed")}"]')
+            expect(page.locator('.rv-row')).to_have_count(1)
+            expect(only).to_be_visible()
+            expect(page.locator('section[data-group="to-do"] .rv-lgrp .cnt')).to_have_text('· 1')
+            expect(page.locator('section[data-group="waiting"]')).to_have_count(0)
+            for scheme in ('light', 'dark'):
+                page.emulate_media(color_scheme=scheme)
+                page.screenshot(path=os.path.join(SHOTS, f'home-search-match-{scheme}.png'))
+            page.emulate_media(color_scheme='null')
+            search.fill(f'#{FAKE_PRS["mine"]}')
+            expect(page.locator('.rv-row')).to_have_count(1)
+            expect(page.locator(f'.rv-row[data-pr="{fake_ref("mine")}"]')).to_be_visible()
+            search.fill('zzz-nothing')
+            expect(page.locator('.rv-row')).to_have_count(0)
+            expect(page.locator('[data-testid="no-match"]')).to_have_text('Aucune PR ne correspond')
+            for scheme in ('light', 'dark'):
+                page.emulate_media(color_scheme=scheme)
+                page.screenshot(path=os.path.join(SHOTS, f'home-search-none-{scheme}.png'))
+            page.emulate_media(color_scheme='null')
+            search.fill('not about me')  # a PR of "Autres PR ouvertes": the fold opens
+            expect(page.locator(f'details[data-group="others"] .rv-row[data-pr="{fake_ref("others")}"]')).to_be_visible()
+            search.press('Escape')
+            expect(search).to_have_value('')
+            expect(page.locator('.rv-row')).to_have_count(all_rows)
+            page.wait_for_function('() => !document.querySelector(\'details[data-group="others"]\').open', timeout=5000)  # back to its state
+        home_search(page)
+
         @check('home: "Refresh" reads Bitbucket again, where a reload reuses the home just computed')
         def refresh_fresh(page):
             assert REQUESTS_URL, 'REVSPAN_REQUESTS_URL missing'

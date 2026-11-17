@@ -111,6 +111,8 @@ reviewer and the ones you reviewed or approved are always shown, and nothing is 
 and the tree show how many PRs are hidden, with a link to the settings. It is a display filter only: notifications and the request
 budget are unchanged.
 
+**Searching** (field in the top bar, `/` to focus it, `Esc` to clear): a case- and accent-insensitive substring of the PR title, its `#number`, its repository or its author's name. It applies on top of the unfollowed filter to every group and subgroup, hides what does not match, counts the matches and opens "Other open PRs" while it holds some. Nothing is requested and the text is not kept when you leave the page; the VS Code tree is unchanged.
+
 "To review" and "Other open PRs" can be grouped by repository, by contributor or not at all. "To rebase" and "My PRs"
 are always by repository and "Waiting" is never grouped. The choice is stored **separately** for the page (browser) and
 for the VS Code tree. Inside each group the PRs are sorted newest push first. Repository subgroups are sorted by their most

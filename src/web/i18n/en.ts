@@ -86,6 +86,8 @@ export const en = {
     'home.badge.newComments': { one: '💬 {count} new', other: '💬 {count} new' },
     'home.badge.approved': '✓ approved',
     'home.pushed': 'pushed {ago}',
+    'home.search.placeholder': 'Search PRs…',
+    'home.search.noMatch': 'No PR matches',
     'home.groupBy': 'Group by',
     'home.grouping.repository': 'Repository',
     'home.grouping.contributor': 'Contributor',

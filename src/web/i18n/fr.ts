@@ -85,6 +85,8 @@ export const fr: Catalog = {
     'home.badge.newComments': { one: '💬 {count} nouveau', other: '💬 {count} nouveaux' },
     'home.badge.approved': '✓ approuvée',
     'home.pushed': 'push {ago}',
+    'home.search.placeholder': 'Rechercher une PR…',
+    'home.search.noMatch': 'Aucune PR ne correspond',
     'home.groupBy': 'Grouper par',
     'home.grouping.repository': 'Dépôt',
     'home.grouping.contributor': 'Contributeur',
