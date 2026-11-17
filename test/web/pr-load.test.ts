@@ -7,6 +7,7 @@ import { setHostVisible } from '../../src/web/composables/usePageVisible.ts';
 import { usePrLoad, type PrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { providePrPage, type PrPage } from '../../src/web/composables/usePrPage.ts';
 import { composerTargetFor } from '../../src/web/lib/diff.ts';
+import { SKELETON_DELAY_MS } from '../../src/web/lib/loading.ts';
 import { presets } from '../../src/web/lib/selection.ts';
 import { prLong, threadById } from './fixtures.ts';
 
@@ -502,7 +503,10 @@ describe('PR page while a slow diff loads', () => {
         api.pr.mockReturnValue(new Promise(() => undefined));
     });
 
-    afterEach(() => unmount());
+    afterEach(() => {
+        unmount();
+        vi.useRealTimers();
+    });
 
     /** The PR page state under a component, on an in-memory router, range v7 → v10 shown. */
     async function mountPage(): Promise<PrPage> {
@@ -531,8 +535,13 @@ describe('PR page while a slow diff loads', () => {
         const slow = deferred<Comparison>();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 9 ? slow.promise : Promise.resolve(comparison(from, to))));
         const page = await mountPage();
+        // the skeleton's 200 ms on a fake clock: the test never depends on how fast the machine is
+        vi.useFakeTimers();
         page.select(9, 10);
-        await vi.waitFor(() => expect(page.diffMode).toBe('skeleton'), { timeout: 1000 });
+        await nextTick();
+        expect(page.diffMode).toBe('progress');
+        vi.advanceTimersByTime(SKELETON_DELAY_MS);
+        expect(page.diffMode).toBe('skeleton');
 
         expect(page.handleKey('j')).toBe(false);
         expect(page.handleKey('k')).toBe(false);
@@ -557,6 +566,8 @@ describe('PR page while a slow diff loads', () => {
         const slow = deferred<Comparison>();
         api.compare.mockImplementation((_ref: unknown, from: number, to: number) => (from === 9 ? slow.promise : Promise.resolve(comparison(from, to))));
         const page = await mountPage();
+        // the previous diff stays (no skeleton) whatever the machine's speed: the 200 ms run on a fake clock
+        vi.useFakeTimers();
         page.select(9, 10);
         await nextTick();
         expect(page.diffMode).toBe('progress');
