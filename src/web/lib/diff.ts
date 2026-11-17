@@ -30,16 +30,36 @@ export interface SplitRow {
     right: DiffLine | null;
 }
 
-/** Left/right pairs of a hunk: the - then + runs are aligned line by line. */
+/**
+ * Left/right rows of a hunk. In a - then + run, a removed line and the added line it was compared with (`pair`, from
+ * the server) share a row; the unpaired lines between two pairs line up by position, as do whole runs without `pair`.
+ */
 export function splitRows(lines: DiffLine[]): SplitRow[] {
     const rows: SplitRow[] = [];
     let dels: DiffLine[] = [];
     let adds: DiffLine[] = [];
-    const flush = (): void => {
-        const count = Math.max(dels.length, adds.length);
-        for (let k = 0; k < count; k++) {
-            rows.push({ left: dels[k] ?? null, right: adds[k] ?? null });
+    const zip = (left: readonly DiffLine[], right: readonly DiffLine[]): void => {
+        for (let k = 0; k < Math.max(left.length, right.length); k++) {
+            rows.push({ left: left[k] ?? null, right: right[k] ?? null });
         }
+    };
+    const flush = (): void => {
+        const indexOf = new Map(adds.map((add, k) => [add.n, k]));
+        let next = 0;
+        let unpaired: DiffLine[] = [];
+        for (const del of dels) {
+            const j = del.pair === undefined ? undefined : indexOf.get(del.pair);
+            // pairings never cross: one that would go back is ignored
+            if (j === undefined || j < next) {
+                unpaired.push(del);
+                continue;
+            }
+            zip(unpaired, adds.slice(next, j));
+            rows.push({ left: del, right: adds[j]! });
+            unpaired = [];
+            next = j + 1;
+        }
+        zip(unpaired, adds.slice(next));
         dels = [];
         adds = [];
     };

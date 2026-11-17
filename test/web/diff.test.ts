@@ -33,6 +33,30 @@ describe('splitRows', () => {
         const rows = splitRows([line('+', null, 1), line('-', 1, null)]);
         expect(rows.map((r) => [r.left?.o ?? null, r.right?.n ?? null])).toEqual([[null, 1], [1, null]]);
     });
+
+    const paired = (o: number, pair?: number): DiffLine => ({ ...line('-', o, null), ...(pair === undefined ? {} : { pair }) });
+    const sides = (rows: ReturnType<typeof splitRows>): [number | null, number | null][] => rows.map((r) => [r.left?.o ?? null, r.right?.n ?? null]);
+
+    it('puts a removed line and the added line it was compared with on one row', () => {
+        // 10 was split into 20 + 21 and compared with 21: the unpaired 20 gets its own row before it
+        expect(sides(splitRows([paired(10, 21), line('+', null, 20), line('+', null, 21)]))).toEqual([[null, 20], [10, 21]]);
+    });
+
+    it('lines up the unpaired lines before, between and after the pairs by position', () => {
+        const rows = splitRows([
+            paired(1), paired(2, 12), paired(3), paired(4), paired(5, 15), paired(6),
+            line('+', null, 10), line('+', null, 11), line('+', null, 12), line('+', null, 13), line('+', null, 14), line('+', null, 15), line('+', null, 16), line('+', null, 17),
+        ]);
+        expect(sides(rows)).toEqual([[1, 10], [null, 11], [2, 12], [3, 13], [4, 14], [5, 15], [6, 16], [null, 17]]);
+    });
+
+    it('without pairing information (or with a partner out of the run, or going back), the runs line up by position as before', () => {
+        const plain = [line(' ', 1, 1), line('-', 2, null), line('-', 3, null), line('+', null, 2), line(' ', 4, 3), line('+', null, 4)];
+        expect(sides(splitRows(plain))).toEqual([[1, 1], [2, 2], [3, null], [4, 3], [null, 4]]);
+        expect(sides(splitRows([paired(2, 99), paired(3), line('+', null, 2), line('+', null, 3)]))).toEqual([[2, 2], [3, 3]]);
+        // the second pairing would cross the first one: ignored
+        expect(sides(splitRows([paired(2, 3), paired(3, 2), line('+', null, 2), line('+', null, 3)]))).toEqual([[null, 2], [2, 3], [3, null]]);
+    });
 });
 
 describe('highlightParts / hunkRange / composerKey', () => {

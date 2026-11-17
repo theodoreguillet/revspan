@@ -357,6 +357,11 @@ export interface DiffLine {
     text: string;
     /** Ranges [start, end[ (character indices) to highlight. */
     hl: [number, number][];
+    /**
+     * Removed line only: new-side number (`n`) of the added line of the same run it is compared with (the most similar
+     * one, pairings never crossing). Absent when unpaired. The side-by-side view puts the pair on one row.
+     */
+    pair?: number;
     /** Last line without a final newline. */
     noEol?: true;
 }

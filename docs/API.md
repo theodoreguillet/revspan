@@ -50,6 +50,15 @@ Common rules:
 | POST | `/api/pr/:ws/:repo/:id/reviewed` | `{ version }` | `Ok` (local "reviewed" mark) |
 | POST | `/api/pr/:ws/:repo/:id/viewed` | `ViewedRequest`: one file `{ path, contentHash?, viewed }`, or several `{ files: [{ path, contentHash? }] (1 to 2000), viewed }` | `Ok` (local state, no Bitbucket call) |
 
+## Diff lines
+
+- `DiffLine.hl`: `[start, end[` ranges (UTF-16 indices of `text`) of the words that changed in a removed or added line,
+  compared with its partner of the same run; `[]` for context lines, unpaired lines and pairs too different to mark.
+- `DiffLine.pair` (removed lines only, optional): the new-side number `n` of the added line of the same run the line
+  was compared with. Pairings never cross. The side-by-side view puts each pair on one row and lines up the unpaired
+  lines between two pairs by position; without `pair` (unpaired lines, or a comparison without it) a run lines up by
+  position as before.
+
 ## Review queue contract
 
 - `PrCard` (in `Home`) gained: `approvals` (participants other than the author, the user included), `requiredApprovals`
