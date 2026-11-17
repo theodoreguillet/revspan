@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isShortcutEvent, isTyping, trappedFocus } from '../../src/web/lib/keyboard.ts';
+import { isGotoClick, isMacPlatform, isShortcutEvent, isTyping, trappedFocus } from '../../src/web/lib/keyboard.ts';
 
 /** Key pressed on `target` (document by default), with the given modifiers. */
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document): KeyboardEvent {
@@ -117,5 +117,33 @@ describe('modal box: Tab does not leave the box', () => {
         expect(trappedFocus(root, document.body, true)).toBe(two);
         expect(trappedFocus(root, root, true)).toBe(two);
         expect(trappedFocus(root, null, false)).toBe(one);
+    });
+});
+
+describe('go to definition: the modifier of the click', () => {
+    const click = (init: Partial<Record<'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey', boolean>> & { button?: number } = {}) =>
+        ({ button: 0, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...init });
+
+    it('macOS: ⌘+click (Ctrl+click is a right click there)', () => {
+        expect(isMacPlatform('MacIntel')).toBe(true);
+        expect(isMacPlatform('iPad')).toBe(true);
+        expect(isGotoClick(click({ metaKey: true }), true)).toBe(true);
+        expect(isGotoClick(click({ ctrlKey: true }), true)).toBe(false);
+    });
+
+    it('elsewhere: Ctrl+click', () => {
+        expect(isMacPlatform('Win32')).toBe(false);
+        expect(isMacPlatform('Linux x86_64')).toBe(false);
+        expect(isGotoClick(click({ ctrlKey: true }), false)).toBe(true);
+        expect(isGotoClick(click({ metaKey: true }), false)).toBe(false);
+    });
+
+    it('a plain click, another button or another modifier with it: not a go to definition', () => {
+        expect(isGotoClick(click(), false)).toBe(false);
+        expect(isGotoClick(click(), true)).toBe(false);
+        expect(isGotoClick(click({ ctrlKey: true, button: 1 }), false)).toBe(false);
+        expect(isGotoClick(click({ ctrlKey: true, shiftKey: true }), false)).toBe(false);
+        expect(isGotoClick(click({ metaKey: true, altKey: true }), true)).toBe(false);
+        expect(isGotoClick(click({ metaKey: true, ctrlKey: true }), true)).toBe(false);
     });
 });

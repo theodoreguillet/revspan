@@ -321,6 +321,7 @@ def screenshots(browser, fixed_time):
                     page.locator('[data-legend]').screenshot(path=os.path.join(SHOTS, f'legend-{scheme}.png'))
         context.close()
     change_shots(browser, fixed_time)
+    goto_shots(browser, fixed_time)
     log(f'      screenshots in {SHOTS}')
 
 
@@ -366,6 +367,48 @@ def change_shots(browser, fixed_time):
             return { x: first.left, y: first.top, width: Math.min(first.width, 760), height: last.bottom - first.top };
         }''')
         page.screenshot(path=os.path.join(SHOTS, f'diff-change-{name}.png'), clip=clip)
+        context.close()
+
+
+def goto_shots(browser, fixed_time):
+    """Go to definition on the main PR: underline with the modifier held, the choice, the notices; light, dark, VS Code Dark+."""
+    n = len(api(pr_api(MAIN_PR))['versions'])
+    for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
+        context = browser.new_context(viewport={'width': 1024, 'height': 700}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+        page = context.new_page()
+        if fixed_time:
+            page.clock.set_fixed_time(fixed_time)
+        page.goto(url(f'pr/{MAIN_PR}?from=0&to={n}'))
+        wait_pr_ready(page)
+        if vscode:
+            page.evaluate('''(vars) => {
+                for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(`--vscode-${k}`, v);
+                document.body.classList.add('vscode-dark');
+            }''', VSCODE_DARK_PLUS)
+        spec = page.locator('.rv-file[data-path="tests/ActionSpec.ts"]')
+        use = spec.locator('.rv-l', has_text='return new Action().run(payload)').first
+        sym = lambda line, word: line.locator('.c .sym', has_text=re.compile(f'^{word}$')).first  # noqa: E731
+        sym(use, 'Action').wait_for(state='attached', timeout=10000)
+        use.evaluate('(e) => e.scrollIntoView({ block: "center" })')
+        page.wait_for_timeout(300)
+        clip = use.evaluate('e => { const r = e.closest(".rv-file").getBoundingClientRect(); const l = e.getBoundingClientRect(); return { x: r.left, y: Math.max(0, l.top - 140), width: Math.min(r.width, 760), height: 300 }; }')
+        page.keyboard.down('ControlOrMeta')
+        sym(use, 'Action').hover()
+        page.screenshot(path=os.path.join(SHOTS, f'goto-hover-{name}.png'), clip=clip)
+        sym(use, 'payload').click()
+        page.keyboard.up('ControlOrMeta')
+        page.locator('[data-goto-choice]').wait_for()
+        page.wait_for_timeout(100)
+        page.screenshot(path=os.path.join(SHOTS, f'goto-choice-{name}.png'), clip=clip)
+        page.keyboard.press('Escape')
+        sym(spec.locator('.rv-l', has_text='describe(').first, 'describe').click(modifiers=['ControlOrMeta'])
+        page.locator('[data-goto-notice]').wait_for()
+        page.screenshot(path=os.path.join(SHOTS, f'goto-notfound-{name}.png'))
+        page.keyboard.press('Escape')
+        sym(spec.locator('.rv-l', has_text='buildPayload()').first, 'buildPayload').click(modifiers=['ControlOrMeta'])
+        page.locator('[data-goto-back]').wait_for()
+        page.wait_for_timeout(400)
+        page.screenshot(path=os.path.join(SHOTS, f'goto-import-back-{name}.png'))
         context.close()
 
 
@@ -1246,6 +1289,159 @@ def run_checks(page):
             page.locator('.rv-seg button[data-seg="unified"]').click()
     added_file_unified(page)
 
+    @check('goto_definition: Ctrl/⌘+click a name → its definition in another file, else its import, several → a choice, none → a notice; Alt+← back')
+    def goto_definition(page):
+        open_pr(page, MAIN_PR, f'?from=0&to={n}')
+        full = api(f'{pr_api(MAIN_PR)}/compare?from=0&to={n}&context=3')
+        spec_path, action_path = 'tests/ActionSpec.ts', 'src/Action.ts'
+        lines_of = {f['path']: [ln for h in f['hunks'] for ln in h['lines']] for f in full['files']}
+        spec, action = lines_of[spec_path], lines_of[action_path]
+        new_n = lambda lines, text: next(ln['n'] for ln in lines if ln['t'] != '-' and text in ln['text'])  # noqa: E731
+        use_n = new_n(spec, 'return new Action().run(payload)')
+        class_n = new_n(action, 'export class Action')
+        import_n = new_n(spec, 'import { buildPayload }')
+        call_n = new_n(spec, 'const payload = buildPayload()')
+        describe_n = new_n(spec, 'describe(')
+        payload_ns = [ln['n'] for ln in spec if 'const payload' in ln['text']]
+        assert len(payload_ns) == 2, payload_ns
+        spec_block = page.locator(f'.rv-file[data-path="{spec_path}"]')
+        action_block = page.locator(f'.rv-file[data-path="{action_path}"]')
+        flashed = re.compile(r'\bflash\b')
+        notice = page.locator('[data-goto-notice]')
+        choice = page.locator('[data-goto-choice]')
+
+        def row(block, number):
+            return block.locator(f'.rv-l[data-n="{number}"]')
+
+        def name(number, word):
+            return row(spec_block, number).locator('.c .sym', has_text=re.compile(f'^{word}$')).first
+
+        def top(locator):
+            return locator.evaluate('e => e.getBoundingClientRect().top')
+
+        def centered(locator):
+            """In the middle of the window (a click does not scroll), returns the scroll position."""
+            locator.evaluate('e => e.scrollIntoView({ block: "center" })')
+            page.wait_for_timeout(100)
+            return page.evaluate('scrollY')
+
+        action_name = name(use_n, 'Action')
+        action_name.scroll_into_view_if_needed()
+        expect(action_name).to_be_attached(timeout=10000)  # names are tagged once the syntax colors arrive
+        underline = 'e => getComputedStyle(e).textDecorationLine'
+        # the modifier held: a class on the diff, names underline on hover (CSS), keywords and strings do not
+        action_name.hover()
+        assert action_name.evaluate(underline) == 'none'
+        page.keyboard.down('ControlOrMeta')
+        try:
+            expect(page.locator('.rv-diff.rv-goto')).to_have_count(1)
+            action_name.hover()
+            assert action_name.evaluate(underline) == 'underline'
+            assert action_name.evaluate('e => getComputedStyle(e).cursor') == 'pointer'
+            keyword = row(spec_block, use_n).locator('.c .nosym', has_text=re.compile('^return$')).first
+            keyword.hover()
+            assert keyword.evaluate(underline) == 'none'
+        finally:
+            page.keyboard.up('ControlOrMeta')
+        expect(page.locator('.rv-diff.rv-goto')).to_have_count(0)
+
+        # a plain click: nothing (no jump, no composer)
+        scroll = centered(action_name)
+        action_name.click()
+        page.wait_for_timeout(200)
+        assert page.evaluate('scrollY') == scroll
+        expect(notice).to_have_count(0)
+        expect(page.locator('.rv-comp')).to_have_count(0)
+
+        # a class used here, defined in another file: that file's line under the bars, flashed; Alt+← comes back
+        before = top(row(spec_block, use_n))
+        action_name.click(modifiers=['ControlOrMeta'])
+        dest = row(action_block, class_n)
+        expect(dest).to_have_class(flashed)
+        expect(dest).to_be_in_viewport()
+        expect(notice.locator('[data-goto-back]')).to_be_visible()
+        page.wait_for_timeout(200)
+        bar = page.evaluate('document.querySelector(".rv-dtb").getBoundingClientRect().bottom')
+        assert bar <= top(dest) <= bar + 120, (bar, top(dest))
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', action_path)
+        page.keyboard.press('Alt+ArrowLeft')
+        expect(row(spec_block, use_n)).to_have_class(flashed)
+        page.wait_for_timeout(200)
+        assert abs(top(row(spec_block, use_n)) - before) <= 2, (before, top(row(spec_block, use_n)))
+
+        # imported from a file outside the PR: the import line, no offer
+        name(call_n, 'buildPayload').click(modifiers=['ControlOrMeta'])
+        expect(row(spec_block, import_n)).to_have_class(flashed)
+        expect(notice).to_contain_text('La définition de buildPayload n’est pas dans la diff affichée : voici son import')
+        expect(notice.locator('[data-goto-offer]')).to_have_count(0)
+        page.keyboard.press('Escape')
+        expect(notice).to_have_count(0)
+
+        # defined twice: a choice under the click, keyboard driven
+        payload = name(use_n, 'payload')
+        payload.scroll_into_view_if_needed()
+        payload.click(modifiers=['ControlOrMeta'])
+        items = choice.locator('[data-goto-item]')
+        expect(items).to_have_count(2)
+        assert items.evaluate_all('els => els.map((e) => +e.dataset.line)') == payload_ns
+        expect(items.first).to_be_focused()
+        assert top(choice) >= payload.bounding_box()['y'] + payload.bounding_box()['height'] - 1, 'the choice opens under the click'
+        page.keyboard.press('Escape')
+        expect(choice).to_have_count(0)
+        payload.click(modifiers=['ControlOrMeta'])
+        expect(items.first).to_be_focused()
+        page.keyboard.press('ArrowDown')
+        expect(items.nth(1)).to_be_focused()
+        page.keyboard.press('Enter')
+        expect(choice).to_have_count(0)
+        expect(row(spec_block, payload_ns[1])).to_have_class(flashed)
+        page.keyboard.press('Escape')
+
+        # the definition line itself: nothing
+        own = name(payload_ns[0], 'payload')
+        scroll = centered(own)
+        own.click(modifiers=['ControlOrMeta'])
+        page.wait_for_timeout(200)
+        assert page.evaluate('scrollY') == scroll
+        expect(choice).to_have_count(0)
+        expect(notice).to_have_count(0)
+
+        # selecting text with the modifier held: nothing
+        scroll = centered(action_name)
+        box = action_name.bounding_box()
+        page.keyboard.down('ControlOrMeta')
+        try:
+            page.mouse.move(box['x'] + 1, box['y'] + box['height'] / 2)
+            page.mouse.down()
+            page.mouse.move(box['x'] + box['width'] - 1, box['y'] + box['height'] / 2, steps=5)
+            page.mouse.up()
+        finally:
+            page.keyboard.up('ControlOrMeta')
+        page.wait_for_timeout(200)
+        assert page.evaluate('getSelection().toString()'), 'the drag selected nothing: the check proves nothing'
+        assert page.evaluate('scrollY') == scroll
+        expect(notice).to_have_count(0)
+        page.evaluate('getSelection().removeAllRanges()')
+
+        # nothing anywhere: a notice, with the "whole file" hint while it is off
+        name(describe_n, 'describe').click(modifiers=['ControlOrMeta'])
+        expect(notice).to_contain_text('Définition introuvable dans la diff affichée')
+        expect(notice).to_contain_text('active « fichier entier » pour chercher dans tout le fichier')
+        page.keyboard.press('Escape')
+
+        # side by side: a name on the old side (left) reaches the definition on the new side (right)
+        page.locator('.rv-seg button[data-seg="split"]').click()
+        try:
+            if_o = next(ln['o'] for ln in action if ln['t'] == ' ' and 'if (!id)' in ln['text'])
+            id_n = new_n(action, 'const id =')
+            left = action_block.locator(f'.half[data-o="{if_o}"] .c .sym', has_text=re.compile('^id$')).first
+            left.scroll_into_view_if_needed()
+            left.click(modifiers=['ControlOrMeta'])
+            expect(action_block.locator(f'.half[data-n="{id_n}"]')).to_have_class(flashed)
+        finally:
+            page.locator('.rv-seg button[data-seg="unified"]').click()
+    goto_definition(page)
+
     @check('sticky_toolbar: the diff toolbar stays under the timeline, j/k lands the file header just under it')
     def sticky_toolbar(page):
         # a short window: the last file can reach the top (the tail below the diff is 55vh)
@@ -1299,6 +1495,9 @@ def run_checks(page):
         overlay = page.locator('.rv-overlay')
         expect(overlay).to_be_visible()
         expect(overlay.locator('button', has_text='Fermer')).to_be_focused()
+        expect(overlay).to_contain_text('⌘/Ctrl + clic')
+        expect(overlay).to_contain_text('⌥/Alt + ←')
+        expect(overlay).to_contain_text('Accueil : rechercher dans les PR')
         inside = '() => !!document.activeElement && !!document.activeElement.closest(".rv-overlay")'
         try:
             for key in ('Tab', 'Tab', 'Shift+Tab'):

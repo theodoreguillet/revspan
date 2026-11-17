@@ -328,6 +328,21 @@ button.armed { color: var(--rv-del) !important; font-weight: 600; }
 .rv-th.file-level, .rv-sl-full .rv-th { margin-left: 12px; }
 .rv-th.flash { animation: rv-flash 1.4s ease-out; }
 @keyframes rv-flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+/* Go to definition: names underline while Ctrl/⌘ is held (CSS only, nothing on mouse moves); the line reached flashes. */
+.rv-goto .c .sym:hover { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.rv-l.flash, .rv-sl .half.flash { animation: rv-line-flash 1.6s ease-out; }
+@keyframes rv-line-flash {
+    0%, 35% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 999px var(--rv-range); }
+    100% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 999px transparent; }
+}
+.rv-goto-pop { position: fixed; z-index: 40; min-width: 260px; max-width: min(640px, calc(100vw - 16px)); max-height: 50vh; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 12px; }
+.rv-goto-pop .hd { padding: 4px 8px 6px; color: var(--text-secondary); font-size: 11px; }
+.rv-goto-pop .it { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; padding: 5px 8px; border: none; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; color: var(--text-primary); }
+.rv-goto-pop .it:hover, .rv-goto-pop .it:focus { background: var(--selected-bg); outline: none; }
+.rv-goto-pop .loc { font-family: var(--rv-mono); font-size: 11px; color: var(--text-secondary); }
+.rv-goto-pop .txt { font-family: var(--rv-mono); font-size: 11.5px; white-space: pre; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rv-goto-bar { position: fixed; z-index: 40; bottom: 16px; left: 50%; transform: translateX(-50%); width: max-content; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); padding: 7px 10px 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,.14); font-size: 12px; }
+.rv-goto-bar .hint { color: var(--text-secondary); }
 .rv-th-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; background: var(--bg-primary); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); }
 .rv-th-h .st { font-weight: 600; }
 .rv-th-h .st.open { color: var(--rv-new); } .rv-th-h .st.res { color: var(--rv-add); }

@@ -32,6 +32,18 @@ export function isShortcutEvent(event: KeyEventLike): boolean {
     return !event.defaultPrevented && modifiersAllowShortcut(event) && !isTyping(event.target);
 }
 
+/** macOS (and iOS) from navigator.platform: ⌘ rather than Ctrl, Ctrl+click being a right click there. */
+export function isMacPlatform(platform: string): boolean {
+    return /Mac|iPhone|iPad|iPod/.test(platform);
+}
+
+export type ClickLike = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>;
+
+/** Go to definition: main button with ⌘ alone on macOS, Ctrl alone elsewhere. */
+export function isGotoClick({ button, metaKey, ctrlKey, altKey, shiftKey }: ClickLike, mac: boolean): boolean {
+    return button === 0 && !altKey && !shiftKey && (mac ? metaKey && !ctrlKey : ctrlKey && !metaKey);
+}
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**

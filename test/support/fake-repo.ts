@@ -100,7 +100,22 @@ export function scenario(): { repo: FakeRepo; versions: ScenarioVersion[] } {
         '}',
     ]);
     const lockM0 = { a: '1.0.0', b: '1.0.0', c: '1.0.0', d: '1.0.0', e: '1.0.0' };
-    const spec = lines(['describe("Action", () => {});']);
+    // go to definition: Action is defined in src/Action.ts, buildPayload in a file outside the PR, payload twice
+    const spec = lines([
+        'import { Action } from \'../src/Action\';',
+        'import { buildPayload } from \'./helpers\';',
+        '',
+        'describe("Action", () => {',
+        '    it("saves the payload", () => {',
+        '        const payload = buildPayload();',
+        '        return new Action().run(payload);',
+        '    });',
+        '    it("skips an empty payload", () => {',
+        '        const payload = {};',
+        '        return new Action().run(payload);',
+        '    });',
+        '});',
+    ]);
     repo.commit('m0', {
         'src/Action.ts': action('data.labels?.slug'),
         'src/Other.ts': lines(['export const other = 1;']),

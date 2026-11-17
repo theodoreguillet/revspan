@@ -222,7 +222,8 @@ describe('fileSides (VS Code diff editor)', () => {
         const { repo, versions } = scenario();
         const { oldText, newText } = await fileSides(repo.source(), versions, 0, 2, { path: 'tests/ActionSpec.ts', oldPath: null });
         expect(oldText).toBe('');
-        expect(newText).toBe('describe("Action", () => {});\n');
+        expect(newText.split('\n').slice(0, 4)).toEqual(['import { Action } from \'../src/Action\';', 'import { buildPayload } from \'./helpers\';', '', 'describe("Action", () => {']);
+        expect(newText.endsWith('    });\n});\n')).toBe(true);
     });
 
     it('restores the absence of a final newline', async () => {

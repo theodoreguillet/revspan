@@ -116,4 +116,41 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         n.scrollToTabsIfBelow();
         expect(scroll).toHaveBeenCalledWith({ top: 2000 - 500 - 150 });
     });
+
+    it('go to definition: the registered line goes under the bars and flashes, or at a saved height (back)', () => {
+        const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+        vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0);
+        const n = nav(150, 40);
+        const line = at(800);
+        document.body.append(line);
+        n.registerJump(line);
+        expect(n.revealJump()).toBe(true);
+        expect(scroll).toHaveBeenCalledWith({ top: 800 - 250 });
+        expect(line.classList.contains('flash')).toBe(true);
+        // consumed: a second reveal without a new registration does nothing
+        expect(n.revealJump()).toBe(false);
+        n.registerJump(line);
+        n.revealJump(400);
+        expect(scroll).toHaveBeenLastCalledWith({ top: 800 - 400 });
+        // never above the bars
+        n.registerJump(line);
+        n.revealJump(20);
+        expect(scroll).toHaveBeenLastCalledWith({ top: 800 - 190 });
+        line.remove();
+    });
+
+    it('go to definition: Vue clearing the ref of the previous target line does not unregister the new one', () => {
+        vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+        const n = nav(150, 40);
+        const line = at(800);
+        document.body.append(line);
+        n.registerJump(line);
+        n.registerJump(null);
+        expect(n.revealJump()).toBe(true);
+        // cleared before a jump: a line that did not render reveals nothing
+        n.registerJump(line);
+        n.clearJump();
+        expect(n.revealJump()).toBe(false);
+        line.remove();
+    });
 });

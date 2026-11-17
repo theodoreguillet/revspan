@@ -53,7 +53,7 @@ function scrollToElement(el: Element, offset: number): void {
     requestAnimationFrame(settle);
 }
 
-/** Briefly highlights an element (thread reached by keyboard, "View in diff"). */
+/** Briefly highlights an element (thread reached by keyboard, "View in diff", line reached by go to definition). */
 function flash(el: HTMLElement): void {
     el.classList.remove('flash');
     void el.offsetWidth;
@@ -76,6 +76,8 @@ export function useDiffNav() {
     let tabs: HTMLElement | null = null;
     /** Line of the current search match (the last one rendered as current). */
     let match: HTMLElement | null = null;
+    /** Line to reach by go to definition (or back), registered when its block renders it; null once revealed. */
+    let jump: HTMLElement | null = null;
 
     function registerFile(path: string, el: HTMLElement | null): void {
         if (el) {
@@ -101,6 +103,33 @@ export function useDiffNav() {
         if (el instanceof HTMLElement) {
             match = el;
         }
+    }
+
+    /** Vue also calls a ref with null when the line loses it (another line became the target): ignored. */
+    function registerJump(el: unknown): void {
+        if (el instanceof HTMLElement) {
+            jump = el;
+        }
+    }
+
+    /** Before a new jump: a line that fails to render never reveals the previous one. */
+    function clearJump(): void {
+        jump = null;
+    }
+
+    /**
+     * Scrolls the registered jump line under the sticky bars and the sticky file header (or `top` px from the top of the
+     * window: back to a saved place) and flashes it. False if no line is registered.
+     */
+    function revealJump(top?: number): boolean {
+        const el = jump;
+        jump = null;
+        if (!el?.isConnected) {
+            return false;
+        }
+        scrollToElement(el, top === undefined ? stickyHeight.value + 60 : Math.max(top, stickyHeight.value));
+        flash(el);
+        return true;
     }
 
     /** Scrolls the line of the current search match under the sticky bars and the sticky file header. */
@@ -177,7 +206,7 @@ export function useDiffNav() {
 
     return {
         tlHeight, toolbarHeight, stickyHeight, curFile,
-        registerFile, registerTabs, registerThread, unregisterThread, registerMatch,
-        scrollToFile, scrollToMatch, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
+        registerFile, registerTabs, registerThread, unregisterThread, registerMatch, registerJump, clearJump,
+        scrollToFile, scrollToMatch, revealJump, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
     };
 }

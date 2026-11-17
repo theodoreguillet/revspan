@@ -9,6 +9,7 @@ import { useDiffNav } from './useDiffNav.ts';
 import { useDiffOptions } from './useDiffOptions.ts';
 import { useDiffSearch } from './useDiffSearch.ts';
 import { useDiscussion } from './useDiscussion.ts';
+import { useGotoDefinition } from './useGotoDefinition.ts';
 import { usePrLoad } from './usePrLoad.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
 import { useReviewActions } from './useReviewActions.ts';
@@ -57,11 +58,15 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     // A composer opened on the previous range's diff, still shown during the first 200 ms of a load, is not sent
     // against the new one.
     watch(() => (load.compare.value ? `${load.compare.value.from}-${load.compare.value.to}` : null), () => discussion.closeComposer());
-    watch([range.from, range.to, options.fullContext], async () => {
-        await load.loadCompare(compareParams());
-        if (nav.curFile.value >= files.value.length) {
-            nav.curFile.value = 0;
-        }
+    /** The comparison being loaded for the current range and context. */
+    let shownLoad: Promise<void> = Promise.resolve();
+    watch([range.from, range.to, options.fullContext], () => {
+        shownLoad = (async () => {
+            await load.loadCompare(compareParams());
+            if (nav.curFile.value >= files.value.length) {
+                nav.curFile.value = 0;
+            }
+        })();
     });
 
     async function gotoFile(idx: number, { expand = false, scroll = true } = {}): Promise<void> {
@@ -84,6 +89,20 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         showFile: (idx) => gotoFile(idx, { expand: true, scroll: false }),
         scrollToMatch: nav.scrollToMatch,
     });
+
+    // Ctrl/⌘+click on a name: its definition in the displayed diff, reached like a search match
+    const goto = useGotoDefinition(files, {
+        showFile: (idx) => gotoFile(idx, { expand: true, scroll: false }),
+        nav,
+        fullContext: options.fullContext,
+        loadWholeFile: async () => {
+            options.fullContext.value = true;
+            // the watcher above starts the load of the comparison with the whole files
+            await nextTick();
+            await shownLoad;
+        },
+    });
+    watch([range.from, range.to], () => goto.reset());
 
     /** "/": the search box of the file list, on the Diff tab. */
     async function focusSearch(): Promise<void> {
@@ -143,8 +162,12 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         return review.setAllViewed(viewed ? listedFiles.value.filter((f) => viewedStatus(f, seen) !== 'seen') : listedFiles.value, viewed);
     }
 
-    /** Shortcuts: j/k file, n/p thread, v seen, Shift+V all seen, [ ] version, / search, Escape closes the composer. Returns true if the key is handled. */
-    function handleKey(key: string, event?: Pick<KeyboardEvent, 'shiftKey'>): boolean {
+    /**
+     * Shortcuts: j/k file, n/p thread, v seen, Shift+V all seen, [ ] version, / search, Alt+← back from a definition,
+     * Escape closes the go-to-definition choice, the composer, then the go-to-definition notice. Returns true if the key
+     * is handled.
+     */
+    function handleKey(key: string, event?: Partial<Pick<KeyboardEvent, 'shiftKey' | 'altKey'>>): boolean {
         // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it
         const inDiff = options.tab.value === 'diff' && load.diffMode.value !== 'skeleton';
         const current = files.value[nav.curFile.value];
@@ -183,9 +206,19 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
                 return range.stepVersion(-1);
             case ']':
                 return range.stepVersion(1);
-            case 'Escape':
-                if (!discussion.composer.value) {
+            case 'ArrowLeft':
+                // Alt+← only, and only with a place to go back to (otherwise the browser's own Alt+←)
+                if (!event?.altKey || options.tab.value !== 'diff' || !goto.canGoBack.value) {
                     return false;
+                }
+                void goto.back();
+                return true;
+            case 'Escape':
+                if (goto.closeChoice()) {
+                    return true;
+                }
+                if (!discussion.composer.value) {
+                    return goto.dismiss();
                 }
                 discussion.closeComposer();
                 return true;
@@ -198,7 +231,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     return reactive({
         ref: prRef,
         ...load, ...range, ...options, ...nav, ...discussion, ...review, ...tasks,
-        search, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, showComment, handleKey,
+        search, goto, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, showComment, handleKey,
     });
 }
 

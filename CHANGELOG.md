@@ -19,6 +19,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   Shift+Enter to move across matches.
 - Search PRs on the home page (`/` to focus, Esc to clear): by title, `#number`, repository or author, ignoring case and
   accents. Groups without a match are hidden and the counts show the matches.
+- Go to definition in the diff: Ctrl+click (⌘+click on macOS) on a name moves to the line that defines it in the
+  displayed diff (a list when several do), else to its import in the same file, with "Open the definition in <file>"
+  when that import points to a file of the PR; `Alt+←` or the "← back" chip returns. Holding the modifier underlines
+  the names. No request, no language server.
 - Mark all viewed (button of the file list or `Shift+V`): every listed file in one request.
 - Tasks tab: the PR's Bitbucket tasks, read when the tab is opened; add, tick, reopen and delete tasks, with the open
   count on the tab (only your own tasks can be deleted).

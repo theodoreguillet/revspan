@@ -16,7 +16,7 @@ const TOKENS: CodeToken[] = [
 
 let app: App | null = null;
 
-function render(props: { line: DiffLine; tokens?: readonly CodeToken[]; marks?: readonly [number, number][]; cur?: number }): HTMLElement {
+function render(props: { line: DiffLine; tokens?: readonly CodeToken[]; marks?: readonly [number, number][]; cur?: number; family?: 'js' | null }): HTMLElement {
     const root = document.createElement('div');
     app = createApp(DiffCode, props);
     app.mount(root);
@@ -47,6 +47,16 @@ describe('DiffCode', () => {
         expect([...code.querySelectorAll('em mark')].map((m) => [m.textContent, m.classList.contains('cur')])).toEqual([[',', false], [' ', false], ['o', false], ['tions', true]]);
         expect([...code.querySelectorAll(':scope > mark')].map((m) => m.textContent)).toEqual(['ad']);
         expect(code.textContent).toBe(TEXT);
+    });
+
+    it('go to definition: names are tagged `sym`, keywords `nosym`, nothing for a file without family', () => {
+        const line: DiffLine = { t: '+', o: null, n: 12, text: TEXT, hl: [[43, 52]] };
+        const code = render({ line, tokens: TOKENS, family: 'js' });
+        expect([...code.querySelectorAll('.sym')].map((el) => el.textContent)).toEqual(['ok', 'validatePayloadData', 'payload', 'options']);
+        expect([...code.querySelectorAll('.nosym')].map((el) => el.textContent)).toEqual(['const', 'this']);
+        expect(code.textContent).toBe(TEXT);
+        app?.unmount();
+        expect(render({ line, tokens: TOKENS, family: null }).querySelectorAll('.sym, .nosym')).toHaveLength(0);
     });
 
     it('plain text without tokens nor ranges', () => {

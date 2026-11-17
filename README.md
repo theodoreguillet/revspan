@@ -249,6 +249,16 @@ one request per interval even once finished (see "Build status").
   lines shown contain it (case-insensitive, at least 2 characters; with "whole file" on, the whole file is searched).
   Each file shows its match count; Enter / Shift+Enter go to the next / previous match across files (a collapsed or
   seen file opens), Esc clears. All in the page: no request to Bitbucket.
+- **Go to definition** (Ctrl+click, ⌘+click on macOS, on a name in the diff, either view and side): the line that
+  defines it among the lines shown, reached like a search match (file opened, line under the toolbar, flashed). The
+  clicked file comes first, then the others in list order; the new side first, removed lines only when the new side has
+  none. Several definitions: a list under the click (↑/↓, Enter, Esc). None shown: its import in the same file, with
+  **Open the definition in <file>** when the import points to a file of the PR (turns "whole file" on and looks there);
+  nothing at all: a short notice (suggesting "whole file" when it is off). `Alt+←` (or the **← back** chip, 5 s) goes
+  back. Holding the modifier underlines the names. Level 1 only, no request and no language server: a small pattern
+  table per language family (TypeScript / JavaScript / Vue; Python; Java, Kotlin, C#, Go, Rust, PHP, Ruby) in
+  `src/web/lib/goto-definition.ts`. Strings, comments, numbers and keywords are told apart by their Dark+ / Light+
+  syntax color, plus a keyword list per family for lines not colored yet.
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution
   (**Reopen** on the folded bar of a resolved thread); comment on a line of the latest version; **Edit** or delete your
   own comments. A comment, a reply or a resolution shows at once, then Bitbucket's answer replaces it.
@@ -266,7 +276,8 @@ one request per interval even once finished (see "Build status").
   runs at the refresh interval of the settings: news shows a banner with a Refresh button, the page never changes by
   itself. Reopening a PR within that interval shows it at once, with no read.
 
-Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `Shift+V` all files seen, `[`/`]` version, `/` search, `?` help. On AZERTY keyboards, `[`
+Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `Shift+V` all files seen, `[`/`]` version, `/` search,
+`Ctrl+click` (`⌘+click`) go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[`
 and `]` typed with Option or AltGr work too.
 
 ## Develop
@@ -327,6 +338,9 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
   thread placed on an erased version is shown at file level.
 - **Comment on a line**: only on the latest version (Bitbucket anchors comments on the current version). On a deleted
   line, the tool posts a general comment that quotes the line.
+- **Go to definition** reads patterns on the displayed lines, not the code: a local name defined in several functions
+  lists them all, a definition outside the hunks is found only with "whole file" (or through its import), and only
+  relative TS / JS imports lead to a file of the PR (no path aliases such as `@/`, no Python or Java packages).
 - **Large repositories**: Revspan reads the first 200 open PRs of a repository (4 pages of 50). Beyond that, the home
   page and the VS Code view say the list was cut, and the PRs left out are neither shown nor notified until they come
   into the first 200.

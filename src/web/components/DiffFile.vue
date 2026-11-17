@@ -31,6 +31,8 @@ const placed = computed(() => placeFileThreads(props.file, page.threadsById, pag
 const hits = computed(() => page.search.fileHits(props.idx));
 const hunkHits = computed(() => hitsByHunk(hits.value));
 const curHit = computed(() => (page.search.currentHit?.fileIdx === props.idx ? page.search.currentHit : null));
+// go to definition: the line to reach, when it is in this file
+const jump = computed(() => (page.goto.target?.path === props.file.path ? page.goto.target : null));
 // a large file renders progressively; its hunks get their share of the lines rendered so far
 const totalLines = computed(() => props.file.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0));
 const budget = useRowBudget(root, () => totalLines.value, () => !collapsed.value, () => props.file.hunks);
@@ -124,6 +126,7 @@ onBeforeUnmount(() => page.registerFile(props.file.path, null));
                     :limit="limits[k] ?? 0"
                     :cur-line="curHit?.hunk === k ? curHit.line : -1"
                     :cur-start="curHit?.hunk === k ? curHit.start : -1"
+                    :jump="jump?.hunk === k ? jump : null"
                 />
             </template>
         </template>
