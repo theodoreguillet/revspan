@@ -8,7 +8,7 @@ against master: on a long PR, there is no way to see what the last amend changed
 days or months, with dozens of versions and several rebases.
 
 Revspan is a small local tool (Node server + web page, in TypeScript) that rebuilds all the versions
-of a Bitbucket PR and lets you review version by version, comment, reply, resolve and approve.
+of a Bitbucket PR and lets you review version by version, comment, reply, like, resolve and approve.
 
 ## Goals
 
@@ -16,7 +16,7 @@ of a Bitbucket PR and lets you review version by version, comment, reply, resolv
 - Show only what the author changed: the noise brought in by a rebase (files or lines coming from master)
   is removed.
 - Resume where you stopped: last review, new versions, new comments, seen files.
-- Act from the tool: comment on a line, reply, resolve/reopen, approve, request changes.
+- Act from the tool: comment on a line, reply, like, resolve/reopen, approve, request changes.
 - "My PRs" home page over a configurable list of repositories.
 - French and English interface, chosen automatically.
 
@@ -57,6 +57,7 @@ of a Bitbucket PR and lets you review version by version, comment, reply, resolv
 | Last review | max(last approval, local "reviewed" mark), each converted into a version through its date. Only an approval or "Mark as reviewed" moves it forward: a comment or a change request never does. |
 | Seen files | Local, stored with the fingerprint of the content on side B; the tick is dropped if the file changes. |
 | Comments | Threads rebuilt (parent). Each comment is attached to the version in progress at its date. `to` anchor relocated line by line onto the displayed version (marked "line modified" if the line changed). `from` anchor only: shown at file level. Content: HTML rendered by Bitbucket, sanitized on the client with an allowlist. |
+| Like | The Bitbucket API exposes no reactions. Like = a reply whose text is exactly "👍" to that comment (existing comment routes, no route of its own); unlike = deleting my "👍" replies to it. A reply made of a single emoji (👍, `:+1:`, `:thumbsup:`, `+1`, `(y)`, 👏, 🎉, ❤️, 🚀, 👀, ✅) to a listed comment that nobody answered is a reaction (`src/shared/reactions.ts`): grouped under that comment as one chip per emoji (users once, in date order; `myCommentIds` = my replies), and left out of the thread's comments, so out of every comment count (thread headers, "new" marks and groups, home badges `newComments`). A deleted one whose text Bitbucket still gives is dropped (neither reaction nor deleted comment). Only the pulse's `commentCount` (Bitbucket's `comment_count`) counts them: someone else's like shows in the news banner as a new comment. The page shows a like or unlike at once and puts it back if Bitbucket refuses; the button needs my profile (`me`), which tells my replies apart. |
 | Inline comment | Possible only if B is the latest version, on the new side (added or context lines): `inline.to`. On a deleted line, a general comment quoting file, line and code. |
 | Approvals | Approval version deduced from the activity; "stale" if a version with code (or dependencies) arrived since. Bitbucket does not necessarily remove the approval on each push: an approval still active with no author change since (rebases, message, or a version Bitbucket erased) holds for the latest version — "Remove approval" instead of "Re-approve", banner "Mark vN as reviewed". A version whose type is not known yet does not count as neutral, and an approval whose version is unknown holds. One pure rule (`src/shared/approval.ts`) serves the home page, the VS Code tree and the PR page. |
 | Home page | Open PRs of the configured repositories, in five groups with a language-neutral key (`HomeGroupKey`), always in this order: `to-do` ("To review"), `to-rebase`, `mine`, `waiting`, `others`. The server sends the keys only; the page and the VS Code tree each translate them. Rules in `src/server/core/review-queue.ts`, applied in order, the first match wins: (1) `me` unknown (token without `read:user`) gives `others`; (2) my own PR gives `mine`, a draft included, and becomes `to-rebase` once its health is read if `needsRebase === true` (`ownGroup`); (3) a draft (Bitbucket `draft: true`) gives `others`; (4) my approval is on the latest version, or still holds after rebase-only pushes, gives `waiting`; (5) I am a designated reviewer who requested changes and only neutral versions arrived since gives `waiting`; (6) I am a designated reviewer gives `to-do`; (7) I reviewed, approved or requested changes and no code or dependency version arrived since gives `waiting`; (8) fewer approvals than the minimum gives `to-do` if the author is followed or nobody is followed (follow filter, `followFilterOn`); (9) I reviewed, approved or requested changes and code arrived since (counted from the later of my last review and my change request; types not computed yet count as code) gives `to-do`; (10) otherwise `others`. The list reads at most 200 open PRs per repository (4 pages of 50); a repository cut there is reported in `Home.truncated` and shown as a notice. |

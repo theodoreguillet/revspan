@@ -8,6 +8,7 @@
 import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import { approvalHoldsSince } from '../../shared/approval.ts';
 import { isOwnGroup } from '../../shared/home-grouping.ts';
+import { reactionOf, reactionReplies } from '../../shared/reactions.ts';
 import { followFilterOn, hidesUnfollowed, requiredApprovalsFor, type ReviewSettings } from '../../shared/review-settings.ts';
 import type { BitbucketClient } from '../bitbucket/client.ts';
 import type { BbActivity, BbPullRequest } from '../bitbucket/types.ts';
@@ -33,7 +34,7 @@ const WAIT_STEP_MS = 100;
  */
 const ERROR_REUSE_MS = 60_000;
 /** To increment if the activity kept for the home changes shape (invalidates the disk cache). */
-const ACTIVITY_FORMAT = 2;
+const ACTIVITY_FORMAT = 3;
 /** To increment if the shared home changes shape (a window running an older version then ignores it). */
 const HOME_FORMAT = 3;
 
@@ -73,7 +74,10 @@ function homeKey(email: string, repos: readonly string[], review: ReviewSettings
     });
 }
 
-/** What the home reads in an activity (pushes, approvals, comment authors and dates), without the texts. */
+/**
+ * What the home reads in an activity (pushes, approvals, comment authors and dates), without the texts: only a comment
+ * made of a single emoji keeps it (as that emoji), so that a reaction is not counted as a new comment.
+ */
 function trimActivity(activity: readonly BbActivity[]): BbActivity[] {
     const user = (raw: { uuid?: string } | undefined): { uuid?: string } | undefined => (raw ? { uuid: raw.uuid } : undefined);
     return activity.flatMap((entry): BbActivity[] => {
@@ -88,8 +92,9 @@ function trimActivity(activity: readonly BbActivity[]): BbActivity[] {
             return [{ changes_requested: { date: entry.changes_requested.date, user: user(entry.changes_requested.user) } }];
         }
         if (entry.comment) {
-            const { id, created_on: createdOn, deleted, parent } = entry.comment;
-            return [{ comment: { id, created_on: createdOn, deleted, parent, user: user(entry.comment.user) } }];
+            const { id, created_on: createdOn, deleted, parent, content } = entry.comment;
+            const emoji = reactionOf(content?.raw);
+            return [{ comment: { id, created_on: createdOn, deleted, parent, user: user(entry.comment.user), ...(emoji ? { content: { raw: emoji } } : {}) } }];
         }
         return [];
     });
@@ -423,9 +428,10 @@ export class HomeService {
         const approvalHolds = base.myApproval
             && approvalHoldsSince(myApprovedVersion, versions.map((v) => local.kinds[v.hash.slice(0, 12)]));
         const since = review.lastReviewedAt;
+        const reactions = since ? reactionReplies(activity.flatMap((e) => (e.comment ? [e.comment] : []))) : new Map<number, string>();
         const newComments = since
             ? activity.filter((e) => e.comment && e.comment.user?.uuid !== meUuid && !e.comment.deleted
-                && e.comment.created_on > since).length
+                && e.comment.created_on > since && !reactions.has(e.comment.id)).length
             : 0;
 
         const group = classifyPr({

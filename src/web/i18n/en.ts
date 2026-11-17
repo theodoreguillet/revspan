@@ -390,6 +390,7 @@ export const en = {
     'disc.resolved': 'Resolved · {count}',
     'disc.empty': 'No discussions on this PR.',
     'disc.total': { one: '{count} thread in total.', other: '{count} threads in total.' },
+    'disc.reactions': 'Replies made of a single emoji show as reactions under the comment they answer.',
     'thread.resolvedBar': 'Thread resolved',
     'thread.resolvedBarBy': 'Thread resolved by {name}',
     'thread.line': 'line {line}',
@@ -415,6 +416,9 @@ export const en = {
     'comment.deleteQuestion': 'Delete this comment on Bitbucket?',
     'comment.sending': 'sending…',
     'comment.editLabel': 'Edit your comment',
+    'comment.like': 'Like',
+    'comment.unlike': 'Remove your 👍',
+    'reaction.you': '{name} (you)',
 
     // ---------- Tasks ----------
     'task.empty': 'No task on this pull request',

@@ -259,9 +259,9 @@ one request per interval even once finished (see "Build status").
   table per language family (TypeScript / JavaScript / Vue; Python; Java, Kotlin, C#, Go, Rust, PHP, Ruby) in
   `src/web/lib/goto-definition.ts`. Strings, comments, numbers and keywords are told apart by their Dark+ / Light+
   syntax color, plus a keyword list per family for lines not colored yet.
-- **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution
+- **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, 👍, resolution
   (**Reopen** on the folded bar of a resolved thread); comment on a line of the latest version; **Edit** or delete your
-  own comments. A comment, a reply or a resolution shows at once, then Bitbucket's answer replaces it.
+  own comments. A comment, a reply, a 👍 or a resolution shows at once, then Bitbucket's answer replaces it.
 - **Tasks** (tab after Builds, with the open count): the PR's Bitbucket tasks, read when the tab is opened. Tick or
   reopen a task, delete yours, add one with the input at the bottom; a task created under a comment links to its
   thread ("see the comment").
@@ -336,6 +336,10 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
   Revspan already cached. These versions stay in the timeline, marked "unavailable" (dotted point), and cannot be
   compared; the next version is summarized against the last version that is still readable (or the base), and a
   thread placed on an erased version is shown at file level.
+- **Like**: the Bitbucket API has no reactions. A 👍 is posted as a reply "👍" (visible as such in Bitbucket); replies
+  made of a single emoji are shown as reactions under the comment they answer and are not counted as comments. Clicking
+  👍 again deletes your reply. The periodic check cannot tell them apart: someone else's 👍 shows as a new comment in
+  its banner.
 - **Comment on a line**: only on the latest version (Bitbucket anchors comments on the current version). On a deleted
   line, the tool posts a general comment that quotes the line.
 - **Go to definition** reads patterns on the displayed lines, not the code: a local name defined in several functions
@@ -351,7 +355,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
 `config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
-and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text; can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
+and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text except a single emoji (a reaction); can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 
 ## License

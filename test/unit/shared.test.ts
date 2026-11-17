@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { approvalHoldsSince } from '../../src/shared/approval.ts';
 import { parsePrUrl } from '../../src/shared/pr-url.ts';
+import { reactionOf, reactionReplies } from '../../src/shared/reactions.ts';
 import { normalizeRepo, parseRepoList } from '../../src/shared/repos.ts';
 
 describe('parsePrUrl', () => {
@@ -52,5 +53,36 @@ describe('approvalHoldsSince: the approval rule shared by the server (home) and 
     it('approved version unknown: Bitbucket\'s state is authoritative, the approval holds', () => {
         expect(approvalHoldsSince(null, ['creation'])).toBe(true);
         expect(approvalHoldsSince(null, ['creation', 'code', undefined])).toBe(true);
+    });
+});
+
+describe('reactions: replies made of a single emoji (the Bitbucket API has no reactions)', () => {
+    it('reactionOf: a single emoji or its alias, nothing else', () => {
+        expect(reactionOf('👍')).toBe('👍');
+        expect(reactionOf(' :+1: ')).toBe('👍');
+        expect(reactionOf(':thumbsup:')).toBe('👍');
+        expect(reactionOf('+1')).toBe('👍');
+        expect(reactionOf('🎉')).toBe('🎉');
+        expect(reactionOf('👍 merci')).toBeNull();
+        expect(reactionOf('👍👍')).toBeNull();
+        expect(reactionOf('')).toBeNull();
+        expect(reactionOf(null)).toBeNull();
+    });
+
+    it('reactionReplies: a reply to a listed comment, nobody answered it; deleted ones kept when their text is known', () => {
+        const comments = [
+            { id: 1, content: { raw: '👍' } },
+            { id: 2, parent: { id: 1 }, content: { raw: 'Done' } },
+            { id: 3, parent: { id: 2 }, content: { raw: '👍' } },
+            { id: 4, parent: { id: 2 }, content: { raw: ':+1:' } },
+            // answered: stays a comment, so its reply keeps its place
+            { id: 5, parent: { id: 1 }, content: { raw: '🎉' } },
+            { id: 6, parent: { id: 5 }, content: { raw: 'Why?' } },
+            // parent not listed
+            { id: 7, parent: { id: 99 }, content: { raw: '👍' } },
+            { id: 8, parent: { id: 2 }, content: { raw: '👍' }, deleted: true },
+            { id: 9, parent: { id: 2 }, content: { raw: '' }, deleted: true },
+        ];
+        expect(reactionReplies(comments)).toEqual(new Map([[3, '👍'], [4, '👍'], [8, '👍']]));
     });
 });

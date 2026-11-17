@@ -322,6 +322,8 @@ def screenshots(browser, fixed_time):
         context.close()
     change_shots(browser, fixed_time)
     goto_shots(browser, fixed_time)
+    if CALLS_URL:
+        like_shots(browser, fixed_time)
     log(f'      screenshots in {SHOTS}')
 
 
@@ -410,6 +412,53 @@ def goto_shots(browser, fixed_time):
         page.wait_for_timeout(400)
         page.screenshot(path=os.path.join(SHOTS, f'goto-import-back-{name}.png'))
         context.close()
+
+
+def like_shots(browser, fixed_time):
+    """My thread in the Discussions tab with my 👍 (chip highlighted, button pressed) and Yann's on Camille's reply: light,
+    dark, VS Code Dark+. The like is real (fake Bitbucket) and taken back afterwards, so the checks start without it."""
+    data = api(pr_api(MAIN_PR))
+    thread = next((t for t in data['threads'] if t['path'] and not t['resolved'] and t['comments'][0]['mine']), None)
+    assert thread, 'no open thread of mine'
+    root = thread['comments'][0]['id']
+    item = f'.rv-ditem[data-thread="{thread["id"]}"]'
+    try:
+        for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
+            context = browser.new_context(viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+            page = context.new_page()
+            if fixed_time:
+                page.clock.set_fixed_time(fixed_time)
+            page.goto(url(f'pr/{MAIN_PR}'))
+            wait_pr_ready(page)
+            if vscode:
+                page.evaluate('''(vars) => {
+                    for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(`--vscode-${k}`, v);
+                    document.body.classList.add('vscode-dark');
+                }''', VSCODE_DARK_PLUS)
+            page.click('.rv-tab[data-tab="discussions"]')
+            button = page.locator(f'{item} .rv-cm[data-comment="{root}"] [data-action="like"]')
+            if button.get_attribute('aria-pressed') != 'true':
+                button.click()
+            expect(page.locator(f'{item} .rv-cm[data-comment="{root}"] .rv-react.mine')).to_be_visible(timeout=10000)
+            expect(button).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+            expect(page.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+            page.locator(item).scroll_into_view_if_needed()
+            page.mouse.move(0, 0)
+            page.wait_for_timeout(200)
+            page.locator(item).screenshot(path=os.path.join(SHOTS, f'like-{name}.png'))
+            if name == 'vscode-dark':
+                button.click()
+                expect(page.locator(f'{item} .rv-cm[data-comment="{root}"] .rv-react')).to_have_count(0, timeout=10000)
+                expect(page.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+            context.close()
+    finally:
+        # never leave the like for the checks, even when a shot failed
+        for t in api(pr_api(MAIN_PR) + '?fresh=1')['threads']:
+            for c in t['comments']:
+                if c['id'] == root:
+                    for r in c['reactions']:
+                        for cid in r['myCommentIds']:
+                            fake_delete_comment(cid)
 
 
 # ---------------------------------------------------------------------------
@@ -818,6 +867,53 @@ def run_checks(page):
         calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{cid}'), f'DELETE comments/{cid}')
         expect(page.locator(f'{thread_sel} .rv-cm', has_text='Merci, c\'est bon pour moi.')).to_have_count(0, timeout=10000)
     reply_and_delete(page)
+
+    @check('like: 👍 posts a "👍" reply shown as my chip, a second click deletes it; a single-emoji reply is a chip, not a reply')
+    def like(page):
+        assert my_thread and len(my_thread['comments']) >= 2, 'no open thread of mine with a reply'
+        root, reply = my_thread['comments'][0], my_thread['comments'][1]
+        thread = page.locator(thread_sel)
+        emoji_card = thread.locator('.rv-cm .rv-html', has_text=re.compile(r'^\s*👍\s*$'))
+        # Yann's "👍" reply to Camille's comment (fake Bitbucket): a chip under her comment, not a reply card
+        theirs = thread.locator(f'.rv-cm[data-comment="{reply["id"]}"] .rv-react[data-emoji="👍"]')
+        expect(theirs).to_have_text('👍 1')
+        expect(theirs).not_to_have_class(re.compile(r'\bmine\b'))
+        expect(theirs).to_have_attribute('title', 'Yann Bernard')
+        expect(emoji_card).to_have_count(0)
+        item = thread.locator(f'.rv-cm[data-comment="{root["id"]}"]')
+        button = item.locator('[data-action="like"]')
+        chip = item.locator('.rv-react[data-emoji="👍"]')
+        refresh = page.locator('.rv-head [data-action="refresh"]')
+        expect(button).to_have_attribute('aria-pressed', 'false')
+        expect(button).to_have_attribute('title', 'J’aime')
+        expect(chip).to_have_count(0)
+        deleted_cards = thread.locator('.rv-cm .deleted').count()
+        calls.start()
+        button.click()
+        call = calls.wait(lambda c: is_post_comment(c) and comment_parent(c) == root['id'], f'POST comments "👍" parent={root["id"]}')
+        assert call is None or comment_raw(call) == '👍', call
+        expect(chip).to_have_text('👍 1')
+        expect(chip).to_have_class(re.compile(r'\bmine\b'))
+        expect(chip).to_have_attribute('title', 'Thomas Girard (toi)')
+        expect(button).to_have_attribute('aria-pressed', 'true')
+        expect(button).to_have_attribute('title', 'Retirer ton 👍')
+        # the write is over, then the background refresh: still my chip, never a reply card
+        expect(button).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(refresh).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(chip).to_have_text('👍 1')
+        expect(chip).to_have_class(re.compile(r'\bmine\b'))
+        expect(emoji_card).to_have_count(0)
+        calls.start()
+        button.click()
+        calls.wait(lambda c: c['method'] == 'DELETE' and re.search(r'/comments/\d+$', c['path']), 'DELETE comments/<my "👍" reply>')
+        expect(chip).to_have_count(0, timeout=10000)
+        expect(button).to_have_attribute('aria-pressed', 'false')
+        expect(button).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(refresh).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        # a like taken back shows neither as a chip nor as a deleted comment
+        expect(chip).to_have_count(0)
+        expect(thread.locator('.rv-cm .deleted')).to_have_count(deleted_cards)
+    like(page)
 
     @check('edit my comment: save, Escape, comment deleted meanwhile')
     def edit_comment(page):

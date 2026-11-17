@@ -27,7 +27,7 @@ const total = computed(() => page.detail.threads.length);
             <DiscussionItem v-for="thread in groups.resolved" :key="thread.id" :thread="thread" />
         </details>
         <div v-if="!total" class="rv-empty">{{ t('disc.empty') }}</div>
-        <p class="note">{{ t('disc.total', { count: total }) }}</p>
+        <p class="note">{{ t('disc.total', { count: total }) }} {{ t('disc.reactions') }}</p>
     </div>
 </template>
 

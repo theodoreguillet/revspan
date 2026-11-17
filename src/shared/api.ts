@@ -246,6 +246,15 @@ export interface Review {
     viewed: Record<string, string>;
 }
 
+/** Replies made of a single emoji to a comment (src/shared/reactions.ts): the Bitbucket API has no reactions. */
+export interface Reaction {
+    emoji: string;
+    /** Who reacted, each once, in date order. */
+    users: User[];
+    /** My replies making this reaction (empty: not mine); a negative temporary id while the page sends my like. */
+    myCommentIds: number[];
+}
+
 export interface Comment {
     id: number;
     user: User | null;
@@ -258,6 +267,8 @@ export interface Comment {
     isNew: boolean;
     deleted: boolean;
     mine: boolean;
+    /** Reactions under this comment, one per emoji, in order of their first reply. */
+    reactions: Reaction[];
     /** Page only (never set by the server): shown before the server answers, with a negative temporary id. */
     pending?: true;
 }
@@ -289,7 +300,7 @@ export interface Thread {
     version: number;
     resolved: boolean;
     resolvedBy: User | null;
-    /** Root first, then replies (chronological order). */
+    /** Root first, then replies (chronological order), without the replies shown as reactions. */
     comments: Comment[];
 }
 

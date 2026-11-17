@@ -214,6 +214,7 @@ export class PrService {
             isNew: false,
             deleted: false,
             mine: Boolean(me) && written.user?.uuid === me?.uuid,
+            reactions: [],
         };
     }
 

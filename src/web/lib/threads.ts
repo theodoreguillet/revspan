@@ -1,5 +1,7 @@
-// Discussion threads: groups, activity, new comments, avatars.
-import type { Thread, User } from '../../shared/api.ts';
+// Discussion threads: groups, activity, new comments, reactions, avatars.
+import type { Comment, Thread, User } from '../../shared/api.ts';
+import { THUMBS } from '../../shared/reactions.ts';
+import type { Translator } from '../i18n/index.ts';
 import { firstName } from './format.ts';
 
 export function lastActivity(thread: Thread): string {
@@ -62,3 +64,25 @@ export function avatarHue(user: User | null | undefined): number {
     }
     return (x >>> 0) % 360;
 }
+
+/** A reaction under a comment: « 👍 2 », the names in its tooltip, highlighted when one of its replies is mine. */
+export interface ReactionChip {
+    emoji: string;
+    count: number;
+    title: string;
+    mine: boolean;
+}
+
+export function reactionChips(tr: Translator, comment: Comment, me: User | null): ReactionChip[] {
+    const name = (u: User): string => (me && u.uuid === me.uuid ? tr.t('reaction.you', { name: u.displayName }) : u.displayName);
+    return comment.reactions
+        .filter((r) => r.users.length > 0)
+        .map((r) => ({ emoji: r.emoji, count: r.users.length, title: tr.list(r.users.map(name)), mine: r.myCommentIds.length > 0 }));
+}
+
+/** My replies making the 👍 of a comment (empty: I have not liked it). */
+export function myLikeIds(comment: Comment): number[] {
+    return comment.reactions.find((r) => r.emoji === THUMBS)?.myCommentIds ?? [];
+}
+
+export const likedByMe = (comment: Comment): boolean => myLikeIds(comment).length > 0;

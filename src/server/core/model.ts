@@ -1,8 +1,9 @@
 // PR model built from raw Bitbucket data: versions, participants, threads, last review.
 // Pure functions (network loading lives in services/).
 import type {
-    Comment, Participant, PrInfo, PrPulse, PrRef, PrTask, Review, ReviewSource, Thread, User, Version,
+    Comment, Participant, PrInfo, PrPulse, PrRef, PrTask, Reaction, Review, ReviewSource, Thread, User, Version,
 } from '../../shared/api.ts';
+import { reactionReplies } from '../../shared/reactions.ts';
 import type { BbActivity, BbComment, BbPullRequest, BbTask, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
 
@@ -241,10 +242,29 @@ function toComment(c: BbComment, versions: readonly DatedVersion[], meUuid: stri
         isNew: sinceDate !== null && !c.deleted && c.created_on > sinceDate && c.user?.uuid !== meUuid,
         deleted: Boolean(c.deleted),
         mine: Boolean(meUuid) && c.user?.uuid === meUuid,
+        reactions: [],
     };
 }
 
-/** Comment threads (root + replies, in order). */
+/** Reactions of one comment from its emoji replies: one per emoji in order of first reply, each user once. */
+function groupReactions(list: readonly { emoji: string; comment: BbComment }[], meUuid: string | null): Reaction[] {
+    const grouped = new Map<string, Reaction>();
+    const sorted = [...list].sort((a, b) => a.comment.created_on.localeCompare(b.comment.created_on));
+    for (const { emoji, comment } of sorted) {
+        const reaction = grouped.get(emoji) ?? { emoji, users: [], myCommentIds: [] };
+        const user = userOf(comment.user);
+        if (user && !reaction.users.some((u) => u.uuid === user.uuid)) {
+            reaction.users.push(user);
+        }
+        if (meUuid && comment.user?.uuid === meUuid) {
+            reaction.myCommentIds.push(comment.id);
+        }
+        grouped.set(emoji, reaction);
+    }
+    return [...grouped.values()];
+}
+
+/** Comment threads (root + replies, in order); the replies made of a single emoji become reactions. */
 export function buildThreads(
     rawComments: readonly BbComment[],
     versions: readonly DatedVersion[],
@@ -264,7 +284,24 @@ export function buildThreads(
         return current;
     };
 
-    const comments = new Map(rawComments.map((c) => [c.id, toComment(c, versions, meUuid, sinceDate)]));
+    const emojiReplies = reactionReplies(rawComments);
+    const comments = new Map<number, Comment>();
+    const reactionsOf = new Map<number, { emoji: string; comment: BbComment }[]>();
+    for (const c of rawComments) {
+        const emoji = emojiReplies.get(c.id);
+        if (!emoji) {
+            comments.set(c.id, toComment(c, versions, meUuid, sinceDate));
+        } else if (c.parent && !c.deleted) {
+            // a deleted one (a like taken back) shows neither as a reaction nor as a comment
+            reactionsOf.set(c.parent.id, [...reactionsOf.get(c.parent.id) ?? [], { emoji, comment: c }]);
+        }
+    }
+    for (const [parentId, list] of reactionsOf) {
+        const target = comments.get(parentId);
+        if (target) {
+            target.reactions = groupReactions(list, meUuid);
+        }
+    }
 
     const threads = new Map<number, Thread>();
     for (const c of rawComments) {

@@ -15,6 +15,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   (`revspan.refreshIntervalMinutes`, `review.refreshMinutes` in the browser version), none for a hidden tab. News shows
   a banner with a Refresh button; the page never changes by itself.
 - Edit your own comments. Reopen a resolved thread from its folded bar.
+- Like a comment again (👍 button): the Bitbucket API has no reactions, so a like is a "👍" reply to the comment and
+  clicking again deletes it. Replies made of a single emoji show as reaction chips under the comment they answer
+  ("👍 2", names in the tooltip, highlighted when one is yours), not as replies, and no comment count includes them.
 - Search the diff (`/`): file names and the lines shown (or whole files), with a match count per file and Enter /
   Shift+Enter to move across matches.
 - Search PRs on the home page (`/` to focus, Esc to clear): by title, `#number`, repository or author, ignoring case and

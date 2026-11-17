@@ -1,6 +1,6 @@
 // Local (optimistic) updates of the PR detail and of a comparison, applied before the server answers or right after
 // a write, until the background refresh brings the server's view. Pure: every function returns new objects.
-import type { Comment, Comparison, Participant, PrDetail, ReviewSource, Thread, User } from '../../shared/api.ts';
+import type { Comment, Comparison, Participant, PrDetail, Reaction, ReviewSource, Thread, User } from '../../shared/api.ts';
 
 /** Comment being sent: negative temporary id; threadId = parent thread (reply), null = new thread. */
 export interface PendingComment {
@@ -12,6 +12,15 @@ export interface PendingComment {
 
 function mapThread(detail: PrDetail, threadId: number, change: (thread: Thread) => Thread): PrDetail {
     return { ...detail, threads: detail.threads.map((t) => (t.id === threadId ? change(t) : t)) };
+}
+
+function mapComment(detail: PrDetail, commentId: number, change: (comment: Comment) => Comment): PrDetail {
+    return {
+        ...detail,
+        threads: detail.threads.map((t) => (t.comments.some((c) => c.id === commentId)
+            ? { ...t, comments: t.comments.map((c) => (c.id === commentId ? change(c) : c)) }
+            : t)),
+    };
 }
 
 /** Adds a comment being sent: at the end of its thread (reply), or as a new thread (general or inline root). */
@@ -27,6 +36,7 @@ export function withPendingComment(detail: PrDetail, pending: PendingComment, me
         isNew: false,
         deleted: false,
         mine: true,
+        reactions: [],
         pending: true,
     };
     if (pending.threadId !== null) {
@@ -78,6 +88,50 @@ export function removeComment(detail: PrDetail, commentId: number): PrDetail {
     return { ...detail, threads };
 }
 
+/** The reactions of a comment replaced (put back as they were when a like or unlike fails). */
+export function withReactions(detail: PrDetail, commentId: number, reactions: Reaction[]): PrDetail {
+    return mapComment(detail, commentId, (c) => ({ ...c, reactions }));
+}
+
+/**
+ * My reaction `emoji` on a comment, made by my reply `replyId` (a negative temporary id while it is sent): me added to
+ * its chip, or a new chip at the end.
+ */
+export function withMyReaction(detail: PrDetail, commentId: number, emoji: string, replyId: number): PrDetail {
+    const me = detail.me;
+    return mapComment(detail, commentId, (c) => {
+        const current = c.reactions.find((r) => r.emoji === emoji);
+        if (!current) {
+            return { ...c, reactions: [...c.reactions, { emoji, users: me ? [me] : [], myCommentIds: [replyId] }] };
+        }
+        const users = !me || current.users.some((u) => u.uuid === me.uuid) ? current.users : [...current.users, me];
+        return { ...c, reactions: c.reactions.map((r) => (r === current ? { ...r, users, myCommentIds: [...r.myCommentIds, replyId] } : r)) };
+    });
+}
+
+/** The temporary id of my reply making a reaction replaced by the one Bitbucket gave it. */
+export function withMyReactionId(detail: PrDetail, commentId: number, emoji: string, tempId: number, id: number): PrDetail {
+    return mapComment(detail, commentId, (c) => ({
+        ...c,
+        reactions: c.reactions.map((r) => (r.emoji === emoji ? { ...r, myCommentIds: r.myCommentIds.map((x) => (x === tempId ? id : x)) } : r)),
+    }));
+}
+
+/** My reaction `emoji` taken out of a comment (my replies making it deleted); its chip goes when nobody is left. */
+export function withoutMyReaction(detail: PrDetail, commentId: number, emoji: string): PrDetail {
+    const meUuid = detail.me?.uuid;
+    return mapComment(detail, commentId, (c) => ({
+        ...c,
+        reactions: c.reactions.flatMap((r) => {
+            if (r.emoji !== emoji) {
+                return [r];
+            }
+            const users = r.users.filter((u) => u.uuid !== meUuid);
+            return users.length ? [{ ...r, users, myCommentIds: [] }] : [];
+        }),
+    }));
+}
+
 /** Resolves (by `me`) or reopens a thread. */
 export function withResolved(detail: PrDetail, threadId: number, resolved: boolean, me: User | null): PrDetail {
     return mapThread(detail, threadId, (t) => ({ ...t, resolved, resolvedBy: resolved ? me : null }));
@@ -85,12 +139,7 @@ export function withResolved(detail: PrDetail, threadId: number, resolved: boole
 
 /** Edited comment: new text and HTML from the server, the rest (version, new mark) as computed with the detail. */
 export function withEditedComment(detail: PrDetail, comment: Comment): PrDetail {
-    return {
-        ...detail,
-        threads: detail.threads.map((t) => (t.comments.some((c) => c.id === comment.id)
-            ? { ...t, comments: t.comments.map((c) => (c.id === comment.id ? { ...c, html: comment.html, raw: comment.raw } : c)) }
-            : t)),
-    };
+    return mapComment(detail, comment.id, (c) => ({ ...c, html: comment.html, raw: comment.raw }));
 }
 
 /**

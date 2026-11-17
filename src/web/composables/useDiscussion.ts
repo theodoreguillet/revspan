@@ -1,11 +1,17 @@
-// Comments: drafts, line composer, replies, deletion, resolution. A comment shows at once as pending, is replaced by the
-// server's answer, and the PR is refreshed in the background; if the send fails, it disappears and its draft comes back.
+// Comments: drafts, line composer, replies, likes, deletion, resolution. A comment shows at once as pending, is replaced
+// by the server's answer, and the PR is refreshed in the background; if the send fails, it disappears and its draft
+// comes back. A like (a "👍" reply, the Bitbucket API has no reactions) shows at once too, and goes if Bitbucket refuses.
 import { reactive, ref } from 'vue';
 import type { Comment, Comparison, NewComment, PrRef, Thread } from '../../shared/api.ts';
+import { THUMBS } from '../../shared/reactions.ts';
 import { tr } from '../i18n/index.ts';
 import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
 import { afterOwnWrite } from '../lib/pulse.ts';
-import { removeComment, replaceComment, withEditedComment, withoutPlacement, withPendingComment, withPlacement, withResolved, type PendingComment } from '../lib/optimistic.ts';
+import {
+    removeComment, replaceComment, withEditedComment, withMyReaction, withMyReactionId, withoutMyReaction, withoutPlacement, withPendingComment, withPlacement,
+    withReactions, withResolved, type PendingComment,
+} from '../lib/optimistic.ts';
+import { myLikeIds } from '../lib/threads.ts';
 import { api } from '../services/api.ts';
 import type { PrLoad } from './usePrLoad.ts';
 
@@ -17,6 +23,7 @@ export const editDraftKey = (commentId: number): string => `edit:${commentId}`;
 export const actionKey = {
     composer: (draftKey: string): string => `comment:${draftKey}`,
     reply: (threadId: number): string => `reply:${threadId}`,
+    like: (commentId: number): string => `like:${commentId}`,
     remove: (commentId: number): string => `delete:${commentId}`,
     edit: (commentId: number): string => `edit:${commentId}`,
     resolve: (threadId: number): string => `resolve:${threadId}`,
@@ -132,6 +139,51 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     const postGeneral = (text: string): Promise<boolean> =>
         send({ raw: text }, { draftKey: GENERAL_DRAFT, text, key: actionKey.composer(GENERAL_DRAFT) });
 
+    /**
+     * Like: a "👍" reply to the comment, shown at once as my 👍 under it. Unlike (I already liked it): my "👍" replies
+     * deleted, my 👍 gone at once. Put back as it was if Bitbucket refuses; my own write is not news for the check.
+     */
+    function toggleLike(comment: Comment): Promise<boolean> {
+        const shown = load.detail.value.threads.flatMap((t) => t.comments).find((c) => c.id === comment.id) ?? comment;
+        const before = shown.reactions;
+        const mine = myLikeIds(shown);
+        const key = actionKey.like(comment.id);
+        if (mine.length) {
+            const left = [...mine];
+            return load.act(async () => {
+                for (const id of mine) {
+                    await api.deleteComment(prRef, id);
+                    left.shift();
+                }
+            }, {
+                key,
+                optimistic: () => load.patchDetail((d) => withoutMyReaction(d, comment.id, THUMBS)),
+                // the replies deleted before the refusal are gone: only the ones left stay mine
+                rollback: () => load.patchDetail((d) => {
+                    const restored = withReactions(d, comment.id, before.map((r) => (r.emoji === THUMBS ? { ...r, myCommentIds: left } : r)));
+                    const deleted = mine.length - left.length;
+                    return deleted ? { ...restored, pulse: afterOwnWrite(restored.pulse, -deleted) } : restored;
+                }),
+                onDone: () => load.patchDetail((d) => ({ ...d, pulse: afterOwnWrite(d.pulse, -mine.length) })),
+            });
+        }
+        const tempId = --lastTempId;
+        let created: Comment | null = null;
+        return load.act(async () => {
+            created = await api.comment(prRef, { raw: THUMBS, parentId: comment.id });
+        }, {
+            key,
+            optimistic: () => load.patchDetail((d) => withMyReaction(d, comment.id, THUMBS, tempId)),
+            rollback: () => load.patchDetail((d) => withReactions(d, comment.id, before)),
+            onDone: () => {
+                const reply = created;
+                if (reply) {
+                    load.patchDetail((d) => ({ ...withMyReactionId(d, comment.id, THUMBS, tempId, reply.id), pulse: afterOwnWrite(d.pulse, 1) }));
+                }
+            },
+        });
+    }
+
     // the confirmation is asked by the button (ConfirmButton): no optimistic delete, the comment goes once the server agreed
     const deleteComment = (comment: Comment): Promise<boolean> =>
         load.act(() => api.deleteComment(prRef, comment.id), {
@@ -192,5 +244,8 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         });
     }
 
-    return { drafts, composer, editing, startEdit, cancelEdit, saveEdit, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, deleteComment, resolve };
+    return {
+        drafts, composer, editing, startEdit, cancelEdit, saveEdit, draft, setDraft, openComposer, closeComposer, submitComposer, reply, postGeneral, toggleLike,
+        deleteComment, resolve,
+    };
 }

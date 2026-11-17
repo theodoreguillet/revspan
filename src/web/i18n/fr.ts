@@ -389,6 +389,7 @@ export const fr: Catalog = {
     'disc.resolved': 'Résolus · {count}',
     'disc.empty': 'Aucune discussion sur cette PR.',
     'disc.total': { one: '{count} fil au total.', other: '{count} fils au total.' },
+    'disc.reactions': 'Les réponses d’un seul emoji sont affichées comme des réactions sous le commentaire auquel elles répondent.',
     'thread.resolvedBar': 'Fil résolu',
     'thread.resolvedBarBy': 'Fil résolu par {name}',
     'thread.line': 'ligne {line}',
@@ -414,6 +415,9 @@ export const fr: Catalog = {
     'comment.deleteQuestion': 'Supprimer ce commentaire sur Bitbucket ?',
     'comment.sending': 'envoi…',
     'comment.editLabel': 'Modifier ton commentaire',
+    'comment.like': 'J’aime',
+    'comment.unlike': 'Retirer ton 👍',
+    'reaction.you': '{name} (toi)',
 
     // ---------- Tasks ----------
     'task.empty': 'Aucune tâche sur cette PR',

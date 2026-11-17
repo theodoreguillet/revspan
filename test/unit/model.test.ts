@@ -124,7 +124,7 @@ describe('buildParticipants', () => {
 });
 
 describe('buildThreads', () => {
-    it('threads (nested replies included), new, resolved, deleted', () => {
+    it('threads (nested replies included), emoji reactions, new, resolved, deleted', () => {
         const raw: BbComment[] = [
             {
                 id: 10, created_on: '2026-11-05T11:02:08Z', user: user(YAN, 'Yann'),
@@ -136,14 +136,41 @@ describe('buildThreads', () => {
             { id: 13, created_on: '2026-11-05T12:31:00Z', user: user(YAN, 'Yann'), content: { raw: ':+1:' }, parent: { id: 11 } },
             { id: 14, created_on: '2026-10-14T09:19:00Z', user: user('{ai}', 'AI'), content: { raw: '## QA', html: '<h2>QA</h2>' } },
             { id: 15, created_on: '2026-10-29T00:00:00Z', user: user(CAM, 'Camille'), content: { raw: '' }, deleted: true },
+            // a like taken back: neither a reaction nor a deleted comment
+            { id: 16, created_on: '2026-11-05T12:40:00Z', user: user(CAM, 'Camille'), content: { raw: '👍' }, parent: { id: 10 }, deleted: true },
         ];
         const threads = buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: '2026-11-05T11:00:00Z' });
         expect(threads.map((t) => t.id)).toEqual([14, 10]);
         const [general, inline] = threads;
         expect(general).toMatchObject({ path: null, version: 1 });
         expect(inline).toMatchObject({ path: 'src/CreateRecord.ts', anchor: { to: 40, from: null }, version: 3, resolved: true });
-        // A "thumbs up" reply is a reply like any other (the Bitbucket API exposes no reactions).
-        expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false], [12, false, true], [13, true, false]]);
+        // Replies made of a single emoji are reactions on the comment they answer, not comments (nor new ones).
+        expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false]]);
+        expect(inline!.comments[0]!.reactions).toEqual([]);
+        expect(inline!.comments[1]!.reactions).toEqual([{
+            emoji: '👍',
+            users: [{ uuid: ME, displayName: 'Moi', nickname: 'Moi' }, { uuid: YAN, displayName: 'Yann', nickname: 'Yann' }],
+            myCommentIds: [12],
+        }]);
+        expect(general!.comments[0]!.reactions).toEqual([]);
+    });
+
+    it('reactions: one per emoji, each user once in date order, all my replies kept; none of mine without my profile', () => {
+        const raw: BbComment[] = [
+            { id: 20, created_on: '2026-11-05T11:00:00Z', user: user(YAN, 'Yann'), content: { raw: 'Ready?' } },
+            { id: 21, created_on: '2026-11-05T12:10:00Z', user: user(ME, 'Moi'), content: { raw: '👍' }, parent: { id: 20 } },
+            { id: 22, created_on: '2026-11-05T12:00:00Z', user: user(CAM, 'Camille'), content: { raw: '🎉' }, parent: { id: 20 } },
+            { id: 23, created_on: '2026-11-05T12:20:00Z', user: user(ME, 'Moi'), content: { raw: ':thumbsup:' }, parent: { id: 20 } },
+            { id: 24, created_on: '2026-11-05T11:30:00Z', user: user(CAM, 'Camille'), content: { raw: '👍' }, parent: { id: 20 } },
+        ];
+        const [thread] = buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: null });
+        expect(thread!.comments.map((c) => c.id)).toEqual([20]);
+        expect(thread!.comments[0]!.reactions.map((r) => [r.emoji, r.users.map((u) => u.uuid), r.myCommentIds])).toEqual([
+            ['👍', [CAM, ME], [21, 23]],
+            ['🎉', [CAM], []],
+        ]);
+        const [anonymous] = buildThreads(raw, versionsFixture(), { meUuid: null, sinceDate: null });
+        expect(anonymous!.comments[0]!.reactions.map((r) => r.myCommentIds)).toEqual([[], []]);
     });
 });
 

@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ApiErrorBody, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, PrTask, Settings, Summary } from '../../src/shared/api.ts';
+import type { ApiErrorBody, Comment, Comparison, ContributorList, FollowedList, Home, HomeGroupKey, PrCard, PrDetail, PrPulse, PrTask, Settings, Summary } from '../../src/shared/api.ts';
 import { DEFAULT_REVIEW_SETTINGS } from '../../src/shared/review-settings.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
@@ -235,6 +235,8 @@ describe('reading a PR', () => {
         expect(mine?.version).toBe(2);
         expect(mine?.comments.map((c) => c.raw)).toEqual(['Utilise le repository pour sauver.', 'Fait dans la dernière version.']);
         expect(mine?.comments[1]?.isNew).toBe(true);
+        // Yann's "👍" reply is a reaction on Camille's reply, not a comment
+        expect(mine?.comments[1]?.reactions.map((r) => [r.emoji, r.users.map((u) => u.displayName), r.myCommentIds])).toEqual([['👍', ['Yann Bernard'], []]]);
     });
 
     it('version summary', async () => {
@@ -394,6 +396,28 @@ describe('actions', () => {
         ]);
         expect(fake.calls[0]?.body).toEqual({ content: { raw: 'Merci !' }, parent: { id: thread.id } });
         expect(fake.calls[1]?.body).toEqual({ content: { raw: 'Nit' }, inline: { path: 'src/Action.ts', to: 3 } });
+    });
+
+    it('like = a "👍" reply shown as a reaction on that comment; unlike = deleting it (no new route)', async () => {
+        const { fake } = await setup();
+        const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
+        const target = thread?.comments[0];
+        if (!thread || !target) {
+            throw new Error('no open thread of mine');
+        }
+        const liked = await api<Comment>('POST', `${prPath()}/comments`, { raw: '👍', parentId: target.id });
+        expect(liked.body).toMatchObject({ raw: '👍', mine: true, reactions: [] });
+        const after = (await detail()).threads.find((t) => t.id === thread.id);
+        expect(after?.comments.map((c) => c.id)).toEqual(thread.comments.map((c) => c.id));
+        expect(after?.comments[0]?.reactions).toEqual([{ emoji: '👍', users: [{ uuid: '{me}', displayName: 'Thomas Girard', nickname: 'tgirard' }], myCommentIds: [liked.body.id] }]);
+
+        expect((await api('DELETE', `${prPath()}/comments/${liked.body.id}`)).status).toBe(200);
+        const unliked = (await detail()).threads.find((t) => t.id === thread.id);
+        // neither a reaction nor a "deleted comment" any more
+        expect(unliked?.comments.map((c) => [c.id, c.deleted])).toEqual(thread.comments.map((c) => [c.id, false]));
+        expect(unliked?.comments[0]?.reactions).toEqual([]);
+        expect(fake.calls.map(shortCall)).toEqual(['POST /comments', `DELETE /comments/${liked.body.id}`]);
+        expect(fake.calls[0]?.body).toEqual({ content: { raw: '👍' }, parent: { id: target.id } });
     });
 
     it('PUT comments/:cid edits my comment', async () => {
@@ -1234,7 +1258,7 @@ describe('request budget', () => {
         pushVersion(fake.data, FAKE_PRS.purged, { commit: 'purged:v4', from: 'purged:v3', base: 'purged:m0', changes: {}, date: '2026-10-22T09:00:00Z' });
         elapse(3 * MINUTE_MS);
         await home();
-        const kept = new Cache(path.join(dir, 'cache')).get<{ key: string }>(`home-activity:2:${WS}/${REPO}#${FAKE_PRS.purged}`);
+        const kept = new Cache(path.join(dir, 'cache')).get<{ key: string }>(`home-activity:3:${WS}/${REPO}#${FAKE_PRS.purged}`);
         expect(kept?.key).toContain(fake.data.prs.get(FAKE_PRS.purged)?.pr.source?.commit?.hash);
     });
 

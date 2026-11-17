@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, nextTick } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { Comment, Comparison, DiffLine, PrDetail, Summary } from '../../src/shared/api.ts';
-import { replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
+import { actionKey, replyDraftKey, useDiscussion } from '../../src/web/composables/useDiscussion.ts';
 import { setHostVisible } from '../../src/web/composables/usePageVisible.ts';
 import { usePrLoad, type PrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { providePrPage, type PrPage } from '../../src/web/composables/usePrPage.ts';
 import { composerTargetFor } from '../../src/web/lib/diff.ts';
 import { SKELETON_DELAY_MS } from '../../src/web/lib/loading.ts';
 import { presets } from '../../src/web/lib/selection.ts';
-import { prLong, threadById } from './fixtures.ts';
+import { commentById, prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
-    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), comment: vi.fn(), approve: vi.fn(), viewed: vi.fn() },
+    api: { pr: vi.fn(), summary: vi.fn(), compare: vi.fn(), comment: vi.fn(), deleteComment: vi.fn(), approve: vi.fn(), viewed: vi.fn() },
     showError: vi.fn(),
 }));
 vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
@@ -36,7 +36,7 @@ function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => voi
 const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 
 function serverComment(id: number, raw: string): Comment {
-    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true };
+    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [] };
 }
 
 const codeLine: DiffLine = { t: '+', o: null, n: 12, text: 'const x = 1;', hl: [] };
@@ -271,6 +271,132 @@ describe('PR page writes without waiting for a reload', () => {
         expect(showError).toHaveBeenCalledWith(expect.objectContaining({ message: 'local update failed' }));
         expect(load.pendingAction.value).toBeNull();
         expect(api.pr).toHaveBeenCalledOnce();
+    });
+});
+
+describe('PR page likes (👍 replies) without waiting for a reload', () => {
+    let detail: PrDetail;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        detail = { ...prLong().data, pulse: { updatedOn: '2026-11-16T10:00:00Z', head: 'head', commentCount: 10, participants: '', taskCount: 0 } };
+        api.pr.mockResolvedValue(detail);
+        api.summary.mockResolvedValue({ versions: [] });
+    });
+
+    it('a like shows at once as my 👍, posts a "👍" reply to that comment, then refreshes in the background', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        const sent = deferred<Comment>();
+        api.comment.mockReturnValue(sent.promise);
+        const refresh = deferred<PrDetail>();
+        api.pr.mockReturnValue(refresh.promise);
+
+        const liking = discussion.toggleLike(commentById(detail, 120));
+        const shown = commentById(load.detail.value, 120).reactions;
+        expect(shown).toMatchObject([{ emoji: '👍', users: [me] }]);
+        expect(shown[0]?.myCommentIds).toHaveLength(1);
+        expect(shown[0]?.myCommentIds[0]).toBeLessThan(0);
+        // a reaction, never a reply card
+        expect(threadById(load.detail.value, 120).comments).toHaveLength(2);
+        expect(api.comment).toHaveBeenCalledWith(ref, { raw: '👍', parentId: 120 });
+        // the lock covers the write only
+        expect(load.busy(actionKey.like(120))).toBe(true);
+
+        sent.resolve(serverComment(601, '👍'));
+        expect(await liking).toBe(true);
+        expect(commentById(load.detail.value, 120).reactions).toEqual([{ emoji: '👍', users: [me], myCommentIds: [601] }]);
+        expect(load.pendingAction.value).toBeNull();
+        // my own reply moves the check baseline: Bitbucket's comment count includes it
+        expect(load.detail.value.pulse).toMatchObject({ commentCount: 11, updatedOn: '' });
+        expect(api.pr).toHaveBeenCalledOnce();
+        expect(load.refreshing.value).toBe(true);
+        refresh.resolve(detail);
+        await vi.waitFor(() => expect(load.refreshing.value).toBe(false));
+    });
+
+    it('a like Bitbucket refuses is taken back, without a refresh', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        api.comment.mockRejectedValue(new Error('refused'));
+
+        expect(await discussion.toggleLike(commentById(detail, 120))).toBe(false);
+        expect(commentById(load.detail.value, 120).reactions).toEqual([]);
+        expect(load.detail.value.pulse).toEqual(detail.pulse);
+        expect(showError).toHaveBeenCalledOnce();
+        await settle();
+        expect(api.pr).not.toHaveBeenCalled();
+    });
+
+    it('clicking 👍 again deletes my 👍 reply at once; a refusal puts it back', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        const before = commentById(detail, 121).reactions;
+        expect(before).toMatchObject([{ emoji: '👍', myCommentIds: [131] }]);
+        const refused = deferred<{ ok: true }>();
+        api.deleteComment.mockReturnValue(refused.promise);
+
+        const failing = discussion.toggleLike(commentById(detail, 121));
+        expect(commentById(load.detail.value, 121).reactions).toEqual([]);
+        expect(api.deleteComment).toHaveBeenCalledWith(ref, 131);
+        expect(api.comment).not.toHaveBeenCalled();
+        refused.reject(new Error('refused'));
+        expect(await failing).toBe(false);
+        expect(commentById(load.detail.value, 121).reactions).toEqual(before);
+        expect(api.pr).not.toHaveBeenCalled();
+
+        api.deleteComment.mockResolvedValue({ ok: true });
+        // the background refresh stays in flight: the local state is what shows meanwhile
+        api.pr.mockReturnValue(new Promise(() => undefined));
+        expect(await discussion.toggleLike(commentById(load.detail.value, 121))).toBe(true);
+        expect(commentById(load.detail.value, 121).reactions).toEqual([]);
+        expect(threadById(load.detail.value, 120).comments.map((c) => c.id)).toEqual([120, 121]);
+        expect(load.detail.value.pulse).toMatchObject({ commentCount: 9, updatedOn: '' });
+        expect(api.pr).toHaveBeenCalledOnce();
+    });
+
+    it('unlike deletes each of my 👍 replies; when one is refused, only the ones left stay mine', async () => {
+        const yann = { uuid: '{yan}', displayName: 'Yann Bernard' };
+        const twice: PrDetail = {
+            ...detail,
+            threads: detail.threads.map((t) => (t.id === 120
+                ? { ...t, comments: t.comments.map((c) => (c.id === 121 ? { ...c, reactions: [{ emoji: '👍', users: [me, yann], myCommentIds: [131, 132] }] } : c)) }
+                : t)),
+        };
+        const load = usePrLoad(ref, twice);
+        const discussion = useDiscussion(ref, load);
+        api.deleteComment.mockResolvedValueOnce({ ok: true }).mockRejectedValueOnce(new Error('refused'));
+
+        expect(await discussion.toggleLike(commentById(twice, 121))).toBe(false);
+        expect(api.deleteComment.mock.calls).toEqual([[ref, 131], [ref, 132]]);
+        expect(commentById(load.detail.value, 121).reactions).toEqual([{ emoji: '👍', users: [me, yann], myCommentIds: [132] }]);
+        // the deleted one is my own write: not news for the check
+        expect(load.detail.value.pulse).toMatchObject({ commentCount: 9, updatedOn: '' });
+    });
+
+    it('a refresh that started before the like does not erase it', async () => {
+        const load = usePrLoad(ref, detail);
+        const discussion = useDiscussion(ref, load);
+        const early = deferred<PrDetail>();
+        api.pr.mockReturnValueOnce(early.promise);
+        void load.refreshDetail();
+        const sent = deferred<Comment>();
+        api.comment.mockReturnValue(sent.promise);
+
+        const liking = discussion.toggleLike(commentById(detail, 120));
+        early.resolve(detail);
+        await settle();
+        expect(commentById(load.detail.value, 120).reactions).toHaveLength(1);
+        const after: PrDetail = {
+            ...detail,
+            threads: detail.threads.map((t) => (t.id === 120
+                ? { ...t, comments: t.comments.map((c) => (c.id === 120 ? { ...c, reactions: [{ emoji: '👍', users: [me], myCommentIds: [601] }] } : c)) }
+                : t)),
+        };
+        api.pr.mockResolvedValue(after);
+        sent.resolve(serverComment(601, '👍'));
+        expect(await liking).toBe(true);
+        await vi.waitFor(() => expect(load.detail.value).toBe(after));
     });
 });
 

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PrCard, User } from '../../src/shared/api.ts';
+import type { Comment, PrCard, User } from '../../src/shared/api.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
 import { GROUP_TITLES, cardBadges, cardSubtitle, cardTooltip, emptyHome, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
-import { initials, newActivity, threadGroups } from '../../src/web/lib/threads.ts';
-import { prLong } from './fixtures.ts';
+import { initials, likedByMe, newActivity, reactionChips, threadGroups } from '../../src/web/lib/threads.ts';
+import { commentById, prLong } from './fixtures.ts';
 
 // French, the language these expectations are written in; English variants are checked next to them.
 const fr = createTranslator('fr');
@@ -158,6 +158,28 @@ describe('threads', () => {
 
     it('new threads and replies since my review', () => {
         expect(newActivity(data.threads)).toEqual({ newThreads: 1, replies: 1, names: ['Yann', 'Camille'] });
+    });
+
+    it('reaction chips: count, names in the tooltip (me marked), mine when one of my replies makes it', () => {
+        const reply = commentById(data, 121);
+        expect(reactionChips(fr, reply, data.me)).toEqual([{ emoji: '👍', count: 1, title: 'Thomas Girard (toi)', mine: true }]);
+        expect(reactionChips(en, reply, data.me)[0]?.title).toBe('Thomas Girard (you)');
+        expect(likedByMe(reply)).toBe(true);
+
+        const yann = { uuid: '{yan}', displayName: 'Yann Bernard' };
+        const camille = { uuid: '{cam}', displayName: 'Camille Durand' };
+        const other: Comment = {
+            ...reply,
+            reactions: [{ emoji: '👍', users: [yann, camille], myCommentIds: [] }, { emoji: '🎉', users: [yann], myCommentIds: [] }],
+        };
+        expect(reactionChips(fr, other, data.me)).toEqual([
+            { emoji: '👍', count: 2, title: 'Yann Bernard et Camille Durand', mine: false },
+            { emoji: '🎉', count: 1, title: 'Yann Bernard', mine: false },
+        ]);
+        expect(likedByMe(other)).toBe(false);
+        // my 🎉 posted from Bitbucket is not a like
+        expect(likedByMe({ ...other, reactions: [{ emoji: '🎉', users: [data.me!], myCommentIds: [140] }] })).toBe(false);
+        expect(reactionChips(fr, commentById(data, 120), data.me)).toEqual([]);
     });
 
     it('avatar initials', () => {

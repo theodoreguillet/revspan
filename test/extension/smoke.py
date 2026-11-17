@@ -205,6 +205,20 @@ def run() -> None:
         widths = frame.evaluate('[document.documentElement.scrollWidth, window.innerWidth]')
         check('panel: no horizontal page scroll', widths[0] <= widths[1] + 1, f'content {widths[0]} px for {widths[1]} px')
         page.screenshot(path=f'{SHOTS}/03-panneau.png')
+        # Yann's "👍" reply to Camille's: a reaction chip under her comment, and a 👍 button on each comment (no click:
+        # the panel makes no write here). textContent: the thread may sit in a block not painted yet (content-visibility).
+        chip = frame.locator('.rv-th .rv-react[data-emoji="👍"]').first
+        has_chip = wait_until(lambda: chip.count() > 0, 30)
+        chip_text = (chip.text_content() or '').strip() if has_chip else 'no chip'
+        check('panel: a single-emoji reply shows as a reaction chip, comments offer the 👍 button',
+              chip_text == '👍 1' and frame.locator('.rv-th [data-action="like"]').count() > 0, chip_text)
+        if has_chip:
+            liked_thread = frame.locator('.rv-th', has=frame.locator('.rv-react[data-emoji="👍"]')).first
+            # twice: the blocks above get their real height once painted (content-visibility), which moves the thread
+            for _ in range(2):
+                liked_thread.scroll_into_view_if_needed()
+                page.wait_for_timeout(400)
+            liked_thread.screenshot(path=f'{SHOTS}/03b-like-chip.png')
 
         # Native VS Code diff on the first file.
         file_block = frame.locator('.rv-file').first

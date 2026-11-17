@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { PrDetail, Summary, Thread, Version, VersionKind, VersionSummary } from '../../src/shared/api.ts';
+import type { Comment, PrDetail, Summary, Thread, Version, VersionKind, VersionSummary } from '../../src/shared/api.ts';
 import { summaryMap, type SummaryMap } from '../../src/web/lib/kinds.ts';
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/api');
@@ -39,6 +39,14 @@ export function threadById(data: PrDetail, id: number): Thread {
         throw new Error(`fil ${id} absent`);
     }
     return thread;
+}
+
+export function commentById(data: PrDetail, id: number): Comment {
+    const comment = data.threads.flatMap((t) => t.comments).find((c) => c.id === id);
+    if (!comment) {
+        throw new Error(`no comment ${id}`);
+    }
+    return comment;
 }
 
 export interface VersionOptions {

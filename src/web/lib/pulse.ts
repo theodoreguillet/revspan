@@ -60,11 +60,12 @@ export const sameNews = (a: PulseNews, b: PulseNews): boolean =>
 export interface RefreshNews {
     newVersions: number;
     newComments: number;
-    /** Approvals, resolutions, edited or deleted comments. */
+    /** Approvals, resolutions, edited or deleted comments, reactions given or taken back. */
     otherChanges: boolean;
 }
 
 const commentsOf = (d: PrDetail): Comment[] => d.threads.flatMap((t) => t.comments);
+const reactionsKey = (c: Comment): string => c.reactions.map((r) => `${r.emoji}:${r.users.map((u) => u.uuid).join(',')}`).join(' ');
 const participantsKey = (d: PrDetail): string =>
     d.participants.map((p) => `${p.user?.uuid ?? ''}:${p.approved}:${p.state ?? ''}:${p.approvedVersion ?? ''}`).sort().join(',');
 
@@ -73,7 +74,7 @@ export function refreshNews(before: PrDetail, after: PrDetail): RefreshNews {
     const newComments = commentsOf(after).filter((c) => !known.has(c.id) && !c.deleted).length;
     const changed = commentsOf(after).some((c) => {
         const old = known.get(c.id);
-        return !!old && (old.raw !== c.raw || old.deleted !== c.deleted);
+        return !!old && (old.raw !== c.raw || old.deleted !== c.deleted || reactionsKey(old) !== reactionsKey(c));
     });
     const resolved = new Map(before.threads.map((t) => [t.id, t.resolved]));
     const resolutions = after.threads.some((t) => resolved.has(t.id) && resolved.get(t.id) !== t.resolved);

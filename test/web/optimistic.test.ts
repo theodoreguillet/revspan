@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Comment, Comparison, DiffLine, FileDiff } from '../../src/shared/api.ts';
-import { replaceComment, withEditedComment, withMyPulseEntry, withMyReview, withPendingComment, withPlacement, withResolved, withReviewedMark } from '../../src/web/lib/optimistic.ts';
-import { prLong, threadById } from './fixtures.ts';
+import {
+    replaceComment, withEditedComment, withMyPulseEntry, withMyReaction, withMyReactionId, withMyReview, withoutMyReaction, withPendingComment, withPlacement,
+    withReactions, withResolved, withReviewedMark,
+} from '../../src/web/lib/optimistic.ts';
+import { commentById, prLong, threadById } from './fixtures.ts';
 
 const me = { uuid: '{me-uuid}', displayName: 'Thomas Girard', nickname: 'tgirard' };
 
 function serverComment(id: number, raw: string): Comment {
-    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true };
+    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [] };
 }
 
 const line = (n: number, t: DiffLine['t'] = ' '): DiffLine => ({ t, o: t === '+' ? null : n, n: t === '-' ? null : n, text: `line ${n}`, hl: [] });
@@ -32,7 +35,7 @@ describe('optimistic updates of the PR detail', () => {
 
         const thread = threadById(next, 120);
         expect(thread.comments).toHaveLength(3);
-        expect(thread.comments.at(-1)).toMatchObject({ id: -1, raw: 'Looks good', user: me, mine: true, pending: true, deleted: false, isNew: false });
+        expect(thread.comments.at(-1)).toMatchObject({ id: -1, raw: 'Looks good', user: me, mine: true, pending: true, deleted: false, isNew: false, reactions: [] });
         expect(threadById(detail, 120).comments).toHaveLength(2);
         expect(next.threads).toHaveLength(detail.threads.length);
     });
@@ -150,5 +153,37 @@ describe('my review state shown at once', () => {
     it('pulse entry: replaced, added, sorted', () => {
         expect(withMyPulseEntry('', '{me}', { approved: true, state: 'approved' })).toBe('{me}:1:approved');
         expect(withMyPulseEntry('{zed}:0:,{me}:0:changes_requested', '{me}', { approved: false, state: null })).toBe('{me}:0:,{zed}:0:');
+    });
+});
+
+describe('optimistic likes', () => {
+    const yann = { uuid: '{yan}', displayName: 'Yann Bernard' };
+
+    it('withMyReaction: a new chip, or me added to an existing one (the reply id negative while it is sent)', () => {
+        const detail = prLong().data;
+        const liked = withMyReaction(detail, 120, '👍', -1);
+        expect(commentById(liked, 120).reactions).toEqual([{ emoji: '👍', users: [me], myCommentIds: [-1] }]);
+        expect(commentById(detail, 120).reactions).toEqual([]);
+        expect(threadById(liked, 120).comments).toHaveLength(2);
+        expect(liked.threads.find((t) => t.id !== 120)).toBe(detail.threads.find((t) => t.id !== 120));
+
+        const others = withReactions(detail, 120, [{ emoji: '👍', users: [yann], myCommentIds: [] }, { emoji: '🎉', users: [yann], myCommentIds: [] }]);
+        expect(commentById(withMyReaction(others, 120, '👍', -2), 120).reactions).toEqual([
+            { emoji: '👍', users: [yann, me], myCommentIds: [-2] },
+            { emoji: '🎉', users: [yann], myCommentIds: [] },
+        ]);
+    });
+
+    it('withMyReactionId swaps the temporary id for Bitbucket\'s', () => {
+        const detail = withMyReaction(prLong().data, 120, '👍', -1);
+        expect(commentById(withMyReactionId(detail, 120, '👍', -1, 601), 120).reactions).toEqual([{ emoji: '👍', users: [me], myCommentIds: [601] }]);
+    });
+
+    it('withoutMyReaction takes me out; the chip goes when nobody is left', () => {
+        const detail = prLong().data;
+        expect(commentById(withoutMyReaction(detail, 121, '👍'), 121).reactions).toEqual([]);
+        const shared = withReactions(detail, 121, [{ emoji: '👍', users: [me, yann], myCommentIds: [131, 132] }]);
+        expect(commentById(withoutMyReaction(shared, 121, '👍'), 121).reactions).toEqual([{ emoji: '👍', users: [yann], myCommentIds: [] }]);
+        expect(commentById(detail, 121).reactions).toHaveLength(1);
     });
 });

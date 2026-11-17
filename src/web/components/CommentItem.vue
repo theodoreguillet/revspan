@@ -5,7 +5,7 @@ import { actionKey, editDraftKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { t, tr } from '../i18n/index.ts';
 import { displayName, fmtFull, relTime } from '../lib/format.ts';
-import { avatarHue, initials } from '../lib/threads.ts';
+import { avatarHue, initials, likedByMe, reactionChips } from '../lib/threads.ts';
 import ConfirmButton from './ConfirmButton.vue';
 import SafeHtml from './SafeHtml.vue';
 
@@ -22,6 +22,9 @@ const text = computed({
     set: (value: string) => page.setDraft(editKey.value, value),
 });
 const saving = computed(() => page.busy(actionKey.edit(props.comment.id)));
+const chips = computed(() => reactionChips(tr(), props.comment, page.detail.me));
+const liked = computed(() => likedByMe(props.comment));
+const liking = computed(() => page.busy(actionKey.like(props.comment.id)));
 
 function autosize(): void {
     const ta = editBox.value;
@@ -96,7 +99,26 @@ function onEditKeydown(event: KeyboardEvent): void {
                 </div>
             </div>
             <SafeHtml v-else :html="comment.html" />
+            <!-- replies made of a single emoji (the Bitbucket API has no reactions) -->
+            <div v-if="chips.length" class="rv-reacts">
+                <span v-for="chip in chips" :key="chip.emoji" :class="['rv-react', { mine: chip.mine }]" :data-emoji="chip.emoji" :title="chip.title">{{ chip.emoji }} {{ chip.count }}</span>
+            </div>
             <div v-if="!comment.deleted && !comment.pending && !isEditing" class="acts">
+                <!-- my profile tells which "👍" replies are mine: without it, a like could not be taken back -->
+                <button
+                    v-if="page.detail.me"
+                    type="button"
+                    :class="['like', { liked, busy: liking }]"
+                    data-action="like"
+                    :disabled="page.acting"
+                    :aria-busy="liking"
+                    :aria-pressed="liked"
+                    :title="liked ? t('comment.unlike') : t('comment.like')"
+                    :aria-label="liked ? t('comment.unlike') : t('comment.like')"
+                    @click="page.toggleLike(comment)"
+                >
+                    👍
+                </button>
                 <button type="button" data-action="reply" @click="emit('reply')">{{ t('common.reply') }}</button>
                 <button v-if="comment.mine" type="button" data-action="edit" :disabled="page.acting" @click="page.startEdit(comment)">{{ t('common.edit') }}</button>
                 <ConfirmButton
