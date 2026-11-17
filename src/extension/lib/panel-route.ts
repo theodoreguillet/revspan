@@ -1,5 +1,6 @@
 // Route shown by the panel: tab title, screen deduced from the page's API reads,
 // route on which VS Code reopens the panel after "Reload Window".
+import { PR_PATH as PR_ROUTE } from '../../shared/panel-role.ts';
 import { isPageRoute, type PanelState } from '../../shared/webview-protocol.ts';
 import type { Translate } from './l10n.ts';
 
@@ -7,8 +8,6 @@ import type { Translate } from './l10n.ts';
 export const PANEL_VIEW_TYPE = 'revspan';
 
 const HOME_ROUTE = '/';
-
-const PR_ROUTE = /^\/pr\/([^/]+)\/([^/]+)\/(\d+)/;
 
 /** API read specific to a screen (outside PRs) -> route of that screen. */
 const SCREENS = new Map([['/home', HOME_ROUTE], ['/settings', '/settings']]);

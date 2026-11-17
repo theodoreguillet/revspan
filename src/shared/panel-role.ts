@@ -4,8 +4,11 @@
 /** "home" or "pr:<workspace>/<repo>/<id>" (decoded segments). */
 export type PanelRole = 'home' | `pr:${string}`;
 
+/** Start of a PR page route or of a PR's API path (`/pr/ws/repo/42/compare`): workspace, repository, id. */
+export const PR_PATH = /^\/pr\/([^/?#]+)\/([^/?#]+)\/(\d+)/;
+
 /** PR page route (as the page's router matches it: number id, optional trailing slash, then query or end). */
-export const PR_ROUTE = /^\/pr\/([^/?#]+)\/([^/?#]+)\/(\d+)\/?(?=[?#]|$)/;
+export const PR_ROUTE = new RegExp(`${PR_PATH.source}\\/?(?=[?#]|$)`);
 
 function decoded(segment: string): string {
     try {

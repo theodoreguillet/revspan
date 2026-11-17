@@ -71,7 +71,10 @@ export class RevspanPanel {
         });
         this.attach(panel, route);
         if (dormant) {
-            void vscode.window.tabGroups.close(dormant, true);
+            // the new tab is already there: a dormant tab VS Code refuses to close only stays as a duplicate
+            vscode.window.tabGroups.close(dormant, true).then(undefined, (error: unknown) => {
+                console.warn(`revspan: cannot close the restored tab (${(error as Error).message ?? String(error)})`);
+            });
         }
     }
 
