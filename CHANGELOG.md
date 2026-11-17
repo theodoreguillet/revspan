@@ -46,6 +46,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 - Comments no longer count as a review: only an approval, a change request or "Mark as reviewed" sets your last
   review, so people who only commented get no "new" badges and their PRs stay in "To review".
+- Timeline: the blue range bar sits at the same height under every item (versions, gaps, spaces, the reviewed mark and
+  folded blocks); it used to be lower under the versions.
 
 ### Performance
 

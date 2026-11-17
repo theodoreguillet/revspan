@@ -278,6 +278,10 @@ def screenshots(browser, fixed_time):
                 page.screenshot(path=os.path.join(SHOTS, f'{name}-{scheme}-{width}.png'))
                 if name == 'pr-long':
                     page.locator('.rv-tl').screenshot(path=os.path.join(SHOTS, f'timeline-{scheme}-{width}.png'))
+                    page.goto(url(f'pr/{fake_ref("long")}?from=0&to=34'))  # wide range: the bar under every item
+                    wait_pr_ready(page)
+                    page.wait_for_timeout(300)
+                    page.locator('.rv-tl').screenshot(path=os.path.join(SHOTS, f'timeline-range-{scheme}-{width}.png'))
                 if name != 'pr':
                     continue
                 page.evaluate('() => { const f = document.querySelector(".rv-diff .rv-file:not(.folded)") || document.querySelector(".rv-diff .rv-file");'
@@ -1302,6 +1306,24 @@ def run_checks(page):
             fold.click()
             expect(page.locator('.rv-track .rv-v:not(.base)')).to_have_count(total)
         long_pr(page)
+
+        @check('range bar: every item draws it at the same height, folds and gaps included')
+        def range_bar_aligned(page):
+            ref = fake_ref('long')
+            open_pr(page, ref, '?from=0&to=34')
+            page.reload()  # the previous check expanded the fold; a reload folds again
+            wait_pr_ready(page)
+            page.wait_for_timeout(300)
+            bars = page.evaluate('''() => [...document.querySelectorAll('.rv-track .in, .rv-track .to')]
+                .filter((e) => getComputedStyle(e, '::after').content !== 'none')
+                .map((e) => ({ cls: e.className, bottom: e.getBoundingClientRect().bottom - parseFloat(getComputedStyle(e, '::after').bottom) }))''')
+            kinds = {b['cls'].split()[0] for b in bars}
+            assert {'rv-v', 'rv-gap', 'rv-fold'} <= kinds, kinds
+            lows = [b['bottom'] for b in bars]
+            assert max(lows) - min(lows) <= 0.5, f'range bar heights differ: {sorted(set(round(x, 1) for x in lows))}'
+            track = page.evaluate("() => document.querySelector('.rv-track').getBoundingClientRect().bottom")
+            assert track - max(lows) < 14, 'the bar sits at the bottom of the track row'
+        range_bar_aligned(page)
 
         @check('only rebases since my review: home group and quick re-approval')
         def fast_path(page):
