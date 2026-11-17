@@ -4,6 +4,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-11-17
+
+### Added
+
+- ↻ Refresh on the PR page: reads the PR again (comments, approvals, versions) and says what came in ("1 new version ·
+  2 new comments", "Updated", "Up to date"). The shown diff stays unless its range changed or a new thread lacks its
+  place.
+- Periodic check for news while a PR page is visible: one light read of the PR at the refresh interval of the settings
+  (`revspan.refreshIntervalMinutes`, `review.refreshMinutes` in the browser version), none for a hidden tab. News shows
+  a banner with a Refresh button; the page never changes by itself.
+- Edit your own comments. Reopen a resolved thread from its folded bar.
+- Search the diff (`/`): file names and the lines shown (or whole files), with a match count per file and Enter /
+  Shift+Enter to move across matches.
+- Mark all viewed (button of the file list or `Shift+V`): every listed file in one request.
+- Tasks tab: the PR's Bitbucket tasks, read when the tab is opened; add, tick, reopen and delete tasks, with the open
+  count on the tab (only your own tasks can be deleted).
+- Rebase and merge-conflict chips in the PR header for any open PR: "Needs rebase on master" when the destination moved
+  since the PR's base, "⚠ Conflicts with master · N files" when Bitbucket reports merge conflicts (a click opens the
+  first conflicting file, marked in the file list).
+- Syntax highlighting with the VS Code Dark+ / Light+ themes for the common languages.
+- Timeline legend and a short two-line version tooltip.
+- VS Code: each PR opens in its own editor tab (the home page and settings share the "Revspan" tab); opening a PR that
+  already has a tab shows it, and Reload Window restores every tab without duplicates. The "My PRs" view shows when it
+  is loading.
+
+### Changed
+
+- Writes show at once: a comment, a reply, a resolution, an edit, a deletion, an approval, a change request, "Mark as
+  reviewed" and task changes appear before Bitbucket answers (put back with the error if it refuses), then a background
+  read confirms them. The review buttons then act on the new state.
+- Loading is visible: a range not computed yet keeps the current diff with a progress bar, then shows placeholder files
+  after 200 ms.
+- The diff toolbar stays under the timeline while scrolling.
+- Added and removed files are always shown unified, even in side-by-side view.
+- Contributor subgroups of the home are sorted alphabetically.
+- The "My PRs" view no longer has an "Open a PR (URL)" title button (the home page has the URL field; the command
+  stays), and the home page no longer shows the top bar.
+
+### Fixed
+
+- Comments no longer count as a review: only an approval, a change request or "Mark as reviewed" sets your last
+  review, so people who only commented get no "new" badges and their PRs stay in "To review".
+
+### Performance
+
+- Reopening a PR within the refresh interval reads nothing from Bitbucket: the loaded PR and its comparisons are kept
+  in memory for that interval (a write, ↻ or a later open reads again).
+- The presets (since your review, last version, all) are computed in the background for a PR of up to 30 files, while
+  the page is visible, so switching to them is instant.
+- Merge conflicts are read only for a PR behind its destination, once per pair of source and destination heads, and
+  never hold the page: the read gets 5 s with no retry, a slow answer only leaves the chip out.
+- Task writes are confirmed by one light read (the open count) instead of a full reload of the PR.
+- The notifier's version check reuses the activity the home just read (19 requests after a code push, was 21).
+- A new version keeps the cached comparisons whose versions did not change.
+- Opening a local file from VS Code reads nothing while the PR is loaded.
+- Large diffs render progressively, without blocking the page.
+
 ## [3.3.0] - 2026-11-12
 
 ### Added
