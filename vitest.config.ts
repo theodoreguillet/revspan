@@ -1,3 +1,4 @@
+import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -6,6 +7,8 @@ export default defineConfig({
             { test: { name: 'unit', include: ['test/unit/**/*.test.ts'], environment: 'node' } },
             { test: { name: 'integration', include: ['test/integration/**/*.test.ts'], environment: 'node' } },
             {
+                // Components (.vue) can be mounted in the web tests.
+                plugins: [vue()],
                 test: {
                     name: 'web',
                     include: ['test/web/**/*.test.ts'],

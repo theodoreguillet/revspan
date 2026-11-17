@@ -320,7 +320,53 @@ def screenshots(browser, fixed_time):
                 if name == 'purged':
                     page.locator('[data-legend]').screenshot(path=os.path.join(SHOTS, f'legend-{scheme}.png'))
         context.close()
+    change_shots(browser, fixed_time)
     log(f'      screenshots in {SHOTS}')
+
+
+# VS Code Dark+ colors of a webview (the variables VS Code sets), to see the page as in the extension.
+VSCODE_DARK_PLUS = {
+    'editor-background': '#1e1e1e', 'foreground': '#cccccc', 'descriptionForeground': '#9d9d9d', 'sideBar-background': '#252526',
+    'panel-border': 'rgba(128,128,128,.35)', 'textLink-foreground': '#3794ff', 'button-background': '#0e639c', 'button-foreground': '#ffffff',
+    'diffEditor-insertedLineBackground': 'rgba(155,185,85,.2)', 'diffEditor-removedLineBackground': 'rgba(255,0,0,.2)',
+    'diffEditor-insertedTextBackground': 'rgba(156,204,44,.2)', 'diffEditor-removedTextBackground': 'rgba(255,0,0,.2)',
+    'editor-font-family': 'Menlo, Monaco, "Courier New", monospace',
+}
+
+
+def change_shots(browser, fixed_time):
+    """Changed lines of the main PR (one band per changed range): light, dark, and VS Code Dark+ colors."""
+    for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
+        context = browser.new_context(viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+        page = context.new_page()
+        if fixed_time:
+            page.clock.set_fixed_time(fixed_time)
+        page.goto(url(f'pr/{MAIN_PR}'))
+        wait_pr_ready(page)
+        if vscode:
+            page.evaluate('''(vars) => {
+                for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(`--vscode-${k}`, v);
+                document.body.classList.add('vscode-dark');
+            }''', VSCODE_DARK_PLUS)
+        band = page.locator('.rv-diff .rv-l em').first
+        band.wait_for(state='attached')
+        page.wait_for_selector('.rv-l .c span[style*="color"]', state='attached', timeout=10000)
+        band.evaluate('(em) => em.scrollIntoView({ block: "center" })')
+        page.wait_for_timeout(300)
+        # The changed rows around the band, with the context row above them.
+        clip = band.evaluate('''(em) => {
+            const row = em.closest('.rv-l');
+            const rows = [...row.closest('.rv-file').querySelectorAll('.rv-l')];
+            let from = rows.indexOf(row);
+            let to = from;
+            while (from > 0 && rows[from - 1].matches('.r, .a')) from--;
+            while (to < rows.length - 1 && rows[to + 1].matches('.r, .a')) to++;
+            const first = rows[Math.max(0, from - 1)].getBoundingClientRect();
+            const last = rows[to].getBoundingClientRect();
+            return { x: first.left, y: first.top, width: Math.min(first.width, 760), height: last.bottom - first.top };
+        }''')
+        page.screenshot(path=os.path.join(SHOTS, f'diff-change-{name}.png'), clip=clip)
+        context.close()
 
 
 # ---------------------------------------------------------------------------
@@ -620,6 +666,27 @@ def run_checks(page):
             page.emulate_media(color_scheme='light')
         page.wait_for_function('c => { const e = document.querySelector(\'.rv-l .c span[style*="color"]\'); return e && getComputedStyle(e).color === c; }', arg=light, timeout=10000)
     syntax_colors(page)
+
+    @check('diff: one band (<em>) per changed range, across the syntax tokens it covers')
+    def change_bands(page):
+        changed = [(f, ln) for f in cmp['files'] if f['path'].endswith('.ts') for h in f['hunks'] for ln in h['lines'] if ln['hl'] and not ln.get('noEol')]
+        assert changed, 'no changed range in the .ts files of the PR'
+        spans_tokens = False
+        for f, ln in changed:
+            side = 'a' if ln['t'] == '+' else 'r'
+            number = ln['n'] if ln['t'] == '+' else ln['o']
+            attr = 'data-n' if ln['t'] == '+' else 'data-o'
+            code = page.locator(f'.rv-file[data-path="{f["path"]}"] .rv-l.{side}[{attr}="{number}"] .c')
+            code.scroll_into_view_if_needed()
+            expect(code.locator('span[style*="color"]').first).to_be_attached(timeout=10000)
+            bands = code.locator('em')
+            expect(bands).to_have_count(len(ln['hl']))
+            texts = bands.all_text_contents()
+            assert texts == [ln['text'][s:e] for s, e in ln['hl']], f'{texts} for {ln["hl"]} in {ln["text"]!r}'
+            # Several non-empty children: the band wraps several tokens (Vue's empty fragment anchors aside).
+            spans_tokens = spans_tokens or code.evaluate('c => [...c.querySelectorAll("em")].some((em) => [...em.childNodes].filter((n) => n.textContent).length > 1)')
+        assert spans_tokens, 'no band covers several syntax tokens: the check proves nothing'
+    change_bands(page)
 
     @check('"whole file" context then 3 lines')
     def full_context(page):

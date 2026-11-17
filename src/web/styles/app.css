@@ -3,8 +3,8 @@
     color-scheme: light;
     --bg-primary: #f5f5f7; --bg-secondary: #ffffff; --bg-tertiary: #e5e5e7; --border: #d1d1d6;
     --text-primary: #1d1d1f; --text-secondary: #6e6e73; --text-tertiary: #aeaeb2; --accent: #0071e3; --selected-bg: #e8f4fd;
-    --rv-add: #1a7f37; --rv-add-bg: rgba(46,160,67,.14); --rv-add-hl: rgba(46,160,67,.32);
-    --rv-del: #cf222e; --rv-del-bg: rgba(248,81,73,.13); --rv-del-hl: rgba(248,81,73,.32);
+    --rv-add: #1a7f37; --rv-add-bg: rgba(46,160,67,.14); --rv-add-hl: rgba(46,160,67,.18);
+    --rv-del: #cf222e; --rv-del-bg: rgba(248,81,73,.13); --rv-del-hl: rgba(248,81,73,.18);
     --rv-rebase: #bc4c00; --rv-rebase-bg: rgba(251,143,68,.16); --rv-new: #0969da;
     --rv-range: rgba(9,105,218,.10); --rv-star: #9a6700; --rv-ok: #1f883d; --rv-ok-hover: #1a7f37; --rv-danger-bg: #fff1f0; --rv-danger-border: #ffccc7;
     --rv-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -23,8 +23,8 @@
         color-scheme: dark;
         --bg-primary: #1d1d1f; --bg-secondary: #2d2d2f; --bg-tertiary: #3d3d3f; --border: #424245;
         --text-primary: #f5f5f7; --text-secondary: #98989d; --text-tertiary: #6e6e73; --accent: #0a84ff; --selected-bg: rgba(10,132,255,.15);
-        --rv-add: #3fb950; --rv-add-bg: rgba(46,160,67,.17); --rv-add-hl: rgba(46,160,67,.40);
-        --rv-del: #f85149; --rv-del-bg: rgba(248,81,73,.15); --rv-del-hl: rgba(248,81,73,.40);
+        --rv-add: #3fb950; --rv-add-bg: rgba(46,160,67,.17); --rv-add-hl: rgba(46,160,67,.25);
+        --rv-del: #f85149; --rv-del-bg: rgba(248,81,73,.15); --rv-del-hl: rgba(248,81,73,.22);
         --rv-rebase: #f0883e; --rv-rebase-bg: rgba(240,136,62,.18); --rv-new: #58a6ff; --rv-range: rgba(56,139,253,.16); --rv-star: #e3b341;
         --rv-ok: #238636; --rv-ok-hover: #2ea043; --rv-danger-bg: rgba(248,81,73,.12); --rv-danger-border: rgba(248,81,73,.4);
         --rv-match-bg: rgba(255,210,0,.26); --rv-match-cur-bg: rgba(255,150,0,.55); --rv-match-cur-border: #f0883e;
@@ -600,8 +600,9 @@ body.vscode-light, body.vscode-dark, body.vscode-high-contrast {
     --rv-star: var(--vscode-charts-yellow, #cca700);
     --rv-add-bg: var(--vscode-diffEditor-insertedLineBackground, rgba(155,185,85,.2));
     --rv-del-bg: var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,.2));
-    --rv-add-hl: var(--vscode-diffEditor-insertedTextBackground, rgba(156,204,44,.25));
-    --rv-del-hl: var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,.25));
+    /* changed words: the theme's color, a little lighter (Dark+ .2 → .17); one band per range over the line color */
+    --rv-add-hl: color-mix(in srgb, var(--vscode-diffEditor-insertedTextBackground, rgba(156,204,44,.2)) 85%, transparent);
+    --rv-del-hl: color-mix(in srgb, var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,.2)) 85%, transparent);
     --rv-rebase-bg: color-mix(in srgb, var(--rv-rebase) 18%, transparent);
     --rv-range: color-mix(in srgb, var(--vscode-focusBorder) 16%, transparent);
     --rv-danger-bg: var(--vscode-inputValidation-errorBackground, rgba(248,81,73,.12));

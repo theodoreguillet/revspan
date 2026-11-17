@@ -41,6 +41,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   after 200 ms.
 - The diff toolbar stays under the timeline while scrolling.
 - Added and removed files are always shown unified, even in side-by-side view.
+- Changed lines mark only the words that changed, each change as one light band even across several syntax colors; a
+  removed line is compared with the most similar added line around it, and lines that differ too much keep only the
+  line color.
 - Contributor subgroups of the home are sorted alphabetically.
 - The "My PRs" view no longer has an "Open a PR (URL)" title button (the home page has the URL field; the command
   stays), and the home page no longer shows the top bar.

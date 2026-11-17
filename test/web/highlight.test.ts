@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHighlighterCore } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import type { DiffLine } from '../../src/shared/api.ts';
-import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, nextJob, partStyle, tokenizeHunk } from '../../src/web/lib/highlight.ts';
+import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, nextJob, partStyle, tokenizeHunk, withBands } from '../../src/web/lib/highlight.ts';
 import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../../src/web/services/highlighter.ts';
 
 const line = (t: DiffLine['t'], text: string, hl: [number, number][] = []): DiffLine => ({ t, o: null, n: null, text, hl });
@@ -45,6 +45,20 @@ describe('mergeTokens', () => {
             { text: 'a', color: '#111111', hl: false }, { text: ';', hl: false }, { text: '\r', hl: false },
         ]);
         expect(mergeTokens('abc', [{ content: 'xyz', color: '#111111' }], [[0, 1]])).toEqual([{ text: 'a', hl: true }, { text: 'bc', hl: false }]);
+    });
+
+    it('withBands gathers the parts of each change range into one band, whatever their tokens', () => {
+        const tokens = [{ content: 'call', color: '#111111' }, { content: '(' }, { content: 'a', color: '#222222' }, { content: ', ' }, { content: 'b', color: '#222222' }, { content: ');' }];
+        const parts = mergeTokens('call(a, b);', tokens, [[0, 2], [6, 11]]);
+        expect(withBands(parts)).toEqual([
+            { band: [{ text: 'ca', color: '#111111', hl: true }] },
+            { text: 'll', color: '#111111', hl: false },
+            { text: '(', hl: false },
+            { text: 'a', color: '#222222', hl: false },
+            { band: [{ text: ', ', hl: true }, { text: 'b', color: '#222222', hl: true }, { text: ');', hl: true }] },
+        ]);
+        expect(withBands(mergeTokens('abc', [], []))).toEqual([{ text: 'abc', hl: false }]);
+        expect(withBands([])).toEqual([]);
     });
 
     it('partStyle writes the inline style of a colored part, nothing for plain text', () => {

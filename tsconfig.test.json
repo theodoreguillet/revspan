@@ -24,6 +24,7 @@
         "src/web/i18n/**/*.ts",
         "src/web/services/**/*.ts",
         "src/web/composables/**/*.ts",
+        "src/web/components/DiffCode.vue",
         "vite.config.ts",
         "vitest.config.ts",
         "src/extension/**/*.ts"

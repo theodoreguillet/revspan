@@ -171,6 +171,32 @@ export function mergeTokens(text: string, tokens: readonly CodeToken[], hl: read
     return search.length ? splitAtMarks(out, search) : out;
 }
 
+/** Consecutive parts inside one change range, drawn as one band. */
+export interface Band {
+    band: Part[];
+}
+
+/**
+ * The parts with each change range gathered into one band (one <em> around its colored tokens, so that it draws one
+ * continuous background); the parts outside stay as they are.
+ */
+export function withBands(parts: readonly Part[]): (Part | Band)[] {
+    const out: (Part | Band)[] = [];
+    let band: Band | null = null;
+    for (const p of parts) {
+        if (!p.hl) {
+            band = null;
+            out.push(p);
+        } else if (band) {
+            band.band.push(p);
+        } else {
+            band = { band: [p] };
+            out.push(band);
+        }
+    }
+    return out;
+}
+
 /** Cuts the parts at the boundaries of the marks and tags the pieces inside a mark. */
 function splitAtMarks(parts: readonly Part[], marks: readonly TextMark[]): Part[] {
     const out: Part[] = [];
