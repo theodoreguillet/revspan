@@ -464,31 +464,67 @@ describe('BitbucketClient: tasks', () => {
 describe('BitbucketClient: merge conflicts of a PR', () => {
     const conflictsUrl = `${BASE}/repositories/acme/records-api/pullrequests/7/conflicts`;
     const fileConflicts = `${BASE}/repositories/acme/records-api/file-conflicts/abc123..def456`;
-    const entry = (path: string, scenario = 'content'): unknown => ({ type: 'file_conflict', path, scenario, message: 'File modified in both source and destination' });
+    // shape of Bitbucket's answer: { size, values: [{ path, scenario, message }] }
+    const entry = (path: string, scenario = 'content'): unknown => ({ path, scenario, message: 'File modified in both source and destination' });
+    const heads = { sourceHead: 'abc123', destHead: 'def456' };
 
     it('reads every page of the PR conflicts route (Bitbucket redirects it to file-conflicts) and keeps each path once', async () => {
         const fetchImpl = mockFetch(
             new Response(null, { status: 302, headers: { location: `${fileConflicts}?pagelen=100` } }),
-            jsonResponse(200, { values: [entry('src/App.ts'), entry('README.md', 'delete_modify')], next: `${fileConflicts}?pagelen=100&page=2` }),
-            jsonResponse(200, { values: [entry('src/App.ts', 'binary'), entry('docs/old.md', 'rename_delete')] }),
+            jsonResponse(200, { size: 4, values: [entry('src/App.ts'), entry('README.md', 'delete_modify')], next: `${fileConflicts}?pagelen=100&page=2` }),
+            jsonResponse(200, { size: 4, values: [entry('src/App.ts', 'binary'), entry('docs/old.md', 'rename_delete')] }),
         );
-        expect(await makeClient(fetchImpl).mergeConflicts('acme', 'records-api', 7)).toEqual(['src/App.ts', 'README.md', 'docs/old.md']);
+        expect(await makeClient(fetchImpl).mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['src/App.ts', 'README.md', 'docs/old.md']);
         expect(fetchImpl).toHaveBeenCalledTimes(3);
         expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(`${conflictsUrl}?pagelen=100`);
     });
 
     it('no conflict: an empty list; a nameless entry is ignored', async () => {
-        expect(await makeClient(mockFetch(jsonResponse(200, { values: [] }))).mergeConflicts('acme', 'records-api', 7)).toEqual([]);
-        expect(await makeClient(mockFetch(jsonResponse(200, { values: [{ type: 'file_conflict' }, entry('a.ts')] }))).mergeConflicts('acme', 'records-api', 7)).toEqual(['a.ts']);
+        expect(await makeClient(mockFetch(jsonResponse(200, { size: 0, values: [] }))).mergeConflicts('acme', 'records-api', 7, heads)).toEqual([]);
+        expect(await makeClient(mockFetch(jsonResponse(200, { values: [{ scenario: 'content' }, entry('a.ts')] }))).mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
     });
 
-    it('kept a few seconds (one read for concurrent or close calls), forgotten with the PR\'s live data', async () => {
+    it('read once per pair of heads: kept across the PR\'s live data, read again for another destination head', async () => {
         const fetchImpl = mockFetch(jsonResponse(200, { values: [entry('a.ts')] }), jsonResponse(200, { values: [] }));
         const client = makeClient(fetchImpl);
-        await Promise.all([client.mergeConflicts('acme', 'records-api', 7), client.mergeConflicts('acme', 'records-api', 7)]);
+        await Promise.all([client.mergeConflicts('acme', 'records-api', 7, heads), client.mergeConflicts('acme', 'records-api', 7, heads)]);
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         client.invalidatePr('acme', 'records-api', 7);
-        expect(await client.mergeConflicts('acme', 'records-api', 7)).toEqual([]);
+        expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(await client.mergeConflicts('acme', 'records-api', 7, { ...heads, destHead: 'fed789' })).toEqual([]);
         expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('no retry: a 503 rejects at once, and the failure is not kept', async () => {
+        const fetchImpl = mockFetch(new Response('', { status: 503 }), jsonResponse(200, { values: [entry('a.ts')] }));
+        const client = makeClient(fetchImpl);
+        await expect(client.mergeConflicts('acme', 'records-api', 7, heads)).rejects.toMatchObject({ code: 'BB_ERROR' });
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+        expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
+    });
+
+    it('a slow answer rejects after the short deadline and its request is aborted', async () => {
+        vi.useFakeTimers();
+        try {
+            let aborted = false;
+            const fetchImpl = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => {
+                    aborted = true;
+                    reject(new Error('aborted'));
+                });
+            }));
+            const client = new BitbucketClient({ baseUrl: BASE, auth: { email: 'a@acme.test', token: TOKEN }, cache: new Cache(null), fetchImpl, conflictsTimeoutMs: 1000 });
+            const read = client.mergeConflicts('acme', 'records-api', 7, heads);
+            const outcome = read.then(() => 'answered', (error: AppError) => error.code);
+            await vi.advanceTimersByTimeAsync(999);
+            expect(aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await outcome).toBe('BB_UNREACHABLE');
+            expect(aborted).toBe(true);
+            expect(fetchImpl).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

@@ -18,6 +18,7 @@ let clock: number;
 let arm: () => void;
 let service: PrService;
 let store: Store;
+let session: BitbucketSession;
 /** Held (once) before the comments of the PR are answered, to simulate a slow read in flight. */
 let gate: { release: () => void; reached: Promise<void> } | null = null;
 
@@ -44,7 +45,7 @@ beforeEach(async () => {
         return response;
     };
     arm = () => { armed = true; };
-    const session = new BitbucketSession({ store, secrets, cache, baseUrl: fake.url, fetchImpl: slowFetch });
+    session = new BitbucketSession({ store, secrets, cache, baseUrl: fake.url, fetchImpl: slowFetch });
     clock = 1_000_000;
     service = new PrService({ session, store, cache, now: () => clock });
 });
@@ -106,6 +107,8 @@ describe('PrService in-memory cache', () => {
         pushVersion(fake.data, ref.id, {
             commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
         });
+        // the notifier checks versions right after the home read the moved PR's activity again
+        await (await session.getClient()).activity(WS, REPO, ref.id, 0);
         expect(await service.versionKinds(ref)).toHaveLength(3);
     });
 
@@ -123,6 +126,59 @@ describe('PrService in-memory cache', () => {
         // The following compare reuses the post-write load (no third read).
         await service.compare(ref, 1, 2, 3);
         expect(reads()).toMatchObject({ pr: 2, comments: 2 });
+    });
+
+    it('the version check reuses the PR and activity just read by the home (no second activity read)', async () => {
+        const before = reads();
+        // the home's read of this PR's activity (live data, 15 s)
+        await (await session.getClient()).activity(WS, REPO, ref.id, 0);
+        await service.versionKinds(ref);
+        expect(reads().activity - before.activity).toBe(1);
+        expect(reads().pr - before.pr).toBe(1);
+    });
+
+    describe('merge conflicts of a PR behind its destination', () => {
+        const conflictReads = (): number => fake.requests.filter((r) => r.path.endsWith(`/pullrequests/${ref.id}/conflicts`)).length;
+
+        it('read once per pair of heads: a refresh (fresh detail) and a write read them 0 more times', async () => {
+            const first = await service.detail(ref);
+            expect(first.needsRebase).toBe(true);
+            expect(first.mergeConflicts).toEqual([]);
+            expect(conflictReads()).toBe(1);
+            clock += 60_000;
+            await service.detail(ref, { fresh: true });
+            await service.createComment(ref, { raw: 'hello' });
+            expect((await service.detail(ref, { fresh: true })).mergeConflicts).toEqual([]);
+            expect(conflictReads()).toBe(1);
+        });
+
+        it('read again once the source head moves', async () => {
+            await service.detail(ref);
+            pushVersion(fake.data, ref.id, {
+                commit: 'mine:v3', from: 'mine:v1', base: 'mine:m0', changes: { 'src/mine.ts': 'x\ny1\ny2\ny3\n' }, date: '2026-10-20T09:00:00Z',
+            });
+            const pr = fake.data.prs.get(ref.id)!.pr;
+            fake.data.mergeBases.set(`${pr.source?.commit?.hash ?? ''}..${fake.data.branchHeads.get('master') ?? ''}`, pr.destination?.commit?.hash ?? '');
+            expect((await service.detail(ref)).needsRebase).toBe(true);
+            expect(conflictReads()).toBe(2);
+        });
+
+        it('a slow conflicts read does not hold the detail beyond the short deadline: no chip (null)', async () => {
+            const secrets = { kind: 'file', get: async () => FAKE_TOKEN, set: async () => undefined, remove: async () => undefined } as unknown as SecretStore;
+            const cache = new Cache(null);
+            const session = new BitbucketSession({ store, secrets, cache, baseUrl: fake.url, conflictsTimeoutMs: 200 });
+            const quick = new PrService({ session, store, cache, now: () => clock });
+            await fetch(`http://127.0.0.1:${fake.port}/__delay?route=conflicts&ms=3000`);
+            const started = Date.now();
+            const detail = await quick.detail(ref);
+            expect(Date.now() - started).toBeLessThan(1500);
+            expect(detail.needsRebase).toBe(true);
+            expect(detail.mergeConflicts).toBeNull();
+            expect(conflictReads()).toBe(1);
+            // the failure is not kept: the next detail asks again
+            await fetch(`http://127.0.0.1:${fake.port}/__delay?route=conflicts&ms=0`);
+            expect((await quick.detail(ref)).mergeConflicts).toEqual([]);
+        });
     });
 
     it('reads the source branch without a new PR read after detail', async () => {

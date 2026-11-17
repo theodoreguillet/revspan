@@ -17,6 +17,11 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const LIVE_TTL_MS = 15000;
 const BUILD_TTL_MS = 60000;
 const REQUEST_TIMEOUT_MS = 30000;
+/**
+ * The merge conflicts are an extra on the PR page, read while the page waits for its detail: they get this long in all
+ * (redirect and pages included), with no retry, and a slow answer only hides the chip.
+ */
+const CONFLICTS_TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
 
 export interface BitbucketAuth {
@@ -46,7 +51,14 @@ interface RequestOptions {
     query?: Query;
     body?: unknown;
     allow404?: boolean;
+    /** Aborts the request (an overall deadline shared by several requests). */
+    signal?: AbortSignal;
+    /** false: a GET is not retried either (network error, 429, 5xx), the error is thrown at once. */
+    retry?: boolean;
 }
+
+/** Options of a read made of one or several GETs (pagination). */
+type ReadOptions = Pick<RequestOptions, 'signal' | 'retry'>;
 
 function errorFor(status: number, path: string, detail: string): AppError {
     const details = detail ? { detail } : {};
@@ -86,6 +98,29 @@ class Semaphore {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs a read with an overall deadline: past `ms` it rejects (BB_UNREACHABLE) and its requests are aborted, wherever it
+ * is (waiting for a slot, in a request, between pages).
+ */
+async function withDeadline<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort();
+            reject(new AppError(502, 'BB_UNREACHABLE', `Bitbucket did not answer within ${ms} ms`, { detail: 'timeout' }));
+        }, ms);
+    });
+    const work = run(controller.signal);
+    // past the deadline the aborted read rejects too: already answered, nothing to report
+    work.catch(() => undefined);
+    try {
+        return await Promise.race([work, expired]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
 const sha1 = (data: string | Buffer): string => createHash('sha1').update(data).digest('hex');
 
 /** Abbreviation of a head hash in build keys: the PR list gives 12 characters, the activity sometimes the full hash. */
@@ -118,15 +153,17 @@ export class BitbucketClient {
     private readonly fetchImpl: typeof fetch;
     private readonly limiter: Semaphore;
     private readonly prListLimit: PrListLimit;
+    private readonly conflictsTimeoutMs: number;
 
-    /** prListLimit: lowered by the tests to cut a short list. */
-    constructor({ baseUrl = DEFAULT_BASE_URL, auth, cache, concurrency = 6, fetchImpl = fetch, prListLimit = DEFAULT_PR_LIST_LIMIT }: {
+    /** prListLimit and conflictsTimeoutMs: lowered by the tests (a short list, a slow conflicts read). */
+    constructor({ baseUrl = DEFAULT_BASE_URL, auth, cache, concurrency = 6, fetchImpl = fetch, prListLimit = DEFAULT_PR_LIST_LIMIT, conflictsTimeoutMs = CONFLICTS_TIMEOUT_MS }: {
         baseUrl?: string;
         auth: BitbucketAuth;
         cache: Cache;
         concurrency?: number;
         fetchImpl?: typeof fetch;
         prListLimit?: PrListLimit;
+        conflictsTimeoutMs?: number;
     }) {
         this.baseUrl = baseUrl.replace(/\/+$/, '');
         this.auth = auth;
@@ -134,6 +171,7 @@ export class BitbucketClient {
         this.fetchImpl = fetchImpl;
         this.limiter = new Semaphore(concurrency);
         this.prListLimit = prListLimit;
+        this.conflictsTimeoutMs = conflictsTimeoutMs;
     }
 
     private url(path: string, query?: Query): string {
@@ -147,7 +185,7 @@ export class BitbucketClient {
     }
 
     /** Raw request: HTTP response (null if a 404 is allowed). Errors are translated into AppError. */
-    private async send(method: string, path: string, { query, body, allow404 = false }: RequestOptions, accept: string): Promise<Response | null> {
+    private async send(method: string, path: string, { query, body, allow404 = false, signal, retry = true }: RequestOptions, accept: string): Promise<Response | null> {
         const url = this.url(path, query);
         const headers: Record<string, string> = {
             Authorization: `Basic ${Buffer.from(`${this.auth.email}:${this.auth.token}`).toString('base64')}`,
@@ -163,22 +201,23 @@ export class BitbucketClient {
             for (let attempt = 0; ; attempt++) {
                 let response: Response;
                 try {
+                    signal?.throwIfAborted();
                     response = await this.fetchFollowingRedirects(url, {
                         method,
                         headers,
                         body: body === undefined ? undefined : JSON.stringify(body),
-                    });
+                    }, signal);
                 } catch (error) {
                     if (error instanceof AppError) {
                         throw error;
                     }
-                    if (idempotent && attempt < 2) {
+                    if (idempotent && retry && attempt < 2) {
                         await sleep(500 * (attempt + 1));
                         continue;
                     }
                     throw new AppError(502, 'BB_UNREACHABLE', `Bitbucket unreachable (${(error as Error).message})`, { detail: (error as Error).message });
                 }
-                const retryable = response.status === 429 || (idempotent && response.status >= 500);
+                const retryable = retry && (response.status === 429 || (idempotent && response.status >= 500));
                 if (retryable && attempt < 3) {
                     const retryAfter = Number(response.headers.get('retry-after'));
                     await sleep(retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : 1000 * 2 ** attempt);
@@ -201,7 +240,7 @@ export class BitbucketClient {
      * Follows at most MAX_REDIRECTS redirects (GET only). The Authorization header is sent only to the origin
      * of the configured API, never to another domain (file storage, CDN).
      */
-    private async fetchFollowingRedirects(url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<Response> {
+    private async fetchFollowingRedirects(url: string, init: { method: string; headers: Record<string, string>; body?: string }, signal?: AbortSignal): Promise<Response> {
         const apiOrigin = new URL(this.baseUrl).origin;
         let current = url;
         for (let hops = 0; ; hops++) {
@@ -213,7 +252,7 @@ export class BitbucketClient {
                 ...init,
                 headers,
                 redirect: 'manual',
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                signal: signal ? AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             });
             const location = response.headers.get('location');
             if (response.status < 300 || response.status >= 400 || !location) {
@@ -242,22 +281,22 @@ export class BitbucketClient {
         }
     }
 
-    private async getJson<T>(path: string, query?: Query): Promise<T> {
-        const value = await this.json<T>('GET', path, query ? { query } : {});
+    private async getJson<T>(path: string, query?: Query, options: ReadOptions = {}): Promise<T> {
+        const value = await this.json<T>('GET', path, query ? { query, ...options } : options);
         if (value === null) {
             throw errorFor(502, path, 'empty response');
         }
         return value;
     }
 
-    private async getAllPages<T>(path: string, query: Query = {}, maxPages = 40): Promise<T[]> {
-        return (await this.getPages<T>(path, query, maxPages)).values;
+    private async getAllPages<T>(path: string, query: Query = {}, maxPages = 40, options: ReadOptions = {}): Promise<T[]> {
+        return (await this.getPages<T>(path, query, maxPages, options)).values;
     }
 
     /** Values of at most maxPages pages; truncated: a next page was still announced at the cap. */
-    private async getPages<T>(path: string, query: Query, maxPages: number): Promise<{ values: T[]; truncated: boolean }> {
+    private async getPages<T>(path: string, query: Query, maxPages: number, options: ReadOptions = {}): Promise<{ values: T[]; truncated: boolean }> {
         const values: T[] = [];
-        let page = await this.getJson<BbPage<T>>(path, query);
+        let page = await this.getJson<BbPage<T>>(path, query, options);
         for (let i = 1; ; i++) {
             for (const value of page.values ?? []) {
                 values.push(value);
@@ -269,7 +308,7 @@ export class BitbucketClient {
             if (!page.next.startsWith(`${this.baseUrl}/`)) {
                 throw new AppError(502, 'BB_ERROR', `Unexpected Bitbucket pagination: ${new URL(page.next).origin}`);
             }
-            page = await this.getJson<BbPage<T>>(page.next);
+            page = await this.getJson<BbPage<T>>(page.next, undefined, options);
         }
     }
 
@@ -309,14 +348,16 @@ export class BitbucketClient {
     }
 
     /**
-     * Paths Bitbucket reports in conflict when merging the PR into its destination (every page, each path once).
-     * Bitbucket redirects the route to the repository's file-conflicts of the PR's revspec.
+     * Paths Bitbucket reports in conflict when merging the PR into its destination (every page, each path once, whatever
+     * the scenario). Bitbucket redirects the route to the repository's file-conflicts of the PR's revspec, so the answer
+     * only depends on the two heads: it is kept per pair (never dropped with the PR's live data) and read once per pair.
+     * The read gets conflictsTimeoutMs in all, with no retry: it rejects past that.
      */
-    mergeConflicts(ws: string, repo: string, id: number): Promise<string[]> {
-        return this.cache.getLive(`live:${ws}/${repo}#${id}:conflicts`, LIVE_TTL_MS, async () => {
-            const values = await this.getAllPages<BbFileConflict>(`${this.prPath(ws, repo, id)}/conflicts`, { pagelen: 100 }, 10);
+    mergeConflicts(ws: string, repo: string, id: number, { sourceHead, destHead }: { sourceHead: string; destHead: string }): Promise<string[]> {
+        return this.cache.getOrCompute(`conflicts:${ws}/${repo}#${id}:${sourceHead}..${destHead}`, () => withDeadline(this.conflictsTimeoutMs, async (signal) => {
+            const values = await this.getAllPages<BbFileConflict>(`${this.prPath(ws, repo, id)}/conflicts`, { pagelen: 100 }, 10, { signal, retry: false });
             return [...new Set(values.map((v) => v.path).filter((path): path is string => !!path))];
-        });
+        }));
     }
 
     /**
@@ -381,6 +422,11 @@ export class BitbucketClient {
 
     invalidatePr(ws: string, repo: string, id: number): void {
         this.cache.invalidateLive(`live:${ws}/${repo}#${id}:`);
+    }
+
+    /** Forgets the PR object read lately (its activity, comments and tasks stay). */
+    forgetPullRequest(ws: string, repo: string, id: number): void {
+        this.cache.invalidateLive(`live:${ws}/${repo}#${id}:pr`);
     }
 
     // ---------- Immutable data (disk cache) ----------

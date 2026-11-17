@@ -30,6 +30,13 @@ interface LoadOptions {
 /** The versions only (summary, version types, "reviewed" mark). */
 const VERSIONS_ONLY: LoadOptions = { comments: false };
 
+/** How loadCached loads: see there. */
+interface LoadMode {
+    fresh?: boolean;
+    keepHigher?: boolean;
+    keepActivity?: boolean;
+}
+
 const MINUTE_MS = 60 * 1000;
 
 /** What a loaded PR holds, from least to most: versions only, plus comments, plus build checks and rebase state. */
@@ -106,9 +113,10 @@ export class PrService {
      * Type of each version, oldest first, with its commit (the notifier tells code from rebases since a given head).
      * sinceHead: only the versions after that head are computed (the last one alone if it is no longer there); the
      * others have kind null. Each version summary is kept on disk, so a version is computed once.
+     * The versions are loaded again, but the activity the home read just before (live data, 15 s) is reused.
      */
     async versionKinds(ref: PrRef, sinceHead?: string): Promise<{ hash: string; kind: VersionKind | null }[]> {
-        const { versions, results } = await this.summarize(ref, sinceHead, { fresh: true });
+        const { versions, results } = await this.summarize(ref, sinceHead, { fresh: true, keepActivity: true });
         return versions.map((version, i) => ({ hash: version.hash, kind: results[i]?.kind ?? null }));
     }
 
@@ -116,7 +124,7 @@ export class PrService {
      * Summaries of every version, or of those after sinceHead (null for the others), remembered as version types for the
      * home.
      */
-    private async summarize(ref: PrRef, sinceHead?: string, { fresh = false } = {}): Promise<{ versions: Version[]; results: (VersionSummary | null)[] }> {
+    private async summarize(ref: PrRef, sinceHead?: string, { fresh = false, keepActivity = false } = {}): Promise<{ versions: Version[]; results: (VersionSummary | null)[] }> {
         const { versions, results } = await this.withVersions(ref, async ({ versions }, src) => {
             const wanted = new Set(sinceHead === undefined ? versions : versionsAfter(versions, sinceHead));
             return {
@@ -131,7 +139,7 @@ export class PrService {
                         : summarizeVersion(src, versions, v.index);
                 })),
             };
-        }, VERSIONS_ONLY, fresh ? { fresh, keepHigher: true } : {});
+        }, VERSIONS_ONLY, fresh ? { fresh, keepHigher: true, keepActivity } : {});
         // Remembers the type of each version for the home page (no recomputation there).
         this.store.updatePrState(prKeyOf(ref), (state) => {
             versions.forEach((version, i) => {
@@ -299,8 +307,10 @@ export class PrService {
      * The loaded PR kept in memory when fresh (younger than review.refreshMinutes) and complete enough for the read, otherwise loaded and
      * kept. Concurrent reads share one load. fresh: always loads and replaces the entry, except with keepHigher, which
      * leaves a higher-level entry alone (the notifier's version check must not downgrade what the page loaded).
+     * A new load first drops the client's live data of the PR; keepActivity keeps its activity (the notifier's version
+     * check, right after the home read it).
      */
-    private async loadCached(ref: PrRef, options: LoadOptions, { fresh = false, keepHigher = false }: { fresh?: boolean; keepHigher?: boolean } = {}): Promise<LoadedPr> {
+    private async loadCached(ref: PrRef, options: LoadOptions, { fresh = false, keepHigher = false, keepActivity = false }: LoadMode = {}): Promise<LoadedPr> {
         const client = await this.session.getClient();
         const entries = this.loaded.get(client) ?? new Map<string, LoadedEntry>();
         this.loaded.set(client, entries);
@@ -319,8 +329,14 @@ export class PrService {
         if (!fresh && kept && kept.level >= level && kept.reviewedHash === reviewedHash) {
             return kept.promise;
         }
-        // The client's 15 s live data must not answer in place of a load that is meant to be fresh.
-        client.invalidatePr(ref.workspace, ref.repo, ref.id);
+        // The client's 15 s live data must not answer in place of a load that is meant to be fresh. keepActivity: the
+        // activity the home just read is reused, the PR itself read again (a PR read after the activity is never older:
+        // a push in between shows as its head).
+        if (keepActivity) {
+            client.forgetPullRequest(ref.workspace, ref.repo, ref.id);
+        } else {
+            client.invalidatePr(ref.workspace, ref.repo, ref.id);
+        }
         const promise = this.load(ref, options);
         const entry: LoadedEntry = { at: now, level, reviewedHash, promise };
         if (!(keepHigher && kept && kept.level > level)) {
@@ -385,7 +401,7 @@ export class PrService {
      * Computation over the PR's versions. A commit cached then erased by Bitbucket only shows up here (404 on its
      * contents): it is forgotten along with what depends on it, the PR reloaded (the version becomes unavailable) and the computation resumed.
      */
-    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>, options: LoadOptions = {}, load: { fresh?: boolean; keepHigher?: boolean } = {}): Promise<T> {
+    private async withVersions<T>(ref: PrRef, run: (loaded: LoadedPr, src: CompareSource) => Promise<T>, options: LoadOptions = {}, load: LoadMode = {}): Promise<T> {
         let loaded = await this.loadCached(ref, options, load);
         const purged = new Set<string>();
         for (;;) {

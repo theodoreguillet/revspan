@@ -20,16 +20,21 @@ export class BitbucketSession {
     private readonly baseUrl: string;
     private readonly fetchImpl: typeof fetch;
     private readonly prListLimit: PrListLimit | undefined;
+    private readonly conflictsTimeoutMs: number | undefined;
     private connection: Connection | null = null;
 
-    /** prListLimit: open PRs read per repository (lowered by the tests; the client's default otherwise). */
-    constructor({ store, secrets, cache, baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch, prListLimit }: {
+    /**
+     * prListLimit: open PRs read per repository; conflictsTimeoutMs: deadline of the merge conflicts read (both lowered by
+     * the tests; the client's defaults otherwise).
+     */
+    constructor({ store, secrets, cache, baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch, prListLimit, conflictsTimeoutMs }: {
         store: Store;
         secrets: SecretStore;
         cache: Cache;
         baseUrl?: string;
         fetchImpl?: typeof fetch;
         prListLimit?: PrListLimit;
+        conflictsTimeoutMs?: number;
     }) {
         this.store = store;
         this.secrets = secrets;
@@ -37,6 +42,7 @@ export class BitbucketSession {
         this.baseUrl = baseUrl;
         this.fetchImpl = fetchImpl;
         this.prListLimit = prListLimit;
+        this.conflictsTimeoutMs = conflictsTimeoutMs;
     }
 
     async hasToken(): Promise<boolean> {
@@ -83,7 +89,8 @@ export class BitbucketSession {
         }
         this.connection = {
             email,
-            client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl, prListLimit: this.prListLimit }),
+            client: new BitbucketClient({ baseUrl: this.baseUrl, auth: { email, token }, cache: this.cache, fetchImpl: this.fetchImpl, prListLimit: this.prListLimit,
+                conflictsTimeoutMs: this.conflictsTimeoutMs }),
         };
         return this.connection;
     }

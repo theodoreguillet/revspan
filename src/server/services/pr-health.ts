@@ -23,6 +23,29 @@ const sameCommit = (a: string, b: string): boolean => a.startsWith(b) || b.start
 /** Head of a destination branch (the home shares one read per repository and branch between its PRs). */
 export type BranchHeadReader = (branch: string) => Promise<string | null>;
 
+/** Rebase state read from the destination branch: behind or not, and the destination head it was compared with. */
+interface RebaseRead {
+    needsRebase: boolean | null;
+    /** Head of the destination branch (null when unknown). */
+    destHead: string | null;
+}
+
+async function readRebase(client: BitbucketClient, ref: PrRef, headHash: string, destBranch: string, branchHead: BranchHeadReader): Promise<RebaseRead> {
+    if (!headHash || !destBranch) {
+        return { needsRebase: null, destHead: null };
+    }
+    try {
+        const destHead = await branchHead(destBranch);
+        if (!destHead) {
+            return { needsRebase: null, destHead: null };
+        }
+        const base = await client.mergeBase(ref.workspace, ref.repo, headHash, destHead);
+        return { needsRebase: base ? !sameCommit(base, destHead) : null, destHead };
+    } catch {
+        return { needsRebase: null, destHead: null };
+    }
+}
+
 /** True when the destination branch moved since the PR's base; null when it cannot be told (unknown head, branch or merge base, read failure). */
 export async function loadNeedsRebase(
     client: BitbucketClient,
@@ -31,19 +54,7 @@ export async function loadNeedsRebase(
     destBranch: string,
     branchHead: BranchHeadReader = (branch) => client.branchHead(ref.workspace, ref.repo, branch),
 ): Promise<boolean | null> {
-    if (!headHash || !destBranch) {
-        return null;
-    }
-    try {
-        const destHead = await branchHead(destBranch);
-        if (!destHead) {
-            return null;
-        }
-        const base = await client.mergeBase(ref.workspace, ref.repo, headHash, destHead);
-        return base ? !sameCommit(base, destHead) : null;
-    } catch {
-        return null;
-    }
+    return (await readRebase(client, ref, headHash, destBranch, branchHead)).needsRebase;
 }
 
 /** Rebase state of an open PR on its page. */
@@ -57,15 +68,16 @@ export const NO_REBASE_STATE: RebaseState = { needsRebase: null, mergeConflicts:
 
 /**
  * Needs-rebase, then the merge conflicts only when the PR is behind its destination: a PR based on the destination's
- * head cannot conflict, so an up-to-date PR costs no conflicts read.
+ * head cannot conflict, so an up-to-date PR costs no conflicts read. The conflicts are kept per pair of source and
+ * destination heads (read once per pair), and a slow or failed read gives null (no chip) instead of holding the page.
  */
 export async function loadRebaseState(client: BitbucketClient, ref: PrRef, headHash: string, destBranch: string): Promise<RebaseState> {
-    const needsRebase = await loadNeedsRebase(client, ref, headHash, destBranch);
-    if (needsRebase !== true) {
+    const { needsRebase, destHead } = await readRebase(client, ref, headHash, destBranch, (branch) => client.branchHead(ref.workspace, ref.repo, branch));
+    if (needsRebase !== true || !destHead) {
         return { needsRebase, mergeConflicts: null };
     }
     try {
-        return { needsRebase, mergeConflicts: await client.mergeConflicts(ref.workspace, ref.repo, ref.id) };
+        return { needsRebase, mergeConflicts: await client.mergeConflicts(ref.workspace, ref.repo, ref.id, { sourceHead: headHash, destHead }) };
     } catch {
         return { needsRebase, mergeConflicts: null };
     }

@@ -75,8 +75,9 @@ Common rules:
   read. `PrDetail.needsRebase: boolean | null` is computed like the card's, but for any open PR, mine or not (`null` on
   a merged or declined PR, or when it cannot be told). `PrDetail.mergeConflicts: string[] | null`: the paths Bitbucket
   reports in conflict when merging into the destination (`GET .../pullrequests/{id}/conflicts`, `[]` for none), read
-  only when `needsRebase === true` (a PR based on the destination's head cannot conflict); `null` otherwise or when
-  unreadable.
+  only when `needsRebase === true` (a PR based on the destination's head cannot conflict), once per pair of source
+  and destination heads (kept in the cache); `null` otherwise, when unreadable, or when Bitbucket does not answer
+  within 5 s (the detail never waits longer for it).
 - `Settings.review: ReviewSettings` (`requiredApprovals`, `requiredApprovalsByRepo`, `followed`, `hideUnfollowed`,
   `notifications`, `refreshMinutes`). `PUT /api/settings` accepts a partial `review`, merged into the current values (notifications key
   by key); an invalid value is replaced by its default.
