@@ -454,7 +454,7 @@ export const en = {
     'shortcuts.keysBackChip': '← back',
     'shortcuts.keysHomeSearch': '/',
     'shortcuts.keysVersion': '[ / ]',
-    'shortcuts.keysClick': 'Click (twice)',
+    'shortcuts.keysClick': 'Click, click again',
     'shortcuts.keysExtend': 'Shift + click',
     'shortcuts.keysSend': '⌘/Ctrl + Enter',
     'shortcuts.keysEscape': 'Esc',

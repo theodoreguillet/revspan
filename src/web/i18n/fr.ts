@@ -453,7 +453,7 @@ export const fr: Catalog = {
     'shortcuts.keysBackChip': '← retour',
     'shortcuts.keysHomeSearch': '/',
     'shortcuts.keysVersion': '[ / ]',
-    'shortcuts.keysClick': 'Clic (deux fois)',
+    'shortcuts.keysClick': 'Clic, nouveau clic',
     'shortcuts.keysExtend': 'Maj + clic',
     'shortcuts.keysSend': '⌘/Ctrl + Entrée',
     'shortcuts.keysEscape': 'Échap',
