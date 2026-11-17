@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { inBand, nodeDelta, nodeStates, nodeTooltip, timelineModel, type TimelineItem } from '../../src/web/lib/timeline.ts';
+import { canFold, inBand, nodeDelta, nodeStates, nodeTooltip, timelineModel, type TimelineItem } from '../../src/web/lib/timeline.ts';
 import type { Version, VersionSummary } from '../../src/shared/api.ts';
 import { makeSums, makeVersions, prLong, versionAt } from './fixtures.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
@@ -89,6 +89,19 @@ describe('automatic folding of long PRs', () => {
 
     it('expanded by the user: no more folding', () => {
         expect(timelineModel(fr, { ...input, foldDisabled: true }).some((it) => it.type === 'fold')).toBe(false);
+    });
+
+    it('canFold: true when folding would hide a run, whatever the current expanded state', () => {
+        expect(canFold(input)).toBe(true);
+        expect(canFold({ ...input, foldDisabled: true })).toBe(true);
+        expect(canFold({ ...input, foldDisabled: true, from: 0, to: 34, lastReviewed: null })).toBe(true);
+    });
+
+    it('canFold: false for a short PR, or when the protected versions keep everything visible', () => {
+        const short = makeVersions(8);
+        const shortInput = { versions: short, sums: makeSums(Array(8).fill('code')), lastReviewed: 2, from: 2, to: 8, hideNoCode: false, foldDisabled: true };
+        expect(canFold(shortInput)).toBe(false);
+        expect(canFold({ ...input, foldDisabled: true, from: 1, to: 34, lastReviewed: 1 })).toBe(false);
     });
 
     it('a single-version fold is cancelled', () => {

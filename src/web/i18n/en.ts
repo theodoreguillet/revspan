@@ -205,6 +205,8 @@ export const en = {
     'timeline.today': 'today',
     'timeline.gapTitle': { one: '{count} day without a push', other: '{count} days without a push' },
     'timeline.lastReviewTitle': 'Your last review: v{version}',
+    'timeline.refold': 'Fold',
+    'timeline.refoldTitle': 'Fold the old versions again',
     'timeline.expandTitle': 'Expand these versions',
     'timeline.withCode': '{count} with code',
     'timeline.hiddenTitle': {
@@ -215,7 +217,6 @@ export const en = {
     'timeline.legendRebase': 'rebase',
     'timeline.legendNew': 'new to you',
     'timeline.legendCommit': 'commit',
-    'timeline.legendGone': 'unavailable',
     'timeline.version': 'Version {version}',
     'timeline.versionUnavailable': 'Version {version} (unavailable)',
     'timeline.reviewedByYou': 'reviewed by you',

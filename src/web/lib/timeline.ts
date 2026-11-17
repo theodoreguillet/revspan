@@ -79,6 +79,11 @@ export function nodeStates({ versions, sums, lastReviewed, from, to, hideNoCode,
     return nodes;
 }
 
+/** Folding would hide at least one run of versions (so an expanded timeline can offer to fold again). */
+export function canFold(input: TimelineInput): boolean {
+    return nodeStates({ ...input, foldDisabled: false }).some((node) => node.state === 'folded');
+}
+
 /** Sequence of items to render from left to right. */
 export function timelineModel(tr: Translator, input: TimelineInput): TimelineItem[] {
     const { sums, lastReviewed } = input;

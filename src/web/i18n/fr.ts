@@ -204,6 +204,8 @@ export const fr: Catalog = {
     'timeline.today': 'aujourd\'hui',
     'timeline.gapTitle': { one: '{count} jour sans push', other: '{count} jours sans push' },
     'timeline.lastReviewTitle': 'Ta dernière relecture : v{version}',
+    'timeline.refold': 'Replier',
+    'timeline.refoldTitle': 'Replier à nouveau les anciennes versions',
     'timeline.expandTitle': 'Déplier ces versions',
     'timeline.withCode': '{count} avec du code',
     'timeline.hiddenTitle': {
@@ -214,7 +216,6 @@ export const fr: Catalog = {
     'timeline.legendRebase': 'rebase',
     'timeline.legendNew': 'nouveau pour toi',
     'timeline.legendCommit': 'commit',
-    'timeline.legendGone': 'indisponible',
     'timeline.version': 'Version {version}',
     'timeline.versionUnavailable': 'Version {version} indisponible',
     'timeline.reviewedByYou': 'relue par toi',

@@ -4,7 +4,7 @@ import { usePrPage } from '../composables/usePrPage.ts';
 import { useStickyHeight } from '../composables/useStickyHeight.ts';
 import { t, tr } from '../i18n/index.ts';
 import { PRESET_LABELS, readout } from '../lib/selection.ts';
-import { inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
+import { canFold, inBand, timelineModel, type TimelineItem } from '../lib/timeline.ts';
 import TimelineNode from './TimelineNode.vue';
 import TimelineSymbol from './TimelineSymbol.vue';
 
@@ -15,7 +15,7 @@ const track = ref<HTMLElement | null>(null);
 const versions = computed(() => page.detail.versions);
 const lastReviewed = computed(() => page.detail.review.lastReviewed);
 const dest = computed(() => page.detail.pr.destBranch);
-const items = computed(() => timelineModel(tr(), {
+const input = computed(() => ({
     versions: versions.value,
     sums: page.sums,
     lastReviewed: lastReviewed.value,
@@ -24,6 +24,9 @@ const items = computed(() => timelineModel(tr(), {
     hideNoCode: page.hideNoCode,
     foldDisabled: page.foldDisabled,
 }));
+const items = computed(() => timelineModel(tr(), input.value));
+// expanded by the user, and folding would hide something again (long PR, or the range moved away from the old versions)
+const canRefold = computed(() => page.foldDisabled && canFold(input.value));
 const text = computed(() => {
     const cmp = page.compare;
     const stats = cmp && cmp.from === page.from && cmp.to === page.to ? cmp.stats : null;
@@ -123,12 +126,14 @@ onMounted(async () => {
             >
                 {{ t(PRESET_LABELS[p.key]) }}
             </button>
+            <button v-if="canRefold" type="button" class="rv-preset rv-refold" :title="t('timeline.refoldTitle')" @click="page.foldDisabled = false">
+                {{ t('timeline.refold') }}
+            </button>
             <span class="rv-hint">
                 <label><input id="hide-no-code" v-model="page.hideNoCode" type="checkbox"> {{ t('timeline.hideNoCode') }}</label>
                 <span class="rv-legend" data-legend>
                     <span><TimelineSymbol /> {{ t('timeline.legendCommit') }}</span>
                     <span><TimelineSymbol rebase /> {{ t('timeline.legendRebase') }}</span>
-                    <span v-if="versions.some((v) => !v.available)" data-legend-gone><TimelineSymbol gone /> {{ t('timeline.legendGone') }}</span>
                     <span><i class="new" /> {{ t('timeline.legendNew') }}</span>
                 </span>
             </span>
