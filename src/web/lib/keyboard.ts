@@ -37,6 +37,19 @@ export function isMacPlatform(platform: string): boolean {
     return /Mac|iPhone|iPad|iPod/.test(platform);
 }
 
+/** Windows from navigator.platform, or from the user agent when the platform is empty. */
+export function isWindowsPlatform(platform: string, userAgent: string): boolean {
+    return /^Win/i.test(platform) || (!platform && /Windows/.test(userAgent));
+}
+
+/**
+ * Does Alt+← go back from a definition? Not in the VS Code webview on Windows: there it is VS Code's Go Back, and the
+ * webview passes the key to VS Code even when the page handles it (the "← back" chip remains).
+ */
+export function altLeftGoesBack(vscode: boolean, windows: boolean): boolean {
+    return !(vscode && windows);
+}
+
 export type ClickLike = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>;
 
 /** Go to definition: main button with ⌘ alone on macOS, Ctrl alone elsewhere. */

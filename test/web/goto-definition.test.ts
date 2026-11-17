@@ -165,6 +165,25 @@ describe('definesSymbol: pattern table', () => {
             '// fun run()',
         ]);
     });
+
+    it('Java, Kotlin, C#, Go, Rust, PHP, Ruby: control flow without parentheses calls the name, it does not define it', () => {
+        no('other', 'run', [
+            '    if run(x) {', '    } else if run(x) {', '    for run() {', '    switch run(x) {', '    select run(x)',
+            '    match run(x) {', '    while run(x) {', '    loop run(x)', '    elsif run(x)', '    unless run(x)',
+            '    until run(x)', '    foreach run(x)', '    catch run(x)', '    lock run(x)', '    using run(x)',
+            '    with run(x)', '    guard run(x) else {', '    do run(x)', '    elif run(x):',
+        ]);
+        // a call on another line keeps finding the real definition only
+        yes('other', 'run', ['func run(x int) bool {']);
+    });
+
+    it('a line too long for the patterns (minified code, data) is skipped, and fast', () => {
+        expect(definesSymbol(`export const run = 1;${' '.repeat(2000)}`, 'run', 'js')).toBe(false);
+        expect(definesSymbol(`export const run = 1;${' '.repeat(1900)}`, 'run', 'js')).toBe(true);
+        const start = performance.now();
+        expect(definesSymbol(`run:${' x'.repeat(64000)}`, 'run', 'js')).toBe(false);
+        expect(performance.now() - start).toBeLessThan(50);
+    });
 });
 
 describe('findDefinitions', () => {
@@ -215,6 +234,15 @@ describe('findImport', () => {
         expect(imported(rows.slice(1), 'Foo')).toMatchObject({ index: 1, spec: './foo' });
         expect(imported(['const {', '    Foo,', '} = require(\'./foo\');'], 'Foo')).toMatchObject({ index: 1, spec: './foo' });
         expect(imported(['const {', '    Foo,', '} = props;'], 'Foo')).toBeNull();
+    });
+
+    it('TypeScript / JavaScript: a block opened by a function or an object is not an import list', () => {
+        const inFunction = ['export function load() {', '    const Foo = require(\'./foo\');', '    return Foo;', '}'];
+        expect(imported(inFunction, 'Foo')).toMatchObject({ index: 1, spec: './foo' });
+        const inObject = ['export default {', '    load() {', '        const Foo = require(\'./foo\');', '    },', '};'];
+        expect(imported(inObject, 'Foo')).toMatchObject({ index: 2, spec: './foo' });
+        // the function line itself is not part of an import
+        expect(imported(['export function Foo() {', '    const x = require(\'./foo\');', '}'], 'Foo')).toBeNull();
     });
 
     it('the symbol named only in the path, or not imported: nothing', () => {

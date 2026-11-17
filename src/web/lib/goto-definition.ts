@@ -114,9 +114,17 @@ const IMPORT_LINE: Readonly<Record<CodeFamily, RegExp>> = {
     other: /^\s*(?:import|use|using|package|require|include)\b/,
 };
 
+/** String literals of a line ('', "", ``; escapes included). */
+const STRING_LITERAL = /(['"`])(?:\\.|(?!\1)[^\\])*\1/g;
+/** A line with its strings emptied (the quotes stay): a quoted name is neither defined nor imported there. */
+const emptyStrings = (text: string): string => text.replace(STRING_LITERAL, '$1$1');
+
+/** Longer lines (minified code, data) are not matched: some patterns cost more than linear time on them. */
+export const MAX_PATTERN_LINE = 2000;
+
 /** A line without its string contents and trailing comment: a name quoted or commented is not defined there. */
 function codeOf(text: string, family: CodeFamily): string {
-    const bare = text.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '$1$1').replace(/\/\*.*?\*\//g, '');
+    const bare = emptyStrings(text).replace(/\/\*.*?\*\//g, '');
     return family === 'python' ? bare.replace(/#.*$/, '') : bare.replace(/\/\/.*$/, '');
 }
 
@@ -153,17 +161,24 @@ function definitionPatterns(name: string, family: CodeFamily): RegExp[] {
             return [
                 new RegExp(`${BEFORE}(?:class|interface|enum|record|struct|trait|object|typealias|type|module|mod|fun|func|fn|def|function|val|var|let|const)\\s+(?:mut\\s+)?(?:<[^>]*>\\s*)?(?:\\([^)]*\\)\\s*)?(?:[\\p{L}\\p{N}_]+\\.)?${n}${AFTER}`, 'u'),
                 new RegExp(`^\\s*(?:(?:public|private|protected|internal|static|final|readonly|const|override|open|lateinit|volatile|transient)\\s+)+${word}\\s+${n}\\s*[=;{]`, 'u'),
-                new RegExp(`^\\s*(?!(?:return|new|throw|else|await|yield|go|defer|case|echo|print|puts|raise|assert|not|and|or|in|is|when|using)\\b)(?:${word}\\s+)+${n}\\s*(?:<[^>]*>)?\\s*\\(`, 'u'),
+                // the first word is a type or a modifier, never a statement keyword (Go, Rust, Ruby control flow has no
+                // parentheses: `if valid(x) {` calls `valid`)
+                new RegExp(`^\\s*(?!(?:${NOT_A_TYPE})\\b)(?:${word}\\s+)+${n}\\s*(?:<[^>]*>)?\\s*\\(`, 'u'),
             ];
         }
     }
 }
 
+/** Words that start a statement, not a method signature `Type name(`: calls follow them. */
+const NOT_A_TYPE = ['return', 'new', 'throw', 'else', 'await', 'yield', 'go', 'defer', 'case', 'echo', 'print', 'puts',
+    'raise', 'assert', 'not', 'and', 'or', 'in', 'is', 'when', 'using', 'if', 'elif', 'elsif', 'unless', 'until', 'while',
+    'for', 'foreach', 'switch', 'match', 'select', 'loop', 'catch', 'lock', 'with', 'guard', 'do', 'try'].join('|');
+
 /** Tests lines for a definition of `name` (patterns compiled once per search). */
 function definitionMatcher(name: string, family: CodeFamily): (text: string) => boolean {
     const patterns = definitionPatterns(name, family);
     return (text) => {
-        if (!text.includes(name) || COMMENT_LINE[family].test(text) || IMPORT_LINE[family].test(text)) {
+        if (text.length > MAX_PATTERN_LINE || !text.includes(name) || COMMENT_LINE[family].test(text) || IMPORT_LINE[family].test(text)) {
             return false;
         }
         const code = codeOf(text, family);
@@ -229,12 +244,16 @@ interface ImportPart {
 
 const JS_SPEC = /(?:\bfrom\s*|\brequire\s*\(\s*)(['"])([^'"]+)\1/;
 const JS_STATEMENT = /^\s*(?:import|export)\b|^\s*(?:const|let|var)\b[^=]*=\s*require\s*\(|^\s*(?:const|let|var)\s*\{/;
+/**
+ * A name list left open at the end of the line: `import {`, `import type {`, `import Foo, {`, `export {` (re-export) or
+ * `const {` (require). Not `export function x() {` nor `export default {`: their braces hold code.
+ */
+const JS_OPEN_LIST = /^\s*(?:import\b[^'"=(]*|export\s+(?:type\s+)?|(?:const|let|var)\s*)\{[^}]*$/;
 const JS_MEMBER = /^\s*(?:type\s+)?[\p{L}_$][\p{L}\p{N}_$]*(?:\s+as\s+[\p{L}_$][\p{L}\p{N}_$]*)?\s*,?\s*$/u;
 /** A multi-line statement longer than this is not an import list (an unclosed brace, a cut hunk). */
 const MAX_IMPORT_LINES = 80;
 
-const withoutStrings = (text: string): string => text.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '');
-const beforeSpec = (text: string): string => withoutStrings(text.replace(/(?:\bfrom|\brequire)\b.*$/, ''));
+const beforeSpec = (text: string): string => emptyStrings(text.replace(/(?:\bfrom|\brequire)\b.*$/, ''));
 
 /** Import lines of a run of consecutive lines (one side of a hunk), TS / JS. */
 function jsImports(texts: readonly string[]): (ImportPart | null)[] {
@@ -256,7 +275,7 @@ function jsImports(texts: readonly string[]): (ImportPart | null)[] {
         if (JS_STATEMENT.test(text)) {
             if (spec !== null) {
                 out[i] = { spec, names: beforeSpec(text) };
-            } else if (text.includes('{') && !text.includes('}')) {
+            } else if (JS_OPEN_LIST.test(text)) {
                 open = i;
             }
             return;
@@ -281,7 +300,7 @@ function pythonImports(texts: readonly string[]): (ImportPart | null)[] {
     let open = -1;
     texts.forEach((text, i) => {
         if (open >= 0) {
-            out[i] = { spec: null, names: withoutStrings(text.replace(/#.*$/, '')) };
+            out[i] = { spec: null, names: emptyStrings(text.replace(/#.*$/, '')) };
             if (text.includes(')') || i - open > MAX_IMPORT_LINES) {
                 open = -1;
             }
@@ -304,7 +323,7 @@ function pythonImports(texts: readonly string[]): (ImportPart | null)[] {
 function otherImports(texts: readonly string[]): (ImportPart | null)[] {
     return texts.map((text) => {
         const match = /^\s*(?:import|use)\b(.*)$/.exec(text);
-        return match ? { spec: null, names: withoutStrings(match[1]!) } : null;
+        return match ? { spec: null, names: emptyStrings(match[1]!) } : null;
     });
 }
 

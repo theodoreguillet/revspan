@@ -1,8 +1,13 @@
 // Keyboard shortcut help (global overlay).
 import { ref } from 'vue';
 import type { MessageKey } from '../i18n/index.ts';
+import { altLeftGoesBack, isWindowsPlatform } from '../lib/keyboard.ts';
+import { isVsCode } from '../services/host.ts';
 
 export const shortcutsOpen = ref(false);
+
+/** Alt+← goes back from a definition (not in the VS Code webview on Windows: VS Code's Go Back; the chip remains). */
+export const ALT_LEFT_BACK = altLeftGoesBack(isVsCode, typeof navigator !== 'undefined' && isWindowsPlatform(navigator.platform, navigator.userAgent));
 
 /** Keys (alternatives separated by " / ") and description of each shortcut. */
 export const SHORTCUTS = [
@@ -12,7 +17,7 @@ export const SHORTCUTS = [
     { keys: 'shortcuts.keysAllViewed', label: 'shortcuts.allViewed' },
     { keys: 'shortcuts.keysSearch', label: 'shortcuts.search' },
     { keys: 'shortcuts.keysGoto', label: 'shortcuts.goto' },
-    { keys: 'shortcuts.keysBack', label: 'shortcuts.back' },
+    ALT_LEFT_BACK ? { keys: 'shortcuts.keysBack', label: 'shortcuts.back' } : { keys: 'shortcuts.keysBackChip', label: 'shortcuts.backChip' },
     { keys: 'shortcuts.keysVersion', label: 'shortcuts.version' },
     { keys: 'shortcuts.keysClick', label: 'shortcuts.click' },
     { keys: 'shortcuts.keysExtend', label: 'shortcuts.extend' },

@@ -40,6 +40,8 @@ export interface GotoChoice {
     top: number;
     bottom: number;
     origin: BackEntry | null;
+    /** Clicked row: focus goes back to it when the choice is closed by Escape. */
+    row: HTMLElement | null;
 }
 
 /** "Open the definition in <file>": looks for `name` in `file` with "whole file" on. */
@@ -75,6 +77,7 @@ export interface GotoClick {
     x: number;
     top: number;
     bottom: number;
+    row?: HTMLElement;
 }
 
 export interface GotoHooks {
@@ -121,6 +124,14 @@ function charRange(root: Node, start: number, end: number): Range | null {
         pos += length;
     }
     return null;
+}
+
+/** A diff line takes the focus (left by the closed choice) without scrolling. */
+function focusLine(el: HTMLElement | null | undefined): void {
+    if (el?.isConnected) {
+        el.tabIndex = -1;
+        el.focus({ preventScroll: true });
+    }
 }
 
 const contains = (rects: Iterable<DOMRect>, x: number, y: number): boolean =>
@@ -188,11 +199,14 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
         }
     }
 
-    /** Closes the choice; false if it was not open. */
-    function closeChoice(): boolean {
-        const open = !!choice.value;
+    /** Closes the choice (focus back on the clicked line if asked: Escape); false if it was not open. */
+    function closeChoice(focusBack = false): boolean {
+        const open = choice.value;
         choice.value = null;
-        return open;
+        if (focusBack) {
+            focusLine(open?.row);
+        }
+        return !!open;
     }
 
     /** Closes the choice and the notice; false if neither was open. */
@@ -209,19 +223,23 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
         }
     }
 
-    /** Shows `ref`: its file expanded, its block rendered, the line scrolled under the bars (or at `top`) and flashed. */
-    async function navigate(ref: LineRef, top?: number): Promise<void> {
+    /**
+     * Shows `ref`: its file expanded, its block rendered, the line scrolled under the bars (or at `top`) and flashed.
+     * Returns the line's element (null if it did not render).
+     */
+    async function navigate(ref: LineRef, top?: number): Promise<HTMLElement | null> {
         hooks.nav.clearJump();
         target.value = { path: ref.path, hunk: ref.hunk, index: ref.index, side: ref.side, seq: ++seq };
         await hooks.showFile(ref.fileIdx);
-        hooks.nav.revealJump(top);
+        return hooks.nav.revealJump(top);
     }
 
-    async function jump(ref: LineRef, origin: BackEntry | null): Promise<void> {
+    async function jump(ref: LineRef, origin: BackEntry | null): Promise<HTMLElement | null> {
         closeChoice();
         remember(origin);
-        await navigate(ref);
+        const el = await navigate(ref);
         showNotice({ message: null, name: '', file: null, hint: false, offer: null, back: canGoBack.value });
+        return el;
     }
 
     const notFound = (name: string, file: string | null = null): GotoNotice =>
@@ -239,7 +257,7 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
                 await jump(result.target, origin);
                 return;
             case 'choose':
-                choice.value = { name, targets: result.targets, x: click.x, top: click.top, bottom: click.bottom, origin };
+                choice.value = { name, targets: result.targets, x: click.x, top: click.top, bottom: click.bottom, origin, row: click.row ?? null };
                 return;
             case 'import': {
                 const offer = result.file && !hooks.fullContext.value
@@ -281,16 +299,16 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
             await jump(defs[0]!, offer.origin);
         } else if (defs.length > 1) {
             const box = anchor ?? new DOMRect(window.innerWidth / 2, window.innerHeight - 60, 0, 30);
-            choice.value = { name: offer.name, targets: defs, x: box.left, top: box.top, bottom: box.bottom, origin: offer.origin };
+            choice.value = { name: offer.name, targets: defs, x: box.left, top: box.top, bottom: box.bottom, origin: offer.origin, row: null };
         } else {
             showNotice(notFound(offer.name, offer.file));
         }
     }
 
-    /** A definition picked in the choice. */
+    /** A definition picked in the choice: the focus, inside the choice, moves to the line reached. */
     async function choose(ref: LineRef): Promise<void> {
         const origin = choice.value?.origin ?? null;
-        await jump(ref, origin);
+        focusLine(await jump(ref, origin));
     }
 
     /** Back to the place before the last jump (Alt+←, the chip): its line at the same height, else the scroll position. */
@@ -348,7 +366,7 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
         }
         const box = row.getBoundingClientRect();
         return {
-            name: word.name, ref, x: event.clientX, top: box.top, bottom: box.bottom,
+            name: word.name, ref, x: event.clientX, top: box.top, bottom: box.bottom, row,
             origin: { path, side, number: lineNumber(ref), top: box.top, scrollY: window.scrollY },
         };
     }

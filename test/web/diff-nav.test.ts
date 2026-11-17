@@ -124,11 +124,11 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         const line = at(800);
         document.body.append(line);
         n.registerJump(line);
-        expect(n.revealJump()).toBe(true);
+        expect(n.revealJump()).toBe(line);
         expect(scroll).toHaveBeenCalledWith({ top: 800 - 250 });
         expect(line.classList.contains('flash')).toBe(true);
         // consumed: a second reveal without a new registration does nothing
-        expect(n.revealJump()).toBe(false);
+        expect(n.revealJump()).toBeNull();
         n.registerJump(line);
         n.revealJump(400);
         expect(scroll).toHaveBeenLastCalledWith({ top: 800 - 400 });
@@ -146,11 +146,11 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         document.body.append(line);
         n.registerJump(line);
         n.registerJump(null);
-        expect(n.revealJump()).toBe(true);
+        expect(n.revealJump()).toBe(line);
         // cleared before a jump: a line that did not render reveals nothing
         n.registerJump(line);
         n.clearJump();
-        expect(n.revealJump()).toBe(false);
+        expect(n.revealJump()).toBeNull();
         line.remove();
     });
 });

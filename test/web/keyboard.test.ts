@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isGotoClick, isMacPlatform, isShortcutEvent, isTyping, trappedFocus } from '../../src/web/lib/keyboard.ts';
+import { altLeftGoesBack, isGotoClick, isMacPlatform, isShortcutEvent, isTyping, isWindowsPlatform, trappedFocus } from '../../src/web/lib/keyboard.ts';
 
 /** Key pressed on `target` (document by default), with the given modifiers. */
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document): KeyboardEvent {
@@ -145,5 +145,24 @@ describe('go to definition: the modifier of the click', () => {
         expect(isGotoClick(click({ ctrlKey: true, shiftKey: true }), false)).toBe(false);
         expect(isGotoClick(click({ metaKey: true, altKey: true }), true)).toBe(false);
         expect(isGotoClick(click({ metaKey: true, ctrlKey: true }), true)).toBe(false);
+    });
+});
+
+describe('go to definition: Alt+← for back', () => {
+    const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.95.0 Chrome/128.0 Electron/32.2.1 Safari/537.36';
+    const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
+
+    it('Windows from the platform or, when it is empty, the user agent', () => {
+        expect(isWindowsPlatform('Win32', '')).toBe(true);
+        expect(isWindowsPlatform('', WIN_UA)).toBe(true);
+        expect(isWindowsPlatform('MacIntel', MAC_UA)).toBe(false);
+        expect(isWindowsPlatform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)')).toBe(false);
+    });
+
+    it('in the VS Code webview on Windows, Alt+← stays VS Code\'s Go Back; everywhere else it is the page\'s', () => {
+        expect(altLeftGoesBack(true, true)).toBe(false);
+        expect(altLeftGoesBack(true, false)).toBe(true);
+        expect(altLeftGoesBack(false, true)).toBe(true);
+        expect(altLeftGoesBack(false, false)).toBe(true);
     });
 });

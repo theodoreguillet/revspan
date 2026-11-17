@@ -253,9 +253,11 @@ one request per interval even once finished (see "Build status").
   defines it among the lines shown, reached like a search match (file opened, line under the toolbar, flashed). The
   clicked file comes first, then the others in list order; the new side first, removed lines only when the new side has
   none. Several definitions: a list under the click (↑/↓, Enter, Esc). None shown: its import in the same file, with
-  **Open the definition in <file>** when the import points to a file of the PR (turns "whole file" on and looks there);
+  **Search <file> (whole file)** when the import points to a file of the PR (turns "whole file" on and looks there);
   nothing at all: a short notice (suggesting "whole file" when it is off). `Alt+←` (or the **← back** chip, 5 s) goes
-  back. Holding the modifier underlines the names. Level 1 only, no request and no language server: a small pattern
+  back; the places to go back to are kept until the compared range changes, and `Alt+←` is the page's only while there
+  is one (in the VS Code panel on Windows, `Alt+←` stays VS Code's Go Back: use the chip). Holding the modifier
+  underlines the names. Level 1 only, no request and no language server: a small pattern
   table per language family (TypeScript / JavaScript / Vue; Python; Java, Kotlin, C#, Go, Rust, PHP, Ruby) in
   `src/web/lib/goto-definition.ts`. Strings, comments, numbers and keywords are told apart by their Dark+ / Light+
   syntax color, plus a keyword list per family for lines not colored yet.

@@ -1415,11 +1415,36 @@ def run_checks(page):
         def top(locator):
             return locator.evaluate('e => e.getBoundingClientRect().top')
 
-        def centered(locator):
-            """In the middle of the window (a click does not scroll), returns the scroll position."""
-            locator.evaluate('e => e.scrollIntoView({ block: "center" })')
-            page.wait_for_timeout(100)
+        def settled_scroll():
+            """The scroll position once it stayed put for 3 polls of 100 ms (no fixed sleep: the machine may be slow)."""
+            page.evaluate('() => { window.__gotoY = undefined; window.__gotoN = 0; }')
+            page.wait_for_function('''() => {
+                if (window.__gotoY === scrollY) { window.__gotoN++; } else { window.__gotoY = scrollY; window.__gotoN = 0; }
+                return window.__gotoN >= 3;
+            }''', polling=100)
             return page.evaluate('scrollY')
+
+        def centered(locator):
+            """In the middle of the window (a click does not scroll), returns the settled scroll position."""
+            locator.evaluate('e => e.scrollIntoView({ block: "center" })')
+            return settled_scroll()
+
+        def stays(scroll):
+            """Nothing moved: the scroll settles where it was (2 px of tolerance)."""
+            now = settled_scroll()
+            assert abs(now - scroll) <= 2, (scroll, now)
+
+        def lands_under_bars(locator):
+            """The line settles just under the toolbar (polled)."""
+            page.wait_for_function('''(e) => {
+                const bar = document.querySelector(".rv-dtb").getBoundingClientRect().bottom;
+                const t = e.getBoundingClientRect().top;
+                return t >= bar - 0.5 && t <= bar + 120;
+            }''', arg=locator.element_handle(), polling=100)
+
+        def lands_at(locator, y):
+            """The line settles at `y` px from the top of the window, 2 px of tolerance (polled)."""
+            page.wait_for_function('([e, y]) => Math.abs(e.getBoundingClientRect().top - y) <= 2', arg=[locator.element_handle(), y], polling=100)
 
         action_name = name(use_n, 'Action')
         action_name.scroll_into_view_if_needed()
@@ -1444,8 +1469,7 @@ def run_checks(page):
         # a plain click: nothing (no jump, no composer)
         scroll = centered(action_name)
         action_name.click()
-        page.wait_for_timeout(200)
-        assert page.evaluate('scrollY') == scroll
+        stays(scroll)
         expect(notice).to_have_count(0)
         expect(page.locator('.rv-comp')).to_have_count(0)
 
@@ -1456,14 +1480,11 @@ def run_checks(page):
         expect(dest).to_have_class(flashed)
         expect(dest).to_be_in_viewport()
         expect(notice.locator('[data-goto-back]')).to_be_visible()
-        page.wait_for_timeout(200)
-        bar = page.evaluate('document.querySelector(".rv-dtb").getBoundingClientRect().bottom')
-        assert bar <= top(dest) <= bar + 120, (bar, top(dest))
+        lands_under_bars(dest)
         expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', action_path)
         page.keyboard.press('Alt+ArrowLeft')
         expect(row(spec_block, use_n)).to_have_class(flashed)
-        page.wait_for_timeout(200)
-        assert abs(top(row(spec_block, use_n)) - before) <= 2, (before, top(row(spec_block, use_n)))
+        lands_at(row(spec_block, use_n), before)
 
         # imported from a file outside the PR: the import line, no offer
         name(call_n, 'buildPayload').click(modifiers=['ControlOrMeta'])
@@ -1484,6 +1505,7 @@ def run_checks(page):
         assert top(choice) >= payload.bounding_box()['y'] + payload.bounding_box()['height'] - 1, 'the choice opens under the click'
         page.keyboard.press('Escape')
         expect(choice).to_have_count(0)
+        expect(row(spec_block, use_n)).to_be_focused()  # the focus back on the clicked line
         payload.click(modifiers=['ControlOrMeta'])
         expect(items.first).to_be_focused()
         page.keyboard.press('ArrowDown')
@@ -1491,14 +1513,14 @@ def run_checks(page):
         page.keyboard.press('Enter')
         expect(choice).to_have_count(0)
         expect(row(spec_block, payload_ns[1])).to_have_class(flashed)
+        expect(row(spec_block, payload_ns[1])).to_be_focused()  # on the line reached
         page.keyboard.press('Escape')
 
         # the definition line itself: nothing
         own = name(payload_ns[0], 'payload')
         scroll = centered(own)
         own.click(modifiers=['ControlOrMeta'])
-        page.wait_for_timeout(200)
-        assert page.evaluate('scrollY') == scroll
+        stays(scroll)
         expect(choice).to_have_count(0)
         expect(notice).to_have_count(0)
 
@@ -1513,9 +1535,8 @@ def run_checks(page):
             page.mouse.up()
         finally:
             page.keyboard.up('ControlOrMeta')
-        page.wait_for_timeout(200)
         assert page.evaluate('getSelection().toString()'), 'the drag selected nothing: the check proves nothing'
-        assert page.evaluate('scrollY') == scroll
+        stays(scroll)
         expect(notice).to_have_count(0)
         page.evaluate('getSelection().removeAllRanges()')
 

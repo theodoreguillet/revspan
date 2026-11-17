@@ -119,17 +119,17 @@ export function useDiffNav() {
 
     /**
      * Scrolls the registered jump line under the sticky bars and the sticky file header (or `top` px from the top of the
-     * window: back to a saved place) and flashes it. False if no line is registered.
+     * window: back to a saved place) and flashes it. Returns it, or null if no line is registered.
      */
-    function revealJump(top?: number): boolean {
+    function revealJump(top?: number): HTMLElement | null {
         const el = jump;
         jump = null;
         if (!el?.isConnected) {
-            return false;
+            return null;
         }
         scrollToElement(el, top === undefined ? stickyHeight.value + 60 : Math.max(top, stickyHeight.value));
         flash(el);
-        return true;
+        return el;
     }
 
     /** Scrolls the line of the current search match under the sticky bars and the sticky file header. */

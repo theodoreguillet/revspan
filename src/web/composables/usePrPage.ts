@@ -12,6 +12,7 @@ import { useDiscussion } from './useDiscussion.ts';
 import { useGotoDefinition } from './useGotoDefinition.ts';
 import { usePrLoad } from './usePrLoad.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
+import { ALT_LEFT_BACK } from './useShortcuts.ts';
 import { useReviewActions } from './useReviewActions.ts';
 import { useTasks } from './useTasks.ts';
 
@@ -58,15 +59,18 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     // A composer opened on the previous range's diff, still shown during the first 200 ms of a load, is not sent
     // against the new one.
     watch(() => (load.compare.value ? `${load.compare.value.from}-${load.compare.value.to}` : null), () => discussion.closeComposer());
-    /** The comparison being loaded for the current range and context. */
+    /** The comparison being loaded for the current range and context (settled: its errors are Vue's, see below). */
     let shownLoad: Promise<void> = Promise.resolve();
     watch([range.from, range.to, options.fullContext], () => {
-        shownLoad = (async () => {
+        const loading = (async () => {
             await load.loadCompare(compareParams());
             if (nav.curFile.value >= files.value.length) {
                 nav.curFile.value = 0;
             }
         })();
+        shownLoad = loading.catch(() => undefined);
+        // returned: a rejection goes to Vue's error handling, as with an async watcher
+        return loading;
     });
 
     async function gotoFile(idx: number, { expand = false, scroll = true } = {}): Promise<void> {
@@ -207,8 +211,9 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
             case ']':
                 return range.stepVersion(1);
             case 'ArrowLeft':
-                // Alt+← only, and only with a place to go back to (otherwise the browser's own Alt+←)
-                if (!event?.altKey || options.tab.value !== 'diff' || !goto.canGoBack.value) {
+                // Alt+← only, and only with a place to go back to (otherwise the browser's own Alt+←); never in the
+                // VS Code webview on Windows (VS Code's Go Back would run too)
+                if (!ALT_LEFT_BACK || !event?.altKey || options.tab.value !== 'diff' || !goto.canGoBack.value) {
                     return false;
                 }
                 void goto.back();

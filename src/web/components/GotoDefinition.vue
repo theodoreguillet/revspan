@@ -3,6 +3,7 @@
 // the notice at the bottom of the window (back chip, not found, import with "open the definition in <file>").
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
+import { ALT_LEFT_BACK } from '../composables/useShortcuts.ts';
 import { t } from '../i18n/index.ts';
 import { MINUS } from '../lib/format.ts';
 import { lineNumber } from '../lib/goto-definition.ts';
@@ -74,10 +75,12 @@ function onKey(event: KeyboardEvent): void {
     const list = items();
     const at = list.indexOf(document.activeElement as HTMLElement);
     const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: list.length - 1 }[event.key];
-    if (event.key === 'Escape' || event.key === 'Tab') {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-        }
+    if (event.key === 'Escape') {
+        // the focus goes back to the clicked line
+        event.preventDefault();
+        event.stopPropagation();
+        page.goto.closeChoice(true);
+    } else if (event.key === 'Tab') {
         event.stopPropagation();
         close();
     } else if (next !== undefined && list.length) {
@@ -153,9 +156,16 @@ const message = computed((): string => {
             :title="t('goto.openInTitle', { option, name: goto.notice.offer.name, file: goto.notice.offer.file })"
             @click="openOffer"
         >
-            {{ t('goto.openIn', { file: goto.notice.offer.file }) }}
+            {{ t('goto.openIn', { file: goto.notice.offer.file, option }) }}
         </button>
-        <button v-if="goto.notice.back" type="button" class="rv-btn rv-btn-sm" data-goto-back :title="t('goto.backTitle')" @click="page.goto.back()">
+        <button
+            v-if="goto.notice.back"
+            type="button"
+            class="rv-btn rv-btn-sm"
+            data-goto-back
+            :title="ALT_LEFT_BACK ? t('goto.backTitle') : t('goto.backTitleChip')"
+            @click="page.goto.back()"
+        >
             {{ t('goto.back') }}
         </button>
     </div>
