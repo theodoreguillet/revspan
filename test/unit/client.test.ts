@@ -504,6 +504,30 @@ describe('BitbucketClient: merge conflicts of a PR', () => {
         expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
     });
 
+    it('only a complete answer is kept: a 202 (still computing) or a page without values rejects and is read again', async () => {
+        const fetchImpl = mockFetch(
+            jsonResponse(202, { values: [] }),
+            jsonResponse(200, { size: 0 }),
+            jsonResponse(200, { values: [entry('a.ts')] }),
+        );
+        const client = makeClient(fetchImpl);
+        await expect(client.mergeConflicts('acme', 'records-api', 7, heads)).rejects.toMatchObject({ code: 'BB_ERROR' });
+        await expect(client.mergeConflicts('acme', 'records-api', 7, heads)).rejects.toMatchObject({ code: 'BB_ERROR' });
+        expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
+        expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toEqual(['a.ts']);
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+    });
+
+    it('a list cut at the page cap is shown but not kept', async () => {
+        const page = (i: number): Response => jsonResponse(200, { values: [entry(`f${i}.ts`)], next: `${conflictsUrl}?pagelen=100&page=${i + 2}` });
+        const fetchImpl = mockFetch(...Array.from({ length: 20 }, (_, i) => page(i % 10)));
+        const client = makeClient(fetchImpl);
+        expect(await client.mergeConflicts('acme', 'records-api', 7, heads)).toHaveLength(10);
+        expect(fetchImpl).toHaveBeenCalledTimes(10);
+        await client.mergeConflicts('acme', 'records-api', 7, heads);
+        expect(fetchImpl).toHaveBeenCalledTimes(20);
+    });
+
     it('a slow answer rejects after the short deadline and its request is aborted', async () => {
         vi.useFakeTimers();
         try {

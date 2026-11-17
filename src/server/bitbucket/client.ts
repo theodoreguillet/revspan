@@ -55,10 +55,15 @@ interface RequestOptions {
     signal?: AbortSignal;
     /** false: a GET is not retried either (network error, 429, 5xx), the error is thrown at once. */
     retry?: boolean;
+    /**
+     * true: only a 200 answer is accepted (a 202 "still computing" or any other 2xx throws), and every page must carry a
+     * `values` array: an answer kept for good must be complete.
+     */
+    strict?: boolean;
 }
 
 /** Options of a read made of one or several GETs (pagination). */
-type ReadOptions = Pick<RequestOptions, 'signal' | 'retry'>;
+type ReadOptions = Pick<RequestOptions, 'signal' | 'retry' | 'strict'>;
 
 function errorFor(status: number, path: string, detail: string): AppError {
     const details = detail ? { detail } : {};
@@ -267,6 +272,9 @@ export class BitbucketClient {
 
     private async json<T>(method: string, path: string, options: RequestOptions = {}): Promise<T | null> {
         const response = await this.send(method, path, options, 'application/json');
+        if (options.strict && response && response.status !== 200) {
+            throw errorFor(502, path.replace(/\?.*$/, ''), `incomplete answer (status ${response.status})`);
+        }
         if (!response || response.status === 204) {
             return null;
         }
@@ -298,6 +306,9 @@ export class BitbucketClient {
         const values: T[] = [];
         let page = await this.getJson<BbPage<T>>(path, query, options);
         for (let i = 1; ; i++) {
+            if (options.strict && !Array.isArray(page.values)) {
+                throw errorFor(502, path.replace(/\?.*$/, ''), 'incomplete answer (page without values)');
+            }
             for (const value of page.values ?? []) {
                 values.push(value);
             }
@@ -351,13 +362,15 @@ export class BitbucketClient {
      * Paths Bitbucket reports in conflict when merging the PR into its destination (every page, each path once, whatever
      * the scenario). Bitbucket redirects the route to the repository's file-conflicts of the PR's revspec, so the answer
      * only depends on the two heads: it is kept per pair (never dropped with the PR's live data) and read once per pair.
-     * The read gets conflictsTimeoutMs in all, with no retry: it rejects past that.
+     * The read gets conflictsTimeoutMs in all, with no retry: it rejects past that. Only a complete answer is kept: a
+     * 202 (still computing) or a page without `values` rejects, a list cut at the page cap is returned but read again.
      */
-    mergeConflicts(ws: string, repo: string, id: number, { sourceHead, destHead }: { sourceHead: string; destHead: string }): Promise<string[]> {
-        return this.cache.getOrCompute(`conflicts:${ws}/${repo}#${id}:${sourceHead}..${destHead}`, () => withDeadline(this.conflictsTimeoutMs, async (signal) => {
-            const values = await this.getAllPages<BbFileConflict>(`${this.prPath(ws, repo, id)}/conflicts`, { pagelen: 100 }, 10, { signal, retry: false });
-            return [...new Set(values.map((v) => v.path).filter((path): path is string => !!path))];
-        }));
+    async mergeConflicts(ws: string, repo: string, id: number, { sourceHead, destHead }: { sourceHead: string; destHead: string }): Promise<string[]> {
+        const { paths } = await this.cache.getOrCompute(`conflicts:${ws}/${repo}#${id}:${sourceHead}..${destHead}`, () => withDeadline(this.conflictsTimeoutMs, async (signal) => {
+            const { values, truncated } = await this.getPages<BbFileConflict>(`${this.prPath(ws, repo, id)}/conflicts`, { pagelen: 100 }, 10, { signal, retry: false, strict: true });
+            return { paths: [...new Set(values.map((v) => v.path).filter((path): path is string => !!path))], complete: !truncated };
+        }), (answer) => answer.complete);
+        return paths;
     }
 
     /**

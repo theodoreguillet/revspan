@@ -53,10 +53,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   in memory for that interval (a write, ↻ or a later open reads again).
 - The presets (since your review, last version, all) are computed in the background for a PR of up to 30 files, while
   the page is visible, so switching to them is instant.
-- Merge conflicts are read only for a PR behind its destination, once per pair of source and destination heads, and
-  never hold the page: the read gets 5 s with no retry, a slow answer only leaves the chip out.
+- Merge conflicts are read only for a PR behind its destination, once per pair of source and destination heads; the
+  page waits at most 5 s for them (no retry), and a slower answer only leaves the chip out.
 - Task writes are confirmed by one light read (the open count) instead of a full reload of the PR.
-- The notifier's version check reuses the activity the home just read (19 requests after a code push, was 21).
+- The notifier's version check reuses the activity the home just read instead of reading it again.
 - A new version keeps the cached comparisons whose versions did not change.
 - Opening a local file from VS Code reads nothing while the PR is loaded.
 - Large diffs render progressively, without blocking the page.

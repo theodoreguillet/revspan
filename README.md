@@ -189,8 +189,8 @@ the PR is behind its destination, and a red "⚠ Conflicts with master · 3 file
 conflicts (`GET .../pullrequests/{id}/conflicts`). Its tooltip lists the files, and a click opens the first one shown
 in the diff, where the file list marks it ⚠ "Merge conflict with master" (the ⚠ of the rebase heuristic keeps its
 own title). Conflicts are read only for a PR that is behind: a PR based on the destination's head cannot conflict. An
-up-to-date PR shows nothing. They are read once per pair of source and destination heads, with a 5 s limit: a slow
-answer only leaves the chip out, the page never waits for it.
+up-to-date PR shows nothing. They are read once per pair of source and destination heads, with a 5 s limit: the page
+waits at most 5 s for them, and a slower answer only leaves the chip out.
 
 ### Request budget
 

@@ -1,6 +1,6 @@
 // Route shown by the panel: tab title, screen deduced from the page's API reads,
 // route on which VS Code reopens the panel after "Reload Window".
-import { PR_PATH as PR_ROUTE } from '../../shared/panel-role.ts';
+import { PR_PATH } from '../../shared/panel-role.ts';
 import { isPageRoute, type PanelState } from '../../shared/webview-protocol.ts';
 import type { Translate } from './l10n.ts';
 
@@ -14,7 +14,7 @@ const SCREENS = new Map([['/home', HOME_ROUTE], ['/settings', '/settings']]);
 
 /** Tab title for a page route (same rule on opening and during navigation). */
 export function panelTitle(t: Translate, route: string): string {
-    const match = PR_ROUTE.exec(route);
+    const match = PR_PATH.exec(route);
     if (match) {
         return `PR #${match[3]} · ${match[2]}`;
     }
@@ -30,7 +30,7 @@ export function routeOfApiRead(method: string, apiPath: string): string | null {
         return null;
     }
     const pagePath = apiPath.replace(/^\/api(?=\/)/, '');
-    const pr = PR_ROUTE.exec(pagePath);
+    const pr = PR_PATH.exec(pagePath);
     if (pr) {
         return pr[0];
     }
@@ -39,12 +39,12 @@ export function routeOfApiRead(method: string, apiPath: string): string | null {
 
 /** Titles a tab of the role of `route` can have: the PR's, or those of the home page and settings. */
 export function roleTitles(t: Translate, route: string): string[] {
-    return PR_ROUTE.test(route) ? [panelTitle(t, route)] : [panelTitle(t, HOME_ROUTE), panelTitle(t, '/settings')];
+    return PR_PATH.test(route) ? [panelTitle(t, route)] : [panelTitle(t, HOME_ROUTE), panelTitle(t, '/settings')];
 }
 
 /** The PR route without its range (revealing an open PR navigates only when a range is asked), otherwise the route. */
 export function screenOfRoute(route: string): string {
-    return PR_ROUTE.exec(route)?.[0] ?? route;
+    return PR_PATH.exec(route)?.[0] ?? route;
 }
 
 /** Route saved by the page in the panel state (PanelState); the home page if the state is missing or invalid. */
