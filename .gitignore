@@ -7,3 +7,4 @@ extension/dist/
 *.vsix
 extension/LICENSE
 extension/CHANGELOG.md
+.superpowers/
