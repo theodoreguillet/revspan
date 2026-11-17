@@ -52,6 +52,9 @@ function comparison(from: number, to: number, paths: string[], placed: number[] 
     };
 }
 
+/** Lets already-resolved promises through. */
+const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
+
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
     let resolve!: (value: T) => void;
     const promise = new Promise<T>((ok) => {
@@ -96,9 +99,6 @@ describe('pulse: what changed on Bitbucket', () => {
         expect(afterOwnWrite(pulse({ commentCount: 0 }), -1).commentCount).toBe(0);
     });
 
-    it('checks at the configured interval', () => {
-        expect(pulseIntervalMs(5)).toBe(5 * MINUTE);
-        expect(pulseIntervalMs(1)).toBe(MINUTE);
     it('afterTaskWrite takes the open count, and Bitbucket\'s updatedOn only when nothing shown moved', () => {
         const shown = afterOwnWrite(pulse());
         const quiet = pulse({ updatedOn: '2026-11-16T10:05:00Z', taskCount: 3 });
@@ -111,6 +111,9 @@ describe('pulse: what changed on Bitbucket', () => {
         expect(pulseNews(after, busy).newComments).toBe(1);
     });
 
+    it('checks at the configured interval', () => {
+        expect(pulseIntervalMs(5)).toBe(5 * MINUTE);
+        expect(pulseIntervalMs(1)).toBe(MINUTE);
     });
 
     it('refreshNews counts new comments and versions', () => {
@@ -343,17 +346,47 @@ describe('user refresh (↻)', () => {
         expect(load.diffMode.value).toBe('diff');
     });
 
-    it('reloads the summary and the shown range when the versions changed', async () => {
-        api.compare.mockResolvedValue(comparison(9, 10, ['src/B.ts']));
+    it('new version: the summary is read again, the ranges whose bounds did not change are kept', async () => {
+        api.compare.mockImplementation(async (_ref: unknown, from: number, to: number) => comparison(from, to, ['src/B.ts']));
         const load = usePrLoad(ref, detail);
+        await load.fetchIntoCache({ from: 0, to: 10, context: 3 });
         await load.loadCompare(shown);
         const pushed = { ...detail.versions[9]!, index: 11, hash: 'new-head' };
         api.pr.mockResolvedValue({ ...detail, versions: [...detail.versions, pushed] });
 
         expect(await load.refresh()).toEqual({ newVersions: 1, newComments: 0, otherChanges: false });
         expect(api.summary).toHaveBeenCalledOnce();
+        // v9..v10 and v0..v10 are the same commits: neither is computed again
+        await load.loadCompare({ from: 0, to: 10, context: 3 });
         expect(api.compare).toHaveBeenCalledTimes(2);
+    });
+
+    it('a replaced version: the ranges ending on it are forgotten, the shown one is computed again under ↻', async () => {
+        api.compare.mockImplementation(async (_ref: unknown, from: number, to: number) => comparison(from, to, ['src/B.ts']));
+        const load = usePrLoad(ref, detail);
+        await load.fetchIntoCache({ from: 3, to: 4, context: 3 });
+        await load.loadCompare(shown);
+        const replaced = detail.versions.map((v) => (v.index === 10 ? { ...v, hash: 'amended-head' } : v));
+        const recompute = deferred<Comparison>();
+        api.compare.mockReturnValueOnce(recompute.promise);
+        api.pr.mockResolvedValue({ ...detail, versions: replaced });
+
+        const refreshing = load.refresh();
+        await settle();
+        // the detail is read, the diff is being computed again: the ↻ button and the bar stay busy, the diff stays
+        expect(api.compare).toHaveBeenCalledTimes(3);
         expect(api.compare).toHaveBeenLastCalledWith(ref, 9, 10, 3);
+        expect(load.refreshing.value).toBe(true);
+        expect(load.recomputing.value).toBe(true);
+        expect(load.diffMode.value).toBe('diff');
+        recompute.resolve(comparison(9, 10, ['src/C.ts']));
+        expect(await refreshing).toMatchObject({ newVersions: 0 });
+        expect(load.refreshing.value).toBe(false);
+        expect(load.recomputing.value).toBe(false);
+        expect(load.compare.value?.files.map((f) => f.path)).toEqual(['src/C.ts']);
+        // v3..v4 did not change
+        await load.loadCompare({ from: 3, to: 4, context: 3 });
+        expect(api.compare).toHaveBeenCalledTimes(3);
     });
 
     it('returns null when the read fails', async () => {

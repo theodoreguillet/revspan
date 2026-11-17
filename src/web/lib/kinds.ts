@@ -41,6 +41,19 @@ export function versionsChanged(before: readonly Pick<Version, 'hash'>[], after:
     return before.length !== after.length || before.some((v, i) => v.hash !== after[i]?.hash);
 }
 
+/**
+ * A comparison computed before the version list changed still holds: both of its bounds are the same commits, readable
+ * as before (from 0 is the base of `to`, part of that version).
+ */
+export function rangeUnchanged(before: readonly Version[], after: readonly Version[], from: number, to: number): boolean {
+    const same = (index: number): boolean => {
+        const a = before[index - 1];
+        const b = after[index - 1];
+        return !!a && !!b && a.hash === b.hash && a.base === b.base && a.available === b.available;
+    };
+    return same(to) && (from === 0 || same(from));
+}
+
 /** The summary found a version erased by Bitbucket that the detail still thinks is readable: detail to reload. */
 export function purgedSinceDetail(versions: readonly Pick<Version, 'index' | 'available'>[], summary: Summary): boolean {
     const readable = new Set(versions.filter((v) => v.available).map((v) => v.index));

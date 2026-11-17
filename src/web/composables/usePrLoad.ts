@@ -2,7 +2,7 @@
 // once then confirmed by a background refresh of the detail.
 import { computed, ref, shallowRef, watch, type WatchStopHandle } from 'vue';
 import type { Comparison, PrDetail, PrRef, Review, Summary } from '../../shared/api.ts';
-import { purgedSinceDetail, summaryMap, versionsChanged } from '../lib/kinds.ts';
+import { purgedSinceDetail, rangeUnchanged, summaryMap, versionsChanged } from '../lib/kinds.ts';
 import { diffDisplay, SKELETON_DELAY_MS } from '../lib/loading.ts';
 import { PREFETCH_CONTEXT, prefetchFileCount, prefetchQueue } from '../lib/prefetch.ts';
 import { afterOwnWrite, refreshNews, unplacedThreads, type RefreshNews } from '../lib/pulse.ts';
@@ -87,7 +87,12 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     /** A refresh was dropped while a write was in progress: refresh when that write ends, even if it fails. */
     let refreshWanted = false;
     let running: Promise<boolean> | null = null;
-    const refreshing = ref(false);
+    /** The detail is being read again. */
+    const reading = ref(false);
+    /** A user refresh (↻) computes the shown range again (the progress bar shows, the diff stays). */
+    const recomputing = ref(false);
+    /** A refresh is in progress: the detail read, then for ↻ the shown range computed again. */
+    const refreshing = computed(() => reading.value || recomputing.value);
     /** Refreshes started so far (with `writes`: a check sent before one of them compares with an outdated detail). */
     let refreshes = 0;
     /** Run once a user refresh (↻) read a fresh detail: data read apart from it (the Tasks tab's list). */
@@ -161,10 +166,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
         refreshWanted = false;
         refreshes++;
-        refreshing.value = true;
+        reading.value = true;
         running = readDetail().finally(() => {
             running = null;
-            refreshing.value = false;
+            reading.value = false;
         });
         return running;
     }
@@ -389,8 +394,9 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     /**
      * User refresh (↻): reads a fresh detail and says what it brought (null if it was not read: failure, write in
-     * progress). New versions: the summary (see readDetail) and the shown range are computed again. Otherwise the diff
-     * stays, unless it lacks a thread placed on one of its files: the ranges concerned are computed again, once.
+     * progress). New versions: the summary (see readDetail) is read again, and the cached ranges whose bounds changed
+     * are forgotten. The diff stays, unless its range changed or it lacks a thread placed on one of its files: it is
+     * computed again (refreshing stays true until then, so the status shows once the diff is current).
      */
     async function refresh(): Promise<RefreshNews | null> {
         if (pendingAction.value !== null) {
@@ -406,13 +412,22 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
         }
         const after = detail.value;
         const params = shownParams;
+        if (versionsChanged(before.versions, after.versions)) {
+            evictCompare((c) => !rangeUnchanged(before.versions, after.versions, c.from, c.to));
+        }
         if (params) {
-            if (versionsChanged(before.versions, after.versions)) {
-                evictCompare(() => true);
-                await recomputeShown(params);
-            } else if (compare.value && unplacedThreads(compare.value, after.threads).length) {
+            const kept = cache.get(keyOf(params));
+            const unplaced = !!kept && unplacedThreads(kept, after.threads).length > 0;
+            if (unplaced) {
                 evictCompare((c) => unplacedThreads(c, after.threads).length > 0);
-                await recomputeShown(params);
+            }
+            if (!kept || unplaced) {
+                recomputing.value = true;
+                try {
+                    await recomputeShown(params);
+                } finally {
+                    recomputing.value = false;
+                }
             }
         }
         return refreshNews(before, after);
@@ -471,7 +486,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
     }
 
     return {
-        detail, summary, sums, compare, compareLoading, compareError, diffMode, pendingAction, acting, busy, refreshing,
+        detail, summary, sums, compare, compareLoading, compareError, diffMode, pendingAction, acting, busy, refreshing, recomputing,
         loadSummary, loadCompare, fetchIntoCache, startPrefetch, stopPrefetch, refreshDetail, refresh, onRefresh, syncSeq, act, patchDetail,
         patchCompare, evictCompare, patchReview,
     };

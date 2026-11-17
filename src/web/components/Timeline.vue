@@ -134,6 +134,6 @@ onMounted(async () => {
             </span>
         </div>
         <!-- a diff the user asked for is being computed (never the background prefetch) -->
-        <div v-if="page.compareLoading" class="rv-progress" role="progressbar" data-loading :aria-label="t('diff.computing')" />
+        <div v-if="page.compareLoading || page.recomputing" class="rv-progress" role="progressbar" data-loading :aria-label="t('diff.computing')" />
     </div>
 </template>
