@@ -115,7 +115,7 @@ onMounted(async () => {
             </template>
         </div>
         <div class="rv-tl-foot">
-            <span class="rv-readout" aria-live="polite"><b>{{ text.bold }}</b> <span class="s">{{ text.rest }}</span></span>
+            <span class="rv-readout" aria-live="polite" :title="`${text.bold} ${text.rest}`"><b>{{ text.bold }}</b> <span class="s">{{ text.rest }}</span></span>
             <button
                 v-for="p in page.presets"
                 :key="p.key"

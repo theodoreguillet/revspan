@@ -1777,8 +1777,11 @@ def run_checks(page):
             expect(page.locator('.rv-fold')).to_have_count(0)
             refold = page.locator('.rv-refold')
             expect(refold).to_have_text('Replier')
+            # Linux CI fonts are wider than macOS ones: widen the text so the check holds on both
+            wide = page.add_style_tag(content='.rv-tl-foot { letter-spacing: .6px; }')
             foot = page.evaluate('() => document.querySelector(".rv-tl-foot").getBoundingClientRect().height')
             assert foot < 40, f'timeline footer wraps once expanded: {foot}'
+            wide.evaluate('(e) => e.remove()')
             refold.click()
             expect(fold).to_have_count(1)
             expect(fold).to_contain_text('⋯ v1 → v22 · juin → août')
