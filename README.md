@@ -32,8 +32,9 @@ Code comments, tests and documentation are in English. The translation catalogs 
 
 ## VS Code extension
 
-The same page exists as a VS Code extension: a **"My PRs"** view in the activity bar (Revspan icon) with the review queue and notifications (see below), the PR page
-in a panel, and two actions on each file of the diff:
+The same page exists as a VS Code extension: a **"My PRs"** view in the activity bar (Revspan icon) with the review queue and notifications (see below),
+each PR in its own editor tab (the home page and the settings share one "Revspan" tab; opening a PR that already has a
+tab shows that tab), and two actions on each file of the diff:
 
 - **Open file**: the file from the repository cloned in the workspace, at the line. The clone is found by its Bitbucket
   remote (`<workspace>/<repo>`, https or ssh), otherwise by its folder name, and the git worktrees of the repository
@@ -47,7 +48,7 @@ There is no server or port: the extension calls the application in memory. The t
 storage (⚙ Settings of the panel or the "Revspan: Settings" command), separately from the web version; VS Code
 shares it across profiles. The tracked repositories are the VS Code setting `revspan.repositories`: it can also be
 edited from VS Code's Settings, is synced by Settings Sync and is specific to each profile (unlike the token). After "Reload Window", VS Code
-reopens the Revspan panel on the page that was displayed.
+restores every Revspan tab (the home and each PR) on the page it showed, without duplicates.
 
 ```bash
 npm run extension:install            # builds dist/revspan.vsix and installs it in VS Code (then reload the window)
@@ -183,29 +184,36 @@ On your own open PRs, a flag appears when the destination branch head differs fr
 destination moved since the base (never on a merged or declined PR); these PRs are listed in "To rebase" instead of "My
 PRs". The destination head is read **once per repository and per interval**.
 
-The PR page shows the same state for any open PR, yours or a colleague's: an orange « À rebaser sur master » chip when
-the PR is behind its destination, and a red « ⚠ Conflits avec master · 3 fichiers » chip when Bitbucket reports merge
+The PR page shows the same state for any open PR, yours or a colleague's: an orange "Needs rebase on master" chip when
+the PR is behind its destination, and a red "⚠ Conflicts with master · 3 files" chip when Bitbucket reports merge
 conflicts (`GET .../pullrequests/{id}/conflicts`). Its tooltip lists the files, and a click opens the first one shown
-in the diff, where the file list marks it ⚠ « Conflit de merge avec master » (the ⚠ of the rebase heuristic keeps its
+in the diff, where the file list marks it ⚠ "Merge conflict with master" (the ⚠ of the rebase heuristic keeps its
 own title). Conflicts are read only for a PR that is behind: a PR based on the destination's head cannot conflict. An
-up-to-date PR shows nothing.
+up-to-date PR shows nothing. They are read once per pair of source and destination heads, with a 5 s limit: a slow
+answer only leaves the chip out, the page never waits for it.
 
 ### Request budget
 
-Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one repository, 8 PRs):
+Revspan keeps its load on Bitbucket low. Measured on the fake Bitbucket (one repository, 8 PRs). The home rows count
+HTTP requests; the PR page rows count reads (a read of several pages, like the activity of a long PR, counts once):
 
 | Situation | Requests |
 |---|---|
-| First refresh (cold) | 31 |
+| First refresh (cold) | 32 |
 | Steady state, next interval | **3** (was 30): the PR list, the destination head, the one running build |
 | Two windows, in phase | **3** (was 60) |
 | Two windows, out of phase | 3, then 0 for the second window that reuses the first one's result |
 | After one code push on a PR you reviewed, with the version check | **19** (was 47) |
-| Explicit Refresh (VS Code command or the page's ↻ button) | **3** (was 30) |
+| Explicit Refresh of the home (VS Code command or the home page's Refresh button) | **3** (was 30) |
 | A repository fails (rate limit, outage), second window within 60 s | **0**: the failed home is shared for 60 s |
 | Reopening a PR within the refresh interval (tab closed and reopened, same comparisons) | **0**: the loaded PR and its comparisons are kept for `review.refreshMinutes`; a write, ↻ or a later open reads again |
+| PR page left open (periodic check) | **1** read of the PR per refresh interval per visible PR page; 0 for a hidden tab; pages checking within 15 s of each other or of a fresh load share it |
+| Changing the range on a PR page | **0** for the presets (prefetched) and any range already computed within the interval (3.3.0: 4 on the main PR) |
+| ↻ on a PR page | **5** on the main PR: the PR, its activity, its comments, the build statuses and the destination head (3.3.0 page reload: 4); the diff is computed again only if its range changed or a new thread lacks its place |
+| A write (comment, reply, resolve, edit, delete) | the write + one fresh detail: **+3** (the PR, its activity, its comments; the merge conflicts are not read again); task writes: the write + **1** (the PR's pulse, for the open count) |
+| Opening a local file from VS Code | **0** while the PR is loaded (3.3.0: 3 to 4) |
 | Opening a PR of ≤ 30 files: up to 3 extra comparisons in the background (prefetch), none for larger PRs or hidden tabs | **+1** on the main PR (48 → 49, cold caches): 2 comparisons, the third preset being the diff shown, mostly reuse what the version summaries already read |
-| Opening a PR: rebase state (any open PR) | up to date with its destination: no conflicts read (only the destination head, cached 60 s and shared with the home, and the merge base, kept on disk); behind it: **+1** paginated conflicts read (100 files per page). Kept with the loaded PR: reopening within the interval reads nothing |
+| Opening a PR: rebase state (any open PR) | up to date: no conflicts read (destination head cached 60 s and shared with the home, merge base on disk); behind: **+1** paginated conflicts read (2 HTTP requests: Bitbucket redirects it), once per source and destination head. Reopening within the interval reads nothing |
 | Tasks tab | **0** until it is opened (the open count comes from the PR already read); opening it: **1** paginated read (100 tasks per page), again on ↻ while it is open |
 
 Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only
@@ -223,9 +231,13 @@ one request per interval even once finished (see "Build status").
   (`+35 −14`, `deps` = only package.json / lockfile / submodule, `rebase only`, `message`).
   Hovering a symbol shows two short lines: what the version is (`v6 · rebase + code (+3 −1)`), then its date and flags.
   Click = what this version changed; Shift+click = extend the range; "master" = full version.
-- **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed"),
+- **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed", never a comment),
   a banner with what moved since, blue dots on the new versions.
-- **Diff**: unified or side by side, "seen" files (the tick is dropped if the file changes), files coming from master hidden.
+- **Diff**: unified or side by side (an added or removed file always unified), "seen" files (the tick is dropped if
+  the file changes; **Mark all viewed** or `Shift+V` ticks every listed file in one request), files coming from master
+  hidden. The toolbar stays under the timeline while scrolling. A range the page has not computed yet keeps the current
+  diff with a progress bar, then shows placeholder files after 200 ms; the presets (since your review, last version,
+  all) are computed in the background for a PR of up to 30 files, so switching to them is instant.
   Syntax highlighting with the VS Code themes (Dark+ / Light+, following the VS Code or browser theme), for the
   common languages (TypeScript, JavaScript, Vue, JSON, YAML, Markdown, CSS, HTML, Python, Java, Go, Rust, shell, PHP,
   Ruby, Kotlin, C#, SQL, XML, Dockerfile, Makefile).
@@ -233,13 +245,22 @@ one request per interval even once finished (see "Build status").
   lines shown contain it (case-insensitive, at least 2 characters; with "whole file" on, the whole file is searched).
   Each file shows its match count; Enter / Shift+Enter go to the next / previous match across files (a collapsed or
   seen file opens), Esc clears. All in the page: no request to Bitbucket.
-- **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution;
-  comment on a line of the latest version.
+- **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, resolution
+  (**Reopen** on the folded bar of a resolved thread); comment on a line of the latest version; **Edit** or delete your
+  own comments. A comment, a reply or a resolution shows at once, then Bitbucket's answer replaces it.
 - **Tasks** (tab after Builds, with the open count): the PR's Bitbucket tasks, read when the tab is opened. Tick or
   reopen a task, delete yours, add one with the input at the bottom; a task created under a comment links to its
   thread ("see the comment").
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
-  An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve.
+  An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve. The new state shows as
+  soon as Bitbucket accepts it. Only an approval, a change request or "Mark as reviewed" counts as a review: a comment
+  does not.
+- **Rebase and conflicts**: "Needs rebase" and "⚠ Conflicts" chips in the header (see "Needs rebase and merge
+  conflicts").
+- **↻ Refresh** reads the PR again (comments, approvals, versions) and says what came in ("2 new comments", "Up to
+  date"); the shown diff stays unless its range changed. While the page is visible, a light check (one read of the PR)
+  runs at the refresh interval of the settings: news shows a banner with a Refresh button, the page never changes by
+  itself. Reopening a PR within that interval shows it at once, with no read.
 
 Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `Shift+V` all files seen, `[`/`]` version, `/` search, `?` help. On AZERTY keyboards, `[`
 and `]` typed with Option or AltGr work too.
@@ -311,7 +332,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 ## Local data
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
-`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit,
+`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
 and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text; can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 
