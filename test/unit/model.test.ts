@@ -105,11 +105,13 @@ describe('computeReview', () => {
         expect(computeReview({ versions, activity, meUuid: ME, local: null }).lastReviewed).toBe(2);
     });
 
-    it('a request for changes still counts as a review', () => {
+    it('a request for changes does not count as a review', () => {
         const versions = versionsFixture();
         const changes = [{ changes_requested: { user: user(ME, 'Moi'), date: '2026-11-05T11:00:00Z' } }];
         expect(computeReview({ versions, activity: changes, meUuid: ME, local: null }))
-            .toMatchObject({ lastReviewed: 3, lastReviewedSource: 'approval' });
+            .toMatchObject({ lastReviewed: null, lastReviewedSource: null, lastReviewedAt: null });
+        // An earlier approval stays my last review, whatever change request follows it.
+        expect(computeReview({ versions, activity: [...activity, ...changes], meUuid: ME, local: null }).lastReviewed).toBe(2);
     });
 });
 

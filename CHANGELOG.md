@@ -48,8 +48,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 ### Fixed
 
 - Timeline: after expanding the folded versions of a long PR, a "Fold" button next to the presets folds them again.
-- Comments no longer count as a review: only an approval, a change request or "Mark as reviewed" sets your last
-  review, so people who only commented get no "new" badges and their PRs stay in "To review".
+- Comments no longer count as a review: only an approval or "Mark as reviewed" sets your last review, so people who
+  only commented get no "new" badges and their PRs stay in "To review".
+- Requesting changes does not mark the PR reviewed either (the "✓ reviewed" mark stays where it was); the PR still moves
+  to "Waiting on the author" until new code arrives.
 - Timeline: the blue range bar sits at the same height under every item (versions, gaps, spaces, the reviewed mark and
   folded blocks); it used to be lower under the versions.
 

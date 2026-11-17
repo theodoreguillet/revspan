@@ -16,7 +16,7 @@ export const REPO = 'demo-repo';
 
 /** PRs served by the fake Bitbucket (me = Thomas Girard, uuid {me}). */
 export const FAKE_PRS = {
-    /** 6 versions, rebases at v3 and v5; my comment and request for changes on v2; Yann approved; several threads. */
+    /** 6 versions, rebases at v3 and v5; my comment on v2 and my approval of v2 (withdrawn since: only the event remains); Yann approved; several threads. */
     main: 42,
     /** 34 versions from June to October, 5 rebases, each modifies src/Long.ts; I approved v30. */
     long: 43,
@@ -239,9 +239,10 @@ function mainPr(b: FakeBuilder): void {
             { user: ME, role: 'REVIEWER', approved: false, state: null },
         ],
         plan: versions.map((v) => ({ commit: named(v.hash), base: named(v.base), date: v.pushedAt })),
-        // My review of v2 is an explicit verdict: a comment alone no longer sets the review.
+        // My review of v2 is an explicit approval event (withdrawn since): a comment alone does not set the review, and
+        // neither would a request for changes.
         events: [
-            { changes_requested: { date: '2026-10-02T12:30:00Z', user: ME } },
+            { approval: { date: '2026-10-02T12:30:00Z', user: ME } },
             { approval: { date: '2026-10-21T12:00:00Z', user: YAN } },
         ],
         comments: [
@@ -312,7 +313,7 @@ function rebaseOnlyPr(b: FakeBuilder): void {
 
 /**
  * #48: old PR whose v1 commit Bitbucket erased (overwritten by a force-push); v2 and v3 readable.
- * My request for changes dates from v1: my last review falls on an unavailable version.
+ * My approval (withdrawn since: only the event remains) dates from v1: my last review falls on an unavailable version.
  */
 function purgedPr(b: FakeBuilder): void {
     const title = 'DEMO-48 - feat(purged): long running pull request';
@@ -332,7 +333,7 @@ function purgedPr(b: FakeBuilder): void {
             { commit: 'purged:v2', base: 'purged:m0', date: '2026-10-14T09:00:00Z' },
             { commit: 'purged:v3', base: 'purged:m0', date: '2026-10-19T15:00:00Z' },
         ],
-        events: [{ changes_requested: { date: '2026-09-01T09:30:00Z', user: ME } }],
+        events: [{ approval: { date: '2026-09-01T09:30:00Z', user: ME } }],
         comments: [b.comment(ME, '2026-09-01T09:00:00Z', 'Pourquoi cette ligne ?', { inline: { path: 'src/Purged.ts', to: 3, from: null } })],
     });
     b.repo.commits.delete(hex('purged:v1'));

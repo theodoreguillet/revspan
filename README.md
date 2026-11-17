@@ -90,7 +90,7 @@ first that matches wins:
 | 4 | You approved the latest version, or your approval still holds because only rebase-only pushes arrived since (Bitbucket keeps it). | `waiting` |
 | 5 | You are a designated reviewer, you **requested changes**, and only neutral versions arrived since. | `waiting` |
 | 6 | You are a **designated reviewer** (and none of the above). | `to-do` |
-| 7 | You reviewed or approved it and only neutral versions arrived since. | `waiting` |
+| 7 | You reviewed (approved or marked it) or requested changes, and only neutral versions arrived since. | `waiting` |
 | 8 | It needs review (fewer approvals than the minimum) and its author is followed, or you follow nobody. | `to-do` |
 | 9 | You reviewed or approved it and code or dependencies changed since (a version whose type is not computed yet counts as code). | `to-do` |
 | 10 | Anything else: enough approvals, nothing asked of you. | `others` |
@@ -233,7 +233,7 @@ one request per interval even once finished (see "Build status").
   Click = what this version changed; click it again = the whole version against master (a third click goes back); Shift+click = extend the range; "master" = full version.
   On a long PR the oldest versions are folded into one block; click it to expand, then **Fold** (next to the presets) to
   fold them again.
-- **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed", never a comment),
+- **Resume**: a "✓ reviewed" mark on your last review (approval or "Mark as reviewed", never a comment or a change request),
   a banner with what moved since, blue dots on the new versions.
 - **Diff**: unified or side by side (an added or removed file always unified), "seen" files (the tick is dropped if
   the file changes; **Mark all viewed** or `Shift+V` ticks every listed file in one request), files coming from master
@@ -255,7 +255,7 @@ one request per interval even once finished (see "Build status").
   thread ("see the comment").
 - **Approve / request changes**, with the version each person approved ("stale" if code changed since).
   An approval that Bitbucket keeps after rebase-only pushes stays valid: nothing to re-approve. The new state shows as
-  soon as Bitbucket accepts it. Only an approval, a change request or "Mark as reviewed" counts as a review: a comment
+  soon as Bitbucket accepts it. Only an approval or "Mark as reviewed" counts as a review: a comment or a change request
   does not.
 - **Rebase and conflicts**: "Needs rebase" and "⚠ Conflicts" chips in the header (see "Needs rebase and merge
   conflicts").

@@ -674,10 +674,12 @@ describe('home', () => {
         expect(cardOf(body, FAKE_PRS.main)?.draft).toBe(false);
     });
 
-    it('M8: designated reviewer who requested changes: "waiting" on the author until new code arrives', async () => {
+    it('M8: requesting changes on a PR still moves it to waiting, until new code arrives (no review mark set)', async () => {
         const { fake } = await setup();
         await api('POST', `${prPath(FAKE_PRS.neverReviewed)}/request-changes`);
-        expect(groupsOf((await api<Home>('GET', '/api/home')).body)[FAKE_PRS.neverReviewed]).toBe('waiting');
+        const first = (await api<Home>('GET', '/api/home')).body;
+        expect(groupsOf(first)[FAKE_PRS.neverReviewed]).toBe('waiting');
+        expect(cardOf(first, FAKE_PRS.neverReviewed)?.lastReviewed).toBeNull();
         pushVersion(fake.data, FAKE_PRS.neverReviewed, {
             commit: 'never:v3', from: 'never:v2', base: 'never:m0', changes: { 'src/never.ts': 'x\ny1\ny2\ny3\n' }, date: new Date(Date.now() + 60_000).toISOString(),
         });

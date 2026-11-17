@@ -130,7 +130,7 @@ export function withMyPulseEntry(participants: string, uuid: string, { approved,
     return [...entries, `${uuid}:${approved ? 1 : 0}:${state ?? ''}`].sort().join(',');
 }
 
-/** A review of `version` (approval or change request, or Mark as reviewed) when it is the latest one known. */
+/** A review of `version` (approval or Mark as reviewed) when it is the latest one known. */
 function withReviewOf(detail: PrDetail, version: number, source: ReviewSource, at: string): PrDetail {
     const { review } = detail;
     if (review.lastReviewed !== null && version < review.lastReviewed) {
@@ -141,8 +141,8 @@ function withReviewOf(detail: PrDetail, version: number, source: ReviewSource, a
 
 /**
  * My participant after a successful approve, unapprove, change request or withdrawal (Bitbucket's outcome is certain):
- * its state on the latest version, the pulse's participants matching (my own write is not news), and an approval or a
- * change request counts as a review of the latest version.
+ * its state on the latest version, the pulse's participants matching (my own write is not news), and an approval
+ * counts as a review of the latest version (a change request does not: only an approval or Mark as reviewed does).
  */
 export function withMyReview(detail: PrDetail, next: MyReviewState, at: string): PrDetail {
     const me = detail.me;
@@ -157,7 +157,7 @@ export function withMyReview(detail: PrDetail, next: MyReviewState, at: string):
         ? detail.participants.map((p) => (p.user?.uuid === me.uuid ? { ...p, ...patch } : p))
         : [...detail.participants, { user: me, role: 'PARTICIPANT', ...patch }];
     const updated = { ...detail, participants, pulse: { ...detail.pulse, participants: withMyPulseEntry(detail.pulse.participants, me.uuid, next) } };
-    return given ? withReviewOf(updated, latest, 'approval', at) : updated;
+    return next.state === 'approved' ? withReviewOf(updated, latest, 'approval', at) : updated;
 }
 
 /** "Mark as reviewed" of a version: my last reviewed version unless I already reviewed a later one. */

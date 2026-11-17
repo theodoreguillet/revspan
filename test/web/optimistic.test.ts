@@ -118,10 +118,12 @@ describe('my review state shown at once', () => {
         expect(next.participants.filter((p) => p.user?.uuid !== me.uuid)).toEqual(data.participants.filter((p) => p.user?.uuid !== me.uuid));
     });
 
-    it('request changes then withdraw: state on the latest version, then neither (the review stays)', () => {
-        const requested = withMyReview(prLong().data, { approved: false, state: 'changes_requested' }, AT);
+    it('requesting changes keeps the review mark: the state is patched, the review is not', () => {
+        const data = prLong().data;
+        const requested = withMyReview(data, { approved: false, state: 'changes_requested' }, AT);
         expect(mine(requested)).toMatchObject({ approved: false, state: 'changes_requested', approvedVersion: 10 });
-        expect(requested.review.lastReviewed).toBe(10);
+        expect(requested.review).toEqual(data.review);
+        expect(requested.pulse.participants).toBe('{me-uuid}:0:changes_requested');
         const withdrawn = withMyReview(requested, { approved: false, state: null }, AT);
         expect(mine(withdrawn)).toMatchObject({ approved: false, state: null, approvedVersion: null });
         expect(withdrawn.review).toEqual(requested.review);

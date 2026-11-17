@@ -407,10 +407,16 @@ export class HomeService {
         const review = computeReview({ versions, activity, meUuid, local });
         const lastReviewed = review.lastReviewed;
         const newVersions = versions.length - (lastReviewed ?? 0);
-
-        const newKinds = versions.slice(lastReviewed ?? 0).map((v) => local.kinds[v.hash.slice(0, 12)]);
-        const allKnown = newKinds.every(Boolean);
-        const newCodeVersions = allKnown ? newKinds.filter((k) => k === 'code' || k === 'deps').length : null;
+        const kindsSince = (from: number): number | null => {
+            const kinds = versions.slice(from).map((v) => local.kinds[v.hash.slice(0, 12)]);
+            return kinds.every(Boolean) ? kinds.filter((k) => k === 'code' || k === 'deps').length : null;
+        };
+        const newCodeVersions = kindsSince(lastReviewed ?? 0);
+        // A change request is not a review but still waits on the author: the queue counts new code since the later of the two.
+        const myChangesVersion = queue.changesRequested
+            ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
+            : null;
+        const queueNewCode = kindsSince(Math.max(lastReviewed ?? 0, myChangesVersion ?? 0));
         const myApprovedVersion = base.myApproval
             ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
             : null;
@@ -426,8 +432,8 @@ export class HomeService {
             ...queue,
             myApprovalCurrent: base.myApproval && myApprovedVersion === versions.length,
             approvalHolds,
-            reviewedOrApproved: lastReviewed !== null || base.myApproval,
-            newCodeVersions,
+            reviewedOrApproved: lastReviewed !== null || base.myApproval || queue.changesRequested,
+            newCodeVersions: queueNewCode,
         });
         return {
             group,
