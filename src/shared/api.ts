@@ -257,6 +257,8 @@ export interface Reaction {
 
 export interface Comment {
     id: number;
+    /** The comment it answers (null: the root of its thread). */
+    parentId: number | null;
     user: User | null;
     createdOn: string;
     /** Version in progress at creation (null right after a creation through the API). */
@@ -300,7 +302,10 @@ export interface Thread {
     version: number;
     resolved: boolean;
     resolvedBy: User | null;
-    /** Root first, then replies (chronological order), without the replies shown as reactions. */
+    /**
+     * Root first, then replies (chronological order), without the replies shown as reactions; a deleted comment only
+     * while a shown reply is under it (src/shared/reactions.ts).
+     */
     comments: Comment[];
 }
 

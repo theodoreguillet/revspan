@@ -162,8 +162,8 @@ describe('threads', () => {
 
     it('reaction chips: count, names in the tooltip (me marked), mine when one of my replies makes it', () => {
         const reply = commentById(data, 121);
-        expect(reactionChips(fr, reply, data.me)).toEqual([{ emoji: '👍', count: 1, title: 'Thomas Girard (toi)', mine: true }]);
-        expect(reactionChips(en, reply, data.me)[0]?.title).toBe('Thomas Girard (you)');
+        expect(reactionChips(fr, reply, data.me)).toEqual([{ emoji: '👍', count: 1, title: 'Thomas Girard (toi)', label: '👍 1 réaction : Thomas Girard (toi)', mine: true }]);
+        expect(reactionChips(en, reply, data.me)[0]).toMatchObject({ title: 'Thomas Girard (you)', label: '👍 1 reaction: Thomas Girard (you)' });
         expect(likedByMe(reply)).toBe(true);
 
         const yann = { uuid: '{yan}', displayName: 'Yann Bernard' };
@@ -173,9 +173,10 @@ describe('threads', () => {
             reactions: [{ emoji: '👍', users: [yann, camille], myCommentIds: [] }, { emoji: '🎉', users: [yann], myCommentIds: [] }],
         };
         expect(reactionChips(fr, other, data.me)).toEqual([
-            { emoji: '👍', count: 2, title: 'Yann Bernard et Camille Durand', mine: false },
-            { emoji: '🎉', count: 1, title: 'Yann Bernard', mine: false },
+            { emoji: '👍', count: 2, title: 'Yann Bernard et Camille Durand', label: '👍 2 réactions : Yann Bernard et Camille Durand', mine: false },
+            { emoji: '🎉', count: 1, title: 'Yann Bernard', label: '🎉 1 réaction : Yann Bernard', mine: false },
         ]);
+        expect(reactionChips(en, other, data.me)[0]?.label).toBe('👍 2 reactions: Yann Bernard and Camille Durand');
         expect(likedByMe(other)).toBe(false);
         // my 🎉 posted from Bitbucket is not a like
         expect(likedByMe({ ...other, reactions: [{ emoji: '🎉', users: [data.me!], myCommentIds: [140] }] })).toBe(false);

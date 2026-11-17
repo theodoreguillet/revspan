@@ -739,7 +739,9 @@ export function startFakeBitbucket({ port = 0, bigPr = false } = {}): Promise<Fa
             if (!target) {
                 return send(res, 404, { error: { message: 'no comment' } });
             }
+            // Like Bitbucket: the deleted comment stays listed with its text blanked, and comment_count leaves it out.
             target.deleted = true;
+            target.content = { raw: '', html: '' };
             fake.pr.comment_count = fake.comments.filter((c) => !c.deleted).length;
             return send(res, 204, '', 'text/plain');
         }

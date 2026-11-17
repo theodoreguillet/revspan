@@ -27,6 +27,8 @@ function mapComment(detail: PrDetail, commentId: number, change: (comment: Comme
 export function withPendingComment(detail: PrDetail, pending: PendingComment, me: User | null): PrDetail {
     const comment: Comment = {
         id: pending.tempId,
+        // a reply answers its thread's root
+        parentId: pending.threadId,
         user: me,
         createdOn: new Date().toISOString(),
         // same as a comment returned by the server right after its creation: no flicker when it is replaced
@@ -68,8 +70,34 @@ export function replaceComment(detail: PrDetail, tempId: number, comment: Commen
 }
 
 /**
- * Removes a comment: a pending one (negative id) disappears, a deleted one is marked deleted as the server shows it.
- * A thread left without any comment that is not deleted disappears, as on the server.
+ * The comments of a thread that stay shown, as on the server (src/shared/reactions.ts): every comment that is not
+ * deleted, and a deleted one only while a shown comment is under it (by `parentId`).
+ */
+function shownComments(comments: readonly Comment[]): Comment[] {
+    const children = new Map<number, Comment[]>();
+    for (const c of comments) {
+        if (c.parentId !== null) {
+            children.set(c.parentId, [...children.get(c.parentId) ?? [], c]);
+        }
+    }
+    const shown = new Map<number, boolean>();
+    // `path`: the comments above, so that a parent loop in bad data cannot recurse forever
+    const isShown = (c: Comment, path: Set<number>): boolean => {
+        let known = shown.get(c.id);
+        if (known === undefined) {
+            const inner = new Set(path).add(c.id);
+            known = !c.deleted || (children.get(c.id) ?? []).some((child) => !inner.has(child.id) && isShown(child, inner));
+            shown.set(c.id, known);
+        }
+        return known;
+    };
+    return comments.filter((c) => isShown(c, new Set()));
+}
+
+/**
+ * Removes a comment. A pending one (negative id) disappears. A deleted one shows as deleted only while a shown reply is
+ * under it, as on the server; otherwise it disappears, with any deleted comment above it left with nothing shown under
+ * it. A thread with nothing shown left disappears.
  */
 export function removeComment(detail: PrDetail, commentId: number): PrDetail {
     const threads: Thread[] = [];
@@ -80,7 +108,7 @@ export function removeComment(detail: PrDetail, commentId: number): PrDetail {
         }
         const comments = commentId < 0
             ? t.comments.filter((c) => c.id !== commentId)
-            : t.comments.map((c) => (c.id === commentId ? { ...c, deleted: true, html: '', raw: '' } : c));
+            : shownComments(t.comments.map((c) => (c.id === commentId ? { ...c, deleted: true, html: '', raw: '' } : c)));
         if (comments.some((c) => !c.deleted)) {
             threads.push({ ...t, comments });
         }

@@ -420,6 +420,7 @@ export const en = {
     'comment.like': 'Like',
     'comment.unlike': 'Remove your 👍',
     'reaction.you': '{name} (you)',
+    'reaction.label': { one: '{emoji} {count} reaction: {names}', other: '{emoji} {count} reactions: {names}' },
 
     // ---------- Tasks ----------
     'task.empty': 'No task on this pull request',

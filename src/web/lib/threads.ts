@@ -69,7 +69,10 @@ export function avatarHue(user: User | null | undefined): number {
 export interface ReactionChip {
     emoji: string;
     count: number;
+    /** The names (tooltip). */
     title: string;
+    /** Emoji, count and names, read out by a screen reader. */
+    label: string;
     mine: boolean;
 }
 
@@ -77,7 +80,11 @@ export function reactionChips(tr: Translator, comment: Comment, me: User | null)
     const name = (u: User): string => (me && u.uuid === me.uuid ? tr.t('reaction.you', { name: u.displayName }) : u.displayName);
     return comment.reactions
         .filter((r) => r.users.length > 0)
-        .map((r) => ({ emoji: r.emoji, count: r.users.length, title: tr.list(r.users.map(name)), mine: r.myCommentIds.length > 0 }));
+        .map((r) => {
+            const names = tr.list(r.users.map(name));
+            const count = r.users.length;
+            return { emoji: r.emoji, count, title: names, label: tr.t('reaction.label', { emoji: r.emoji, count, names }), mine: r.myCommentIds.length > 0 };
+        });
 }
 
 /** My replies making the 👍 of a comment (empty: I have not liked it). */

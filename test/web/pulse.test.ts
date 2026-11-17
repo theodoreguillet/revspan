@@ -27,7 +27,7 @@ const pulse = (over: Partial<PrPulse> = {}): PrPulse => ({
 });
 
 function comment(id: number, raw: string, over: Partial<Comment> = {}): Comment {
-    return { id, user: yann, createdOn: '2026-11-16T10:00:00Z', version: 10, html: `<p>${raw}</p>`, raw, isNew: true, deleted: false, mine: false, reactions: [], ...over };
+    return { id, user: yann, createdOn: '2026-11-16T10:00:00Z', version: 10, html: `<p>${raw}</p>`, raw, isNew: true, deleted: false, mine: false, reactions: [], parentId: null, ...over };
 }
 
 /** The long PR's detail with a pulse and a freshness (read `loadedAt`, interval `minutes`). */
@@ -151,6 +151,17 @@ describe('pulse: what changed on Bitbucket', () => {
         expect(refreshNews(before, withLike([yann]))).toEqual({ newVersions: 0, newComments: 0, otherChanges: true });
         expect(refreshNews(withLike([yann]), before)).toEqual({ newVersions: 0, newComments: 0, otherChanges: true });
         expect(refreshNews(withLike([yann]), withLike([yann]))).toEqual({ newVersions: 0, newComments: 0, otherChanges: false });
+    });
+
+    it('refreshNews sees a comment that vanished (deleted with nothing under it) as another change', () => {
+        const before = detailOf();
+        const vanished = { ...before, threads: before.threads.map((t) => (t.id === 120 ? { ...t, comments: t.comments.filter((c) => c.id !== 121) } : t)) };
+        expect(refreshNews(before, vanished)).toEqual({ newVersions: 0, newComments: 0, otherChanges: true });
+        // the whole thread gone
+        expect(refreshNews(before, { ...before, threads: before.threads.filter((t) => t.id !== 110) }).otherChanges).toBe(true);
+        // my comment being sent (temporary id), now Bitbucket's: a new comment, not a vanished one
+        const sending = withThread(before, { ...inlineThread(-1, 'src/A.ts'), comments: [comment(-1, 'Mine', { pending: true })] });
+        expect(refreshNews(sending, withThread(before, inlineThread(900, 'src/A.ts')))).toEqual({ newVersions: 0, newComments: 1, otherChanges: false });
     });
 
     it('does not count a deleted new comment', () => {

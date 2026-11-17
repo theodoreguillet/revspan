@@ -37,7 +37,7 @@ Common rules:
 | GET | `/api/pr/:ws/:repo/:id/pulse` | — | `PrPulse` (one Bitbucket read: `updatedOn`, `head`, `commentCount`, `participants`, `taskCount`; the page compares it to `PrDetail.pulse`, and reads it after a task write to update the open count) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |
-| POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` |
+| POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` (`parentId`: the comment it answers, null for a thread root; `reactions: []`). A like is a reply `{ raw: "👍", parentId }`, an unlike the DELETE of that reply: no route of its own |
 | PUT | `/api/pr/:ws/:repo/:id/comments/:cid` | `EditComment` | `Comment` (404 if the comment was deleted meanwhile) |
 | DELETE | `/api/pr/:ws/:repo/:id/comments/:cid` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/comments/:cid/resolve` | — | `Ok` |

@@ -101,7 +101,15 @@ function onEditKeydown(event: KeyboardEvent): void {
             <SafeHtml v-else :html="comment.html" />
             <!-- replies made of a single emoji (the Bitbucket API has no reactions) -->
             <div v-if="chips.length" class="rv-reacts">
-                <span v-for="chip in chips" :key="chip.emoji" :class="['rv-react', { mine: chip.mine }]" :data-emoji="chip.emoji" :title="chip.title">{{ chip.emoji }} {{ chip.count }}</span>
+                <span
+                    v-for="chip in chips"
+                    :key="chip.emoji"
+                    :class="['rv-react', { mine: chip.mine }]"
+                    role="img"
+                    :data-emoji="chip.emoji"
+                    :title="chip.title"
+                    :aria-label="chip.label"
+                >{{ chip.emoji }} {{ chip.count }}</span>
             </div>
             <div v-if="!comment.deleted && !comment.pending && !isEditing" class="acts">
                 <!-- my profile tells which "👍" replies are mine: without it, a like could not be taken back -->

@@ -412,12 +412,29 @@ describe('actions', () => {
         expect(after?.comments[0]?.reactions).toEqual([{ emoji: '👍', users: [{ uuid: '{me}', displayName: 'Thomas Girard', nickname: 'tgirard' }], myCommentIds: [liked.body.id] }]);
 
         expect((await api('DELETE', `${prPath()}/comments/${liked.body.id}`)).status).toBe(200);
+        // like Bitbucket, the deleted reply stays listed with its text blanked: nothing tells it was a 👍
+        expect(fake.data.prs.get(FAKE_PRS.main)?.comments.find((c) => c.id === liked.body.id)).toMatchObject({ deleted: true, content: { raw: '', html: '' } });
         const unliked = (await detail()).threads.find((t) => t.id === thread.id);
         // neither a reaction nor a "deleted comment" any more
         expect(unliked?.comments.map((c) => [c.id, c.deleted])).toEqual(thread.comments.map((c) => [c.id, false]));
         expect(unliked?.comments[0]?.reactions).toEqual([]);
         expect(fake.calls.map(shortCall)).toEqual(['POST /comments', `DELETE /comments/${liked.body.id}`]);
         expect(fake.calls[0]?.body).toEqual({ content: { raw: '👍' }, parent: { id: target.id } });
+    });
+
+    it('a deleted reply nobody answered is not shown; one with a shown reply under it shows as deleted', async () => {
+        await setup();
+        const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);
+        if (!thread) {
+            throw new Error('no open thread of mine');
+        }
+        const first = await api<Comment>('POST', `${prPath()}/comments`, { raw: 'First', parentId: thread.id });
+        const second = await api<Comment>('POST', `${prPath()}/comments`, { raw: 'Answer to the first', parentId: first.body.id });
+        await api('DELETE', `${prPath()}/comments/${first.body.id}`);
+        const kept = (await detail()).threads.find((t) => t.id === thread.id)?.comments.slice(-2);
+        expect(kept?.map((c) => [c.id, c.deleted, c.raw, c.parentId])).toEqual([[first.body.id, true, '', thread.id], [second.body.id, false, 'Answer to the first', first.body.id]]);
+        await api('DELETE', `${prPath()}/comments/${second.body.id}`);
+        expect((await detail()).threads.find((t) => t.id === thread.id)?.comments.map((c) => c.id)).toEqual(thread.comments.map((c) => c.id));
     });
 
     it('PUT comments/:cid edits my comment', async () => {
@@ -1231,13 +1248,18 @@ describe('request budget', () => {
         expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.neverReviewed}`);
     });
 
-    it('deleted comments count towards comment_count: such an activity is kept at once', async () => {
+    // Bitbucket leaves deleted comments out of comment_count while the activity still lists them; an activity is complete
+    // either way, so it is kept at once (were deleted comments ever counted, it would still be).
+    it.each([
+        ['leaves deleted comments out of comment_count, as Bitbucket does', false],
+        ['would count them', true],
+    ])('a PR with a deleted comment keeps its activity at once: Bitbucket %s', async (_label, counted) => {
         fakeTime();
         const { fake } = await setup();
         const main = fake.data.prs.get(FAKE_PRS.main)!;
         const deleted = main.comments[0]!;
         deleted.deleted = true;
-        main.pr.comment_count = main.comments.length;
+        main.pr.comment_count = main.comments.filter((c) => counted || !c.deleted).length;
         await home();
         elapse(3 * MINUTE_MS);
         expect(labels(await requestsOf(home))).not.toContain(`activity #${FAKE_PRS.main}`);

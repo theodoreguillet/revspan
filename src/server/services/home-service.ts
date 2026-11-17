@@ -135,7 +135,8 @@ function consistentWithList(activity: readonly BbActivity[], raw: BbPullRequest)
             return false;
         }
     }
-    // Deleted comments included: whether Bitbucket counts them or not, a complete activity has at least that many.
+    // The activity lists deleted comments too, while Bitbucket's comment_count leaves them out: a complete activity has at
+    // least that many (and still would if the count included them).
     return activity.filter((e) => e.comment).length >= (raw.comment_count ?? 0);
 }
 

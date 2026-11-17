@@ -3,7 +3,7 @@
 import type {
     Comment, Participant, PrInfo, PrPulse, PrRef, PrTask, Reaction, Review, ReviewSource, Thread, User, Version,
 } from '../../shared/api.ts';
-import { reactionReplies } from '../../shared/reactions.ts';
+import { classifyComments } from '../../shared/reactions.ts';
 import type { BbActivity, BbComment, BbPullRequest, BbTask, BbUser } from '../bitbucket/types.ts';
 import { sameHash } from './classify.ts';
 
@@ -231,9 +231,10 @@ export function buildParticipants(pr: BbPullRequest, activity: readonly BbActivi
     });
 }
 
-function toComment(c: BbComment, versions: readonly DatedVersion[], meUuid: string | null, sinceDate: string | null): Comment {
+function toComment(c: BbComment, parentId: number | null, versions: readonly DatedVersion[], meUuid: string | null, sinceDate: string | null): Comment {
     return {
         id: c.id,
+        parentId,
         user: userOf(c.user),
         createdOn: c.created_on,
         version: versionAt(versions, c.created_on),
@@ -264,7 +265,10 @@ function groupReactions(list: readonly { emoji: string; comment: BbComment }[], 
     return [...grouped.values()];
 }
 
-/** Comment threads (root + replies, in order); the replies made of a single emoji become reactions. */
+/**
+ * Comment threads (root + replies, in order). The replies made of a single emoji become reactions; a deleted comment
+ * shows only while a shown comment is under it (src/shared/reactions.ts).
+ */
 export function buildThreads(
     rawComments: readonly BbComment[],
     versions: readonly DatedVersion[],
@@ -284,16 +288,16 @@ export function buildThreads(
         return current;
     };
 
-    const emojiReplies = reactionReplies(rawComments);
+    const { reactions: emojiReplies, hidden } = classifyComments(rawComments);
     const comments = new Map<number, Comment>();
     const reactionsOf = new Map<number, { emoji: string; comment: BbComment }[]>();
     for (const c of rawComments) {
+        const parentId = c.parent && byId.has(c.parent.id) ? c.parent.id : null;
         const emoji = emojiReplies.get(c.id);
-        if (!emoji) {
-            comments.set(c.id, toComment(c, versions, meUuid, sinceDate));
-        } else if (c.parent && !c.deleted) {
-            // a deleted one (a like taken back) shows neither as a reaction nor as a comment
-            reactionsOf.set(c.parent.id, [...reactionsOf.get(c.parent.id) ?? [], { emoji, comment: c }]);
+        if (emoji && parentId !== null) {
+            reactionsOf.set(parentId, [...reactionsOf.get(parentId) ?? [], { emoji, comment: c }]);
+        } else if (!hidden.has(c.id)) {
+            comments.set(c.id, toComment(c, parentId, versions, meUuid, sinceDate));
         }
     }
     for (const [parentId, list] of reactionsOf) {

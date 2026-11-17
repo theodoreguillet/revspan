@@ -300,6 +300,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": null,
           "reactions": []
         },
         {
@@ -316,6 +317,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": 101,
           "reactions": []
         }
       ]
@@ -349,6 +351,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": null,
           "reactions": []
         },
         {
@@ -365,6 +368,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": 103,
           "reactions": []
         }
       ]
@@ -398,6 +402,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": null,
           "reactions": []
         },
         {
@@ -414,6 +419,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": 105,
           "reactions": []
         }
       ]
@@ -440,6 +446,7 @@
           "isNew": false,
           "deleted": false,
           "mine": false,
+          "parentId": null,
           "reactions": []
         }
       ]
@@ -469,6 +476,7 @@
           "isNew": true,
           "deleted": false,
           "mine": false,
+          "parentId": null,
           "reactions": []
         },
         {
@@ -485,6 +493,7 @@
           "isNew": true,
           "deleted": false,
           "mine": false,
+          "parentId": 120,
           "reactions": [
             {
               "emoji": "👍",

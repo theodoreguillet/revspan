@@ -60,7 +60,7 @@ export const sameNews = (a: PulseNews, b: PulseNews): boolean =>
 export interface RefreshNews {
     newVersions: number;
     newComments: number;
-    /** Approvals, resolutions, edited or deleted comments, reactions given or taken back. */
+    /** Approvals, resolutions, edited, deleted or vanished comments, reactions given or taken back. */
     otherChanges: boolean;
 }
 
@@ -72,6 +72,9 @@ const participantsKey = (d: PrDetail): string =>
 export function refreshNews(before: PrDetail, after: PrDetail): RefreshNews {
     const known = new Map(commentsOf(before).map((c) => [c.id, c]));
     const newComments = commentsOf(after).filter((c) => !known.has(c.id) && !c.deleted).length;
+    // a comment deleted with nothing under it is no longer listed (a comment being sent has a negative id: not a change)
+    const listed = new Set(commentsOf(after).map((c) => c.id));
+    const vanished = [...known.keys()].some((id) => id > 0 && !listed.has(id));
     const changed = commentsOf(after).some((c) => {
         const old = known.get(c.id);
         return !!old && (old.raw !== c.raw || old.deleted !== c.deleted || reactionsKey(old) !== reactionsKey(c));
@@ -81,7 +84,7 @@ export function refreshNews(before: PrDetail, after: PrDetail): RefreshNews {
     return {
         newVersions: Math.max(0, after.versions.length - before.versions.length),
         newComments,
-        otherChanges: changed || resolutions || participantsKey(before) !== participantsKey(after),
+        otherChanges: changed || vanished || resolutions || participantsKey(before) !== participantsKey(after),
     };
 }
 

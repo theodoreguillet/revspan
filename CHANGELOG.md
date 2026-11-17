@@ -17,7 +17,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Edit your own comments. Reopen a resolved thread from its folded bar.
 - Like a comment again (👍 button): the Bitbucket API has no reactions, so a like is a "👍" reply to the comment and
   clicking again deletes it. Replies made of a single emoji show as reaction chips under the comment they answer
-  ("👍 2", names in the tooltip, highlighted when one is yours), not as replies, and no comment count includes them.
+  ("👍 2", names in the tooltip, highlighted when one is yours), not as replies, and no comment count of the page
+  includes them (the periodic check's banner does: it reads Bitbucket's comment count).
 - Search the diff (`/`): file names and the lines shown (or whole files), with a match count per file and Enter /
   Shift+Enter to move across matches.
 - Search PRs on the home page (`/` to focus, Esc to clear): by title, `#number`, repository or author, ignoring case and
@@ -57,6 +58,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
   text added to or removed from a line is marked however short the line, and lines that differ too much keep only the
   line color.
 - Contributor subgroups of the home are sorted alphabetically.
+- A deleted comment nobody answered is no longer shown (Bitbucket keeps it with its text blanked); one with a reply
+  still shown under it stays as "Comment deleted".
 - The "My PRs" view no longer has an "Open a PR (URL)" title button (the home page has the URL field; the command
   stays), and the home page no longer shows the top bar.
 

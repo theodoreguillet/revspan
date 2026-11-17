@@ -849,7 +849,7 @@ def run_checks(page):
         expect(page.locator('.rv-comp')).to_have_count(0)
     inline_comment(page)
 
-    @check('reply to a thread, then delete my reply')
+    @check('reply to a thread, then delete my reply: it goes, no "deleted comment" left behind')
     def reply_and_delete(page):
         assert my_thread, 'no open thread of mine'
         page.locator(f'{thread_sel} .rv-th-f textarea').fill('Merci, c\'est bon pour moi.')
@@ -862,10 +862,16 @@ def run_checks(page):
         expect(mine).not_to_have_class(re.compile(r'\bpending\b'), timeout=10000)
         cid = int(mine.get_attribute('data-comment'))
         assert cid > 0, cid
+        deleted_cards = page.locator(f'{thread_sel} .rv-cm .deleted').count()
         calls.start()
         mine.locator('[data-action="delete"]').click()  # confirm() accepted by the dialog handler
         calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{cid}'), f'DELETE comments/{cid}')
         expect(page.locator(f'{thread_sel} .rv-cm', has_text='Merci, c\'est bon pour moi.')).to_have_count(0, timeout=10000)
+        # nothing answered it: it is not shown at all, neither before nor after the background refresh
+        expect(page.locator(f'{thread_sel} .rv-cm[data-comment="{cid}"]')).to_have_count(0)
+        expect(page.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(page.locator(f'{thread_sel} .rv-cm[data-comment="{cid}"]')).to_have_count(0)
+        expect(page.locator(f'{thread_sel} .rv-cm .deleted')).to_have_count(deleted_cards)
     reply_and_delete(page)
 
     @check('like: 👍 posts a "👍" reply shown as my chip, a second click deletes it; a single-emoji reply is a chip, not a reply')
@@ -903,9 +909,15 @@ def run_checks(page):
         expect(chip).to_have_text('👍 1')
         expect(chip).to_have_class(re.compile(r'\bmine\b'))
         expect(emoji_card).to_have_count(0)
+        # the reply just created: the unlike must delete that one
+        detail = api(pr_api(MAIN_PR) + '?fresh=1')
+        mine = next((c for t in detail['threads'] for c in t['comments'] if c['id'] == root['id']), None)
+        liked = next((r for r in (mine or {}).get('reactions', []) if r['emoji'] == '👍'), None)
+        assert liked and len(liked['myCommentIds']) == 1, mine
+        like_id = liked['myCommentIds'][0]
         calls.start()
         button.click()
-        calls.wait(lambda c: c['method'] == 'DELETE' and re.search(r'/comments/\d+$', c['path']), 'DELETE comments/<my "👍" reply>')
+        calls.wait(lambda c: c['method'] == 'DELETE' and c['path'].endswith(f'/comments/{like_id}'), f'DELETE comments/{like_id} (my "👍" reply)')
         expect(chip).to_have_count(0, timeout=10000)
         expect(button).to_have_attribute('aria-pressed', 'false')
         expect(button).not_to_have_attribute('aria-busy', 'true', timeout=10000)

@@ -66,7 +66,11 @@ describe('like button and reaction chips of a comment', () => {
         expect(likeButton(root, 121)?.title).toBe('Remove your 👍');
         expect(chips(root, 120)).toEqual([]);
         expect(chips(root, 121)).toEqual(['👍 1 (mine)']);
-        expect(item(root, 121).querySelector<HTMLElement>('.rv-react')?.title).toBe('Thomas Girard (you)');
+        const chip = item(root, 121).querySelector<HTMLElement>('.rv-react');
+        expect(chip?.title).toBe('Thomas Girard (you)');
+        // read out with the names, not only shown on hover
+        expect(chip?.getAttribute('role')).toBe('img');
+        expect(chip?.getAttribute('aria-label')).toBe('👍 1 reaction: Thomas Girard (you)');
     });
 
     it('a click likes at once, the chip shows before Bitbucket answers', async () => {

@@ -206,6 +206,7 @@ export class PrService {
         const me = await this.session.me().catch(() => null);
         return {
             id: written.id,
+            parentId: written.parent?.id ?? null,
             user: userOf(written.user),
             createdOn: written.created_on,
             version: null,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { approvalHoldsSince } from '../../src/shared/approval.ts';
 import { parsePrUrl } from '../../src/shared/pr-url.ts';
-import { reactionOf, reactionReplies } from '../../src/shared/reactions.ts';
+import { classifyComments, reactionOf, reactionReplies } from '../../src/shared/reactions.ts';
 import { normalizeRepo, parseRepoList } from '../../src/shared/repos.ts';
 
 describe('parsePrUrl', () => {
@@ -69,20 +69,60 @@ describe('reactions: replies made of a single emoji (the Bitbucket API has no re
         expect(reactionOf(null)).toBeNull();
     });
 
-    it('reactionReplies: a reply to a listed comment, nobody answered it; deleted ones kept when their text is known', () => {
+    it('reactionOf: emoji variation selector and skin tones ignored, shortcodes; ZWJ sequences and flags are text', () => {
+        expect(reactionOf('❤')).toBe('❤️');
+        expect(reactionOf('❤️')).toBe('❤️');
+        expect(reactionOf('👍️')).toBe('👍');
+        expect(reactionOf('👍🏽')).toBe('👍');
+        expect(reactionOf('👏🏿')).toBe('👏');
+        expect([':tada:', ':heart:', ':rocket:', ':eyes:', ':clap:', ':white_check_mark:'].map(reactionOf)).toEqual(['🎉', '❤️', '🚀', '👀', '👏', '✅']);
+        // zero-width-joiner sequences (👨‍💻, 👍+ZWJ+🔥) and flags are not single emoji
+        expect(reactionOf('\u{1F468}\u200D\u{1F4BB}')).toBeNull();
+        expect(reactionOf('👍\u200D🔥')).toBeNull();
+        expect(reactionOf('🇫🇷')).toBeNull();
+        expect(reactionOf('👍🏽👍')).toBeNull();
+    });
+
+    it('reactionReplies: a live reply made of a single emoji, to a listed comment, with nothing shown under it', () => {
         const comments = [
+            // a root is never a reaction
             { id: 1, content: { raw: '👍' } },
             { id: 2, parent: { id: 1 }, content: { raw: 'Done' } },
             { id: 3, parent: { id: 2 }, content: { raw: '👍' } },
             { id: 4, parent: { id: 2 }, content: { raw: ':+1:' } },
-            // answered: stays a comment, so its reply keeps its place
+            // answered by a shown reply: stays a comment, so its reply keeps its place
             { id: 5, parent: { id: 1 }, content: { raw: '🎉' } },
             { id: 6, parent: { id: 5 }, content: { raw: 'Why?' } },
             // parent not listed
             { id: 7, parent: { id: 99 }, content: { raw: '👍' } },
-            { id: 8, parent: { id: 2 }, content: { raw: '👍' }, deleted: true },
-            { id: 9, parent: { id: 2 }, content: { raw: '' }, deleted: true },
+            // deleted (Bitbucket blanks its text): never a reaction
+            { id: 8, parent: { id: 2 }, content: { raw: '', html: '' }, deleted: true },
+            // its only reply (a like) was taken back: nothing shown under it any more, a reaction again
+            { id: 9, parent: { id: 2 }, content: { raw: '✅' } },
+            { id: 10, parent: { id: 9 }, content: { raw: '', html: '' }, deleted: true },
+            // a reaction to a reaction: the first one stays a comment, the second one shows on it
+            { id: 11, parent: { id: 2 }, content: { raw: '🚀' } },
+            { id: 12, parent: { id: 11 }, content: { raw: '👀' } },
         ];
-        expect(reactionReplies(comments)).toEqual(new Map([[3, '👍'], [4, '👍'], [8, '👍']]));
+        expect(reactionReplies(comments)).toEqual(new Map([[3, '👍'], [4, '👍'], [9, '✅'], [12, '👀']]));
+    });
+
+    it('classifyComments: a deleted comment shows only while a shown comment is under it, never for a reaction alone', () => {
+        const comments = [
+            // deleted root and reply kept for the comment under them; the deleted leaf goes
+            { id: 1, content: { raw: '' }, deleted: true },
+            { id: 2, parent: { id: 1 }, content: { raw: '' }, deleted: true },
+            { id: 3, parent: { id: 2 }, content: { raw: 'Still here' } },
+            { id: 4, parent: { id: 3 }, content: { raw: '' }, deleted: true },
+            // a deleted chain with nothing shown under it goes whole
+            { id: 5, parent: { id: 3 }, content: { raw: '' }, deleted: true },
+            { id: 6, parent: { id: 5 }, content: { raw: '' }, deleted: true },
+            // a live reaction does not keep a deleted comment (it goes with it)
+            { id: 7, content: { raw: '' }, deleted: true },
+            { id: 8, parent: { id: 7 }, content: { raw: '👍' } },
+        ];
+        const { reactions, hidden } = classifyComments(comments);
+        expect(reactions).toEqual(new Map([[8, '👍']]));
+        expect([...hidden].sort((a, b) => a - b)).toEqual([4, 5, 6, 7]);
     });
 });

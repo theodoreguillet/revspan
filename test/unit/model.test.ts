@@ -136,8 +136,8 @@ describe('buildThreads', () => {
             { id: 13, created_on: '2026-11-05T12:31:00Z', user: user(YAN, 'Yann'), content: { raw: ':+1:' }, parent: { id: 11 } },
             { id: 14, created_on: '2026-10-14T09:19:00Z', user: user('{ai}', 'AI'), content: { raw: '## QA', html: '<h2>QA</h2>' } },
             { id: 15, created_on: '2026-10-29T00:00:00Z', user: user(CAM, 'Camille'), content: { raw: '' }, deleted: true },
-            // a like taken back: neither a reaction nor a deleted comment
-            { id: 16, created_on: '2026-11-05T12:40:00Z', user: user(CAM, 'Camille'), content: { raw: '👍' }, parent: { id: 10 }, deleted: true },
+            // a like taken back (Bitbucket blanks a deleted comment): neither a reaction nor a deleted comment
+            { id: 16, created_on: '2026-11-05T12:40:00Z', user: user(CAM, 'Camille'), content: { raw: '', html: '' }, parent: { id: 10 }, deleted: true },
         ];
         const threads = buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: '2026-11-05T11:00:00Z' });
         expect(threads.map((t) => t.id)).toEqual([14, 10]);
@@ -145,7 +145,7 @@ describe('buildThreads', () => {
         expect(general).toMatchObject({ path: null, version: 1 });
         expect(inline).toMatchObject({ path: 'src/CreateRecord.ts', anchor: { to: 40, from: null }, version: 3, resolved: true });
         // Replies made of a single emoji are reactions on the comment they answer, not comments (nor new ones).
-        expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine])).toEqual([[10, true, false], [11, true, false]]);
+        expect(inline!.comments.map((c) => [c.id, c.isNew, c.mine, c.parentId])).toEqual([[10, true, false, null], [11, true, false, 10]]);
         expect(inline!.comments[0]!.reactions).toEqual([]);
         expect(inline!.comments[1]!.reactions).toEqual([{
             emoji: '👍',
@@ -153,6 +153,27 @@ describe('buildThreads', () => {
             myCommentIds: [12],
         }]);
         expect(general!.comments[0]!.reactions).toEqual([]);
+    });
+
+    it('a deleted comment shows (as deleted) only while a shown reply is under it; a reaction alone does not keep it', () => {
+        const at = (minute: number): string => `2026-11-05T12:${String(minute).padStart(2, '0')}:00Z`;
+        const raw: BbComment[] = [
+            { id: 30, created_on: at(0), user: user(YAN, 'Yann'), content: { raw: 'Why?', html: '<p>Why?</p>' } },
+            { id: 31, created_on: at(1), user: user(CAM, 'Camille'), content: { raw: '', html: '' }, parent: { id: 30 }, deleted: true },
+            { id: 32, created_on: at(2), user: user(YAN, 'Yann'), content: { raw: 'Answered above', html: '<p>Answered above</p>' }, parent: { id: 31 } },
+            // my reply, deleted, nothing under it
+            { id: 33, created_on: at(3), user: user(ME, 'Moi'), content: { raw: '', html: '' }, parent: { id: 30 }, deleted: true },
+            // Camille's ✅ whose only reply (my 👍) was taken back: a reaction again
+            { id: 34, created_on: at(4), user: user(CAM, 'Camille'), content: { raw: '✅' }, parent: { id: 30 } },
+            { id: 35, created_on: at(5), user: user(ME, 'Moi'), content: { raw: '', html: '' }, parent: { id: 34 }, deleted: true },
+            // a deleted root with only a like under it: the whole thread goes
+            { id: 40, created_on: at(6), user: user(CAM, 'Camille'), content: { raw: '', html: '' }, deleted: true },
+            { id: 41, created_on: at(7), user: user(YAN, 'Yann'), content: { raw: '👍' }, parent: { id: 40 } },
+        ];
+        const threads = buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: null });
+        expect(threads.map((t) => t.id)).toEqual([30]);
+        expect(threads[0]!.comments.map((c) => [c.id, c.parentId, c.deleted])).toEqual([[30, null, false], [31, 30, true], [32, 31, false]]);
+        expect(threads[0]!.comments[0]!.reactions.map((r) => [r.emoji, r.users.map((u) => u.uuid)])).toEqual([['✅', [CAM]]]);
     });
 
     it('reactions: one per emoji, each user once in date order, all my replies kept; none of mine without my profile', () => {

@@ -419,6 +419,7 @@ export const fr: Catalog = {
     'comment.like': 'J’aime',
     'comment.unlike': 'Retirer ton 👍',
     'reaction.you': '{name} (toi)',
+    'reaction.label': { one: '{emoji} {count} réaction : {names}', other: '{emoji} {count} réactions : {names}' },
 
     // ---------- Tasks ----------
     'task.empty': 'Aucune tâche sur cette PR',

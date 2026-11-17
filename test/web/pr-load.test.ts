@@ -36,7 +36,7 @@ function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => voi
 const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 
 function serverComment(id: number, raw: string): Comment {
-    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [] };
+    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [], parentId: null };
 }
 
 const codeLine: DiffLine = { t: '+', o: null, n: 12, text: 'const x = 1;', hl: [] };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Comment, Comparison, DiffLine, FileDiff } from '../../src/shared/api.ts';
 import {
-    replaceComment, withEditedComment, withMyPulseEntry, withMyReaction, withMyReactionId, withMyReview, withoutMyReaction, withPendingComment, withPlacement,
+    removeComment, replaceComment, withEditedComment, withMyPulseEntry, withMyReaction, withMyReactionId, withMyReview, withoutMyReaction, withPendingComment, withPlacement,
     withReactions, withResolved, withReviewedMark,
 } from '../../src/web/lib/optimistic.ts';
 import { commentById, prLong, threadById } from './fixtures.ts';
@@ -9,7 +9,7 @@ import { commentById, prLong, threadById } from './fixtures.ts';
 const me = { uuid: '{me-uuid}', displayName: 'Thomas Girard', nickname: 'tgirard' };
 
 function serverComment(id: number, raw: string): Comment {
-    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [] };
+    return { id, user: me, createdOn: '2026-11-16T10:00:00Z', version: null, html: `<p>${raw}</p>`, raw, isNew: false, deleted: false, mine: true, reactions: [], parentId: null };
 }
 
 const line = (n: number, t: DiffLine['t'] = ' '): DiffLine => ({ t, o: t === '+' ? null : n, n: t === '-' ? null : n, text: `line ${n}`, hl: [] });
@@ -35,7 +35,7 @@ describe('optimistic updates of the PR detail', () => {
 
         const thread = threadById(next, 120);
         expect(thread.comments).toHaveLength(3);
-        expect(thread.comments.at(-1)).toMatchObject({ id: -1, raw: 'Looks good', user: me, mine: true, pending: true, deleted: false, isNew: false, reactions: [] });
+        expect(thread.comments.at(-1)).toMatchObject({ id: -1, raw: 'Looks good', user: me, mine: true, pending: true, deleted: false, isNew: false, reactions: [], parentId: 120 });
         expect(threadById(detail, 120).comments).toHaveLength(2);
         expect(next.threads).toHaveLength(detail.threads.length);
     });
@@ -47,7 +47,7 @@ describe('optimistic updates of the PR detail', () => {
         expect(next.threads).toHaveLength(detail.threads.length + 1);
         expect(next.threads.at(-1)).toMatchObject({
             id: -2, path: 'src/A.ts', anchor: { to: 12, from: null }, version: 10, resolved: false, resolvedBy: null,
-            comments: [{ id: -2, raw: 'Why?', pending: true }],
+            comments: [{ id: -2, raw: 'Why?', pending: true, parentId: null }],
         });
         expect(next.pulse).toBe(detail.pulse);
     });
@@ -153,6 +153,43 @@ describe('my review state shown at once', () => {
     it('pulse entry: replaced, added, sorted', () => {
         expect(withMyPulseEntry('', '{me}', { approved: true, state: 'approved' })).toBe('{me}:1:approved');
         expect(withMyPulseEntry('{zed}:0:,{me}:0:changes_requested', '{me}', { approved: false, state: null })).toBe('{me}:0:,{zed}:0:');
+    });
+});
+
+describe('optimistic deletion of a comment', () => {
+    /** Thread 120 with Yann's root, Camille's reply 121, and my reply 122 to Camille's. */
+    function withMyAnswer(): ReturnType<typeof prLong>['data'] {
+        const detail = prLong().data;
+        const mine: Comment = { ...serverComment(122, 'Thanks'), parentId: 121 };
+        return { ...detail, threads: detail.threads.map((t) => (t.id === 120 ? { ...t, comments: [...t.comments, mine] } : t)) };
+    }
+
+    it('a deleted reply with nothing under it goes; the thread stays while anything is shown', () => {
+        const next = removeComment(withMyAnswer(), 122);
+        expect(threadById(next, 120).comments.map((c) => c.id)).toEqual([120, 121]);
+        expect(next.threads).toHaveLength(prLong().data.threads.length);
+    });
+
+    it('a deleted comment with a shown reply under it stays as "deleted"; deleting that reply takes both away', () => {
+        const kept = removeComment(withMyAnswer(), 121);
+        expect(threadById(kept, 120).comments.map((c) => [c.id, c.deleted, c.raw])).toEqual([[120, false, 'can we reuse the batch loader here ?'], [121, true, ''], [122, false, 'Thanks']]);
+        const gone = removeComment(kept, 122);
+        expect(threadById(gone, 120).comments.map((c) => c.id)).toEqual([120]);
+    });
+
+    it('a thread with nothing shown left goes (a deleted root with a shown reply stays)', () => {
+        const rootDeleted = removeComment(withMyAnswer(), 120);
+        expect(threadById(rootDeleted, 120).comments.map((c) => [c.id, c.deleted])).toEqual([[120, true], [121, false], [122, false]]);
+        const empty = removeComment(removeComment(rootDeleted, 122), 121);
+        expect(empty.threads.some((t) => t.id === 120)).toBe(false);
+    });
+
+    it('a pending comment that could not be sent goes, its thread too when it was the only comment', () => {
+        const detail = prLong().data;
+        const reply = withPendingComment(detail, { tempId: -1, raw: 'Looks good', threadId: 120, inline: null }, me);
+        expect(threadById(removeComment(reply, -1), 120).comments).toEqual(threadById(detail, 120).comments);
+        const root = withPendingComment(detail, { tempId: -2, raw: 'Why?', threadId: null, inline: { path: 'src/A.ts', to: 12 } }, me);
+        expect(removeComment(root, -2).threads).toEqual(detail.threads);
     });
 });
 
