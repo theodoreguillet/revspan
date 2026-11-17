@@ -419,13 +419,13 @@ export class HomeService {
         };
         const newCodeVersions = kindsSince(lastReviewed ?? 0);
         // A change request is not a review but still waits on the author: the queue counts new code since the later of the two.
-        const myChangesVersion = queue.changesRequested
+        // Version of my approval or change request (Bitbucket keeps one state per participant), null without its event.
+        const myStateVersion = queue.changesRequested || base.myApproval
             ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
             : null;
+        const myChangesVersion = queue.changesRequested ? myStateVersion : null;
         const queueNewCode = kindsSince(Math.max(lastReviewed ?? 0, myChangesVersion ?? 0));
-        const myApprovedVersion = base.myApproval
-            ? buildParticipants(raw, activity, versions).find((p) => p.user?.uuid === meUuid)?.approvedVersion ?? null
-            : null;
+        const myApprovedVersion = base.myApproval ? myStateVersion : null;
         const approvalHolds = base.myApproval
             && approvalHoldsSince(myApprovedVersion, versions.map((v) => local.kinds[v.hash.slice(0, 12)]));
         const since = review.lastReviewedAt;

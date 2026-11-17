@@ -727,6 +727,18 @@ describe('home', () => {
         expect(groupsOf((await api<Home>('GET', '/api/home?fresh=1')).body)[FAKE_PRS.neverReviewed]).toBe('to-do');
     });
 
+    it('changes requested without a matching activity event: its version is unknown, the code since my last review counts', async () => {
+        const { fake } = await setup();
+        const me = fake.data.prs.get(FAKE_PRS.neverReviewed)?.pr.participants.find((p) => p.user?.uuid === '{me}');
+        expect(me).toBeTruthy();
+        Object.assign(me!, { state: 'changes_requested' });
+        await api('GET', `${prPath(FAKE_PRS.neverReviewed)}/summary`);
+        const { body } = await api<Home>('GET', '/api/home');
+        // with the event at the last version it would wait on the author (M8); here the code of the PR is new to me
+        expect(cardOf(body, FAKE_PRS.neverReviewed)).toMatchObject({ lastReviewed: null, newCodeVersions: 1 });
+        expect(groupsOf(body)[FAKE_PRS.neverReviewed]).toBe('to-do');
+    });
+
     it('only rebases since my approval, which Bitbucket kept: "waiting", no re-approval', async () => {
         const { fake } = await setup();
         const me = fake.data.prs.get(FAKE_PRS.rebaseOnly)?.pr.participants.find((p) => p.user?.uuid === '{me}');
