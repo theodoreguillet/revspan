@@ -154,12 +154,57 @@ function sharedChars(a: Tokens, b: Tokens): number {
     return common;
 }
 
+/** Index of the first character after the leading indentation. */
+function indentOf(text: string): number {
+    let i = 0;
+    while (i < text.length && kindAt(text, i) === SPACE) {
+        i++;
+    }
+    return i;
+}
+
 /**
- * Whether two lines are worth comparing word by word: similar enough, or the words of one are all in the other (an
- * insertion or a deletion inside a line, such as `foo()` → `foo(a, b)`, however small the line).
+ * Whether one line is the other with a single block of text inserted (or removed): the shorter one, leading
+ * indentation aside, is a prefix of the longer one followed by a suffix of it (`foo()` → `foo(a, b)`). A shorter line
+ * without a word (`}`, `});`) must be a plain prefix, the block added at its end (`}` → `} // checked`), so that a lone
+ * bracket does not match every line that holds one. Two separate insertions (`a(b)` → `a(x, b, y)`) are not one.
  */
-function worthComparing(a: Tokens, b: Tokens, shared: number): boolean {
-    return shared > 0 && (shared >= MIN_SIMILARITY * Math.max(a.solid, b.solid) || shared === a.solid || shared === b.solid);
+function singleInsertion(x: string, y: string): boolean {
+    const xFrom = indentOf(x);
+    const yFrom = indentOf(y);
+    const xLength = x.length - xFrom;
+    const yLength = y.length - yFrom;
+    if (xLength === yLength) {
+        return false;
+    }
+    const [short, from, long, longFrom] = xLength < yLength ? [x, xFrom, y, yFrom] : [y, yFrom, x, xFrom];
+    const length = short.length - from;
+    if (length === 0) {
+        return false;
+    }
+    let prefix = 0;
+    while (prefix < length && short[from + prefix] === long[longFrom + prefix]) {
+        prefix++;
+    }
+    if (prefix === length) {
+        return true;
+    }
+    if (!WORD_CHAR.test(short.slice(from))) {
+        return false;
+    }
+    let suffix = 0;
+    while (prefix + suffix < length && short[short.length - 1 - suffix] === long[long.length - 1 - suffix]) {
+        suffix++;
+    }
+    return prefix + suffix === length;
+}
+
+/**
+ * Whether two lines are worth comparing word by word: similar enough, or one is the other with a single block
+ * inserted (an insertion is shown however small the line). The same rule decides the pairing and the marking.
+ */
+function worthComparing(a: Tokens, b: Tokens, shared: number, insertion: boolean): boolean {
+    return shared > 0 && (insertion || shared >= MIN_SIMILARITY * Math.max(a.solid, b.solid));
 }
 
 /**
@@ -225,47 +270,59 @@ function pairBySimilarity(dels: readonly DiffLine[], adds: readonly DiffLine[], 
     delTokens.forEach((a, i) => {
         addTokens.forEach((b, j) => {
             const shared = a && b ? sharedChars(a, b) : 0;
-            if (a && b && worthComparing(a, b, shared)) {
-                // how much of each line the other explains: a line inside another ranks above a partial overlap
+            const similar = a && b && shared >= MIN_SIMILARITY * Math.max(a.solid, b.solid);
+            if (a && b && worthComparing(a, b, shared, !similar && singleInsertion(dels[i]!.text, adds[j]!.text))) {
+                // how much of each line the other explains: an insertion ranks above a partial overlap
                 candidates.push({ i, j, similarity: (shared / a.solid + shared / b.solid) / 2 });
             }
         });
     });
+    // Sorting, then one binary search per candidate among the accepted pairs.
+    const steps = Math.ceil(Math.log2(candidates.length + 1)) + Math.ceil(Math.log2(Math.min(dels.length, adds.length) + 1)) + 1;
+    if (!afford(budget, candidates.length * steps)) {
+        return null;
+    }
     // Equal similarity: the closest positions first.
     candidates.sort((x, y) => y.similarity - x.similarity || Math.abs(x.i - x.j) - Math.abs(y.i - y.j) || x.i - y.i);
-    const addOf = new Int32Array(dels.length).fill(-1);
-    const taken = new Uint8Array(adds.length);
+    const accepted = new Pairings();
+    const delTaken = new Uint8Array(dels.length);
+    const addTaken = new Uint8Array(adds.length);
     for (const { i, j } of candidates) {
-        if (addOf[i] === -1 && !taken[j] && !crosses(addOf, i, j)) {
-            addOf[i] = j;
-            taken[j] = 1;
+        if (!delTaken[i] && !addTaken[j] && accepted.add(i, j)) {
+            delTaken[i] = 1;
+            addTaken[j] = 1;
         }
     }
-    const pairs: Pair[] = [];
-    addOf.forEach((j, i) => {
-        if (j !== -1) {
-            pairs.push({ del: dels[i]!, add: adds[j]!, tokens: [delTokens[i]!, addTokens[j]!] });
-        }
+    return accepted.dels.map((i, k): Pair => {
+        const j = accepted.adds[k]!;
+        return { del: dels[i]!, add: adds[j]!, tokens: [delTokens[i]!, addTokens[j]!] };
     });
-    return pairs;
 }
 
-/** Whether pairing removed line i with added line j would cross a pairing already made (those never cross each other). */
-function crosses(addOf: Int32Array, i: number, j: number): boolean {
-    for (let k = i - 1; k >= 0; k--) {
-        if (addOf[k] !== -1) {
-            if (addOf[k]! > j) {
-                return true;
+/** Accepted pairings, sorted by removed line: they never cross, so the added lines are sorted too. */
+class Pairings {
+    readonly dels: number[] = [];
+    readonly adds: number[] = [];
+
+    /** Adds the pairing i → j unless it would cross one already made (binary search for its neighbours). */
+    add(i: number, j: number): boolean {
+        let low = 0;
+        let high = this.dels.length;
+        while (low < high) {
+            const mid = (low + high) >> 1;
+            if (this.dels[mid]! < i) {
+                low = mid + 1;
+            } else {
+                high = mid;
             }
-            break;
         }
-    }
-    for (let k = i + 1; k < addOf.length; k++) {
-        if (addOf[k] !== -1) {
-            return addOf[k]! < j;
+        if ((low > 0 && this.adds[low - 1]! > j) || (low < this.adds.length && this.adds[low]! < j)) {
+            return false;
         }
+        this.dels.splice(low, 0, i);
+        this.adds.splice(low, 0, j);
+        return true;
     }
-    return false;
 }
 
 /** Highlights the words that differ in a pair, or nothing when the lines are too different. */
@@ -289,8 +346,9 @@ function markPair(del: DiffLine, add: DiffLine, budget: WorkBudget, tokens?: [To
         pair = [tokenize(a, vocabulary), tokenize(b, vocabulary)];
     }
     const [ta, tb] = pair;
+    const insertion = singleInsertion(a, b);
     // Cheap bound first: most too-different pairs stop here, before the comparison in order.
-    if (!worthComparing(ta, tb, sharedChars(ta, tb))) {
+    if (!worthComparing(ta, tb, sharedChars(ta, tb), insertion)) {
         return;
     }
     const matches = matchWords(ta, tb, budget);
@@ -298,7 +356,7 @@ function markPair(del: DiffLine, add: DiffLine, budget: WorkBudget, tokens?: [To
         markEdges(del, add);
         return;
     }
-    const ranges = changedRanges(a, ta, b, tb, matches);
+    const ranges = changedRanges(a, ta, b, tb, matches, insertion);
     if (ranges) {
         [del.hl, add.hl] = ranges;
     }
@@ -336,7 +394,10 @@ function markEdges(del: DiffLine, add: DiffLine): void {
 function matchWords(ta: Tokens, tb: Tokens, budget: WorkBudget): [number, number][] | null {
     const a = ta.ids;
     const b = tb.ids;
-    let pre = 0;
+    const { lengths, spaces } = ta.vocabulary;
+    // Re-indented line: the indentation is a change of its own, the rest is aligned from its start.
+    const start = a.length && b.length && a[0] !== b[0] && spaces[a[0]!] && spaces[b[0]!] ? 1 : 0;
+    let pre = start;
     while (pre < a.length && pre < b.length && a[pre] === b[pre]) {
         pre++;
     }
@@ -350,11 +411,10 @@ function matchWords(ta: Tokens, tb: Tokens, budget: WorkBudget): [number, number
         return null;
     }
     const out: [number, number][] = [];
-    for (let k = 0; k < pre; k++) {
+    for (let k = start; k < pre; k++) {
         out.push([k, k]);
     }
     if (n > 0 && m > 0) {
-        const { lengths, spaces } = ta.vocabulary;
         const weights = Int32Array.from({ length: n }, (_, k) => {
             const id = a[pre + k]!;
             return spaces[id] ? 1 : 2 * lengths[id]!;
@@ -401,9 +461,9 @@ function matchWords(ta: Tokens, tb: Tokens, budget: WorkBudget): [number, number
 
 /**
  * Ranges of both lines from their common tokens; null when too different: under MIN_SIMILARITY common characters,
- * unless one line is left unmarked (the other only gained or lost words: an insertion is shown however small).
+ * unless one line is the other with a single block inserted (shown however small the line).
  */
-function changedRanges(a: string, ta: Tokens, b: string, tb: Tokens, matches: readonly [number, number][]): [[number, number][], [number, number][]] | null {
+function changedRanges(a: string, ta: Tokens, b: string, tb: Tokens, matches: readonly [number, number][], insertion: boolean): [[number, number][], [number, number][]] | null {
     const { lengths, spaces } = ta.vocabulary;
     let common = 0;
     for (const [i] of matches) {
@@ -432,8 +492,7 @@ function changedRanges(a: string, ta: Tokens, b: string, tb: Tokens, matches: re
         nextA = i + 1;
         nextB = j + 1;
     }
-    const oneSided = !delRanges.length || !addRanges.length;
-    if (!oneSided && common < MIN_SIMILARITY * Math.max(ta.solid, tb.solid)) {
+    if (!insertion && common < MIN_SIMILARITY * Math.max(ta.solid, tb.solid)) {
         return null;
     }
     return [joinRanges(a, delRanges), joinRanges(b, addRanges)];

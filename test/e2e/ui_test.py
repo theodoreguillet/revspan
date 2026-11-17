@@ -718,15 +718,16 @@ def run_checks(page):
             attr = 'data-n' if ln['t'] == '+' else 'data-o'
             code = page.locator(f'.rv-file[data-path="{f["path"]}"] .rv-l.{side}[{attr}="{number}"] .c')
             code.scroll_into_view_if_needed()
+            words = re.search(r'\w', ln['text'])
+            if words:  # the syntax colors first (a punctuation-only line like `});` gets none)
+                expect(code.locator('span[style*="color"]').first).to_be_attached(timeout=10000)
             bands = code.locator('em')
             expect(bands).to_have_count(len(ln['hl']))
             texts = bands.all_text_contents()
             assert texts == [ln['text'][s:e] for s, e in ln['hl']], f'{texts} for {ln["hl"]} in {ln["text"]!r}'
-            if not re.search(r'\w', ln['text']):
-                continue  # punctuation only (`});`): no colored token to wait for
-            expect(code.locator('span[style*="color"]').first).to_be_attached(timeout=10000)
-            # Several non-empty children: the band wraps several tokens (Vue's empty fragment anchors aside).
-            spans_tokens = spans_tokens or code.evaluate('c => [...c.querySelectorAll("em")].some((em) => [...em.childNodes].filter((n) => n.textContent).length > 1)')
+            if words:
+                # Several non-empty children: the band wraps several tokens (Vue's empty fragment anchors aside).
+                spans_tokens = spans_tokens or code.evaluate('c => [...c.querySelectorAll("em")].some((em) => [...em.childNodes].filter((n) => n.textContent).length > 1)')
         assert spans_tokens, 'no band covers several syntax tokens: the check proves nothing'
     change_bands(page)
 

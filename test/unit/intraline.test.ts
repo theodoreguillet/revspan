@@ -67,7 +67,7 @@ describe('highlightIntraLine', () => {
         expect(del.map((l) => l.pair)).toEqual([2, undefined]);
     });
 
-    it('marks an insertion or a deletion inside a line however small the common part (one side unmarked)', () => {
+    it('marks a single inserted (or removed) block however small the line', () => {
         const { del, add } = highlight(['    foo();', '    }', '    bar(a, b, c, d);'], ['    foo(alpha, beta, gamma);', '    } // checked', '    bar();']);
         expect(marked(add[0]!)).toEqual(['alpha, beta, gamma']);
         expect(add[1]!.hl).toEqual([[5, 16]]);
@@ -75,15 +75,43 @@ describe('highlightIntraLine', () => {
         expect(marked(del[2]!)).toEqual(['a, b, c, d']);
         expect([del[0]!.hl, del[1]!.hl, add[2]!.hl]).toEqual([[], [], []]);
         expect(del.map((l) => l.pair)).toEqual([1, 2, 3]);
-        const call = highlight(['foo()'], ['foo(a, b, c, d)']);
-        expect(marked(call.add[0]!)).toEqual(['a, b, c, d']);
+        expect(marked(highlight(['foo()'], ['foo(a, b, c, d)']).add[0]!)).toEqual(['a, b, c, d']);
+        // a line without a word: the block added at its end, the indentation aside (re-indented here)
+        expect(marked(highlight(['    }'], ['    }, { once: true });']).add[0]!)).toEqual([', { once: true });']);
+        expect(marked(highlight(['    }'], ['        }, { once: true });']).add[0]!)).toEqual(['    ', ', { once: true });']);
     });
 
-    it('pairs a line with the added line that contains all its words, even when it is much shorter', () => {
+    it('pairs a short line with the added line that is the same plus one inserted block', () => {
         const { del, add } = highlight(['    }'], ['    const total = sum(values);', '    } // checked']);
         expect(del[0]!.pair).toBe(2);
         expect(marked(add[1]!)).toEqual([' // checked']);
         expect(add[0]!.hl).toEqual([]);
+    });
+
+    it('a bracket line is not an insertion into any line that holds the bracket: no pairing, no band', () => {
+        const total = highlight(['        });', '    }'], ['        const total = items.reduce((sum, item) => sum + item.price, 0);', '        return { total };']);
+        const brace = highlight(['{'], ['    const x = { y: 1 };']);
+        const call = highlight(['    });'], ['    foo({ a: 1 });']);
+        for (const { del, add } of [total, brace, call]) {
+            expect([...del, ...add].map((l) => l.hl)).toEqual([...del, ...add].map(() => []));
+            expect(del.map((l) => l.pair)).toEqual(del.map(() => undefined));
+        }
+    });
+
+    it('a short line does not take the partner of a similar line', () => {
+        const { del, add } = highlight(['    }', '    const value = buildRecord(source, target, mode);'], ['    const { value } = buildEntry(source, mapping);']);
+        expect(del.map((l) => l.pair)).toEqual([undefined, 1]);
+        expect(del[0]!.hl).toEqual([]);
+        expect(marked(del[1]!)).toEqual(['Record', 'target, mode']);
+        expect(marked(add[0]!)).toEqual(['{ ', ' }', 'Entry', 'mapping']);
+    });
+
+    it('two separate insertions are not one block: the 40 % rule decides', () => {
+        // a(b) → a(x, b, y): half of the longer line is common, so it is marked
+        expect(marked(highlight(['a(b)'], ['a(x, b, y)']).add[0]!)).toEqual(['x, ', ', y']);
+        // call(b) → wrap(x, call(b), y): too little in common
+        const wrapped = highlight(['    call(b);'], ['    wrap(first, call(b), second);']);
+        expect([wrapped.del[0]!.hl, wrapped.add[0]!.hl]).toEqual([[], []]);
     });
 
     it('no highlight when the lines are too different (the line background says it all)', () => {
@@ -142,6 +170,29 @@ describe('highlightIntraLine', () => {
         expect(del[299]!.hl).toEqual([[62, del[299]!.text.length - 41]]);
         expect(add[299]!.hl).toEqual([[62, add[299]!.text.length - 41]]);
         expect(del[299]!.pair).toBe(300);
+    });
+
+    it('checks a candidate pairing against the accepted ones by binary search, its cost counted in the budget', () => {
+        // 4 999 alike removed lines whose best partner is taken by the last one: every candidate is checked and refused
+        const removed = [...Array.from({ length: 4999 }, () => 'gamma x'), 'alpha beta'];
+        const one = run(removed, ['alpha beta', 'gamma y']);
+        const budget = workBudget();
+        highlightIntraLine([...one.del, ...one.add], budget);
+        expect(one.del[4999]!.pair).toBe(1);
+        expect(one.del.slice(0, 4999).every((l) => l.pair === undefined)).toBe(true);
+        // tokens 280 160 + bags 40 000 + 5 000 candidates × 16 steps (sort and search)
+        expect(budget.spent).toBe(400_160);
+        // forty such runs in one file stay within the budget, and quick
+        const lines: DiffLine[] = [];
+        for (let k = 0; k < 40; k++) {
+            const block = run(removed, ['alpha beta', 'gamma y']);
+            lines.push(...block.del, ...block.add, { t: ' ', o: null, n: null, text: '', hl: [] });
+        }
+        const file = workBudget();
+        const start = Date.now();
+        highlightIntraLine(lines, file);
+        expect(file.spent).toBeLessThanOrEqual(WORK_BUDGET);
+        expect(Date.now() - start).toBeLessThan(5000); // generous: was ~600 ms with a linear scan per candidate
     });
 
     it('pairs a run of long similar lines by position when comparing every pair would cost more than the budget', () => {
