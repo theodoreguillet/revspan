@@ -169,11 +169,14 @@ describe('buildThreads', () => {
             // a deleted root with only a like under it: the whole thread goes
             { id: 40, created_on: at(6), user: user(CAM, 'Camille'), content: { raw: '', html: '' }, deleted: true },
             { id: 41, created_on: at(7), user: user(YAN, 'Yann'), content: { raw: '👍' }, parent: { id: 40 } },
+            // a like on the deleted comment kept by its reply: no reaction under a "Comment deleted" placeholder
+            { id: 42, created_on: at(8), user: user(YAN, 'Yann'), content: { raw: '👍' }, parent: { id: 31 } },
         ];
         const threads = buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: null });
         expect(threads.map((t) => t.id)).toEqual([30]);
         expect(threads[0]!.comments.map((c) => [c.id, c.parentId, c.deleted])).toEqual([[30, null, false], [31, 30, true], [32, 31, false]]);
         expect(threads[0]!.comments[0]!.reactions.map((r) => [r.emoji, r.users.map((u) => u.uuid)])).toEqual([['✅', [CAM]]]);
+        expect(threads[0]!.comments[1]!.reactions).toEqual([]);
     });
 
     it('reactions: one per emoji, each user once in date order, all my replies kept; none of mine without my profile', () => {

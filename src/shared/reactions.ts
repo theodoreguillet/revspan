@@ -22,7 +22,7 @@ const REACTION_ALIASES = new Map<string, string>([
 ]);
 
 /** Emoji presentation selector (U+FE0F) and the five skin tone modifiers: "👍🏽" and "❤️" read as 👍 and ❤. */
-const EMOJI_MODIFIERS = /[️\u{1F3FB}-\u{1F3FF}]/gu;
+const EMOJI_MODIFIERS = /[\u{FE0F}\u{1F3FB}-\u{1F3FF}]/gu;
 
 const bareText = (raw: string): string => raw.trim().replace(EMOJI_MODIFIERS, '');
 

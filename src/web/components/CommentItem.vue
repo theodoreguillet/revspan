@@ -100,7 +100,7 @@ function onEditKeydown(event: KeyboardEvent): void {
             </div>
             <SafeHtml v-else :html="comment.html" />
             <!-- replies made of a single emoji (the Bitbucket API has no reactions) -->
-            <div v-if="chips.length" class="rv-reacts">
+            <div v-if="chips.length && !comment.deleted" class="rv-reacts">
                 <span
                     v-for="chip in chips"
                     :key="chip.emoji"

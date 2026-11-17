@@ -302,7 +302,8 @@ export function buildThreads(
     }
     for (const [parentId, list] of reactionsOf) {
         const target = comments.get(parentId);
-        if (target) {
+        // a deleted comment kept by a reply shows as a "Comment deleted" placeholder, without reactions
+        if (target && !target.deleted) {
             target.reactions = groupReactions(list, meUuid);
         }
     }
