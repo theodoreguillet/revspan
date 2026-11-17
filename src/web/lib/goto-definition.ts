@@ -136,7 +136,7 @@ function codeOf(text: string, family: CodeFamily): string {
  * - python: `def name`, `class name`, `name =` at the start of the line (module level).
  * - other (Java, Kotlin, C#, Go, Rust, PHP, Ruby): `class|interface|enum|record|struct|trait|object|type|module|fun|
  *   func|fn|def|function|val|var|let|const` + name (Go receiver, Kotlin extension, Ruby `self.` allowed); a field after a
- *   modifier; a method signature `Type name(`.
+ *   modifier; in Java and C# only (see signaturePattern), a method signature `Type name(`.
  */
 function definitionPatterns(name: string, family: CodeFamily): RegExp[] {
     const n = escapeRe(name);
@@ -156,39 +156,52 @@ function definitionPatterns(name: string, family: CodeFamily): RegExp[] {
                 new RegExp(`^\\s*class\\s+${n}${AFTER}`, 'u'),
                 new RegExp(`^${n}\\s*(?::[^=]+)?=(?!=)`, 'u'),
             ];
-        case 'other': {
-            const word = '@?[\\p{L}\\p{N}_<>\\[\\],.?]+';
+        case 'other':
             return [
                 new RegExp(`${BEFORE}(?:class|interface|enum|record|struct|trait|object|typealias|type|module|mod|fun|func|fn|def|function|val|var|let|const)\\s+(?:mut\\s+)?(?:<[^>]*>\\s*)?(?:\\([^)]*\\)\\s*)?(?:[\\p{L}\\p{N}_]+\\.)?${n}${AFTER}`, 'u'),
-                new RegExp(`^\\s*(?:(?:public|private|protected|internal|static|final|readonly|const|override|open|lateinit|volatile|transient)\\s+)+${word}\\s+${n}\\s*[=;{]`, 'u'),
-                // the first word is a type or a modifier, never a statement keyword (Go, Rust, Ruby control flow has no
-                // parentheses: `if valid(x) {` calls `valid`)
-                new RegExp(`^\\s*(?!(?:${NOT_A_TYPE})\\b)(?:${word}\\s+)+${n}\\s*(?:<[^>]*>)?\\s*\\(`, 'u'),
+                new RegExp(`^\\s*(?:(?:public|private|protected|internal|static|final|readonly|const|override|open|lateinit|volatile|transient)\\s+)+${TYPE_WORD}\\s+${n}\\s*[=;{]`, 'u'),
             ];
-        }
     }
 }
+
+/** A type or modifier word of the `other` family (generics, arrays, nullable, annotation). */
+const TYPE_WORD = '@?[\\p{L}\\p{N}_<>\\[\\],.?]+';
+
+/**
+ * Languages whose methods are declared without a keyword (`Type name(`). Elsewhere a word before a call is a call
+ * (Ruby `assert_equal valid(x), y`, Kotlin infix `a to valid(x)`), so the signature pattern stays off.
+ */
+const SIGNATURE_LANGS: ReadonlySet<string> = new Set(['java', 'csharp']);
+const hasSignatures = (path: string): boolean => SIGNATURE_LANGS.has(languageOf(path) ?? '');
+
+/**
+ * Method signature `Type name(`: the first word is a type or a modifier, never a statement keyword (`return valid(x);`,
+ * or paren-less control flow `if valid(x) {` calls `valid`).
+ */
+const signaturePattern = (name: string): RegExp => new RegExp(`^\\s*(?!(?:${NOT_A_TYPE})\\b)(?:${TYPE_WORD}\\s+)+${escapeRe(name)}\\s*(?:<[^>]*>)?\\s*\\(`, 'u');
 
 /** Words that start a statement, not a method signature `Type name(`: calls follow them. */
 const NOT_A_TYPE = ['return', 'new', 'throw', 'else', 'await', 'yield', 'go', 'defer', 'case', 'echo', 'print', 'puts',
     'raise', 'assert', 'not', 'and', 'or', 'in', 'is', 'when', 'using', 'if', 'elif', 'elsif', 'unless', 'until', 'while',
     'for', 'foreach', 'switch', 'match', 'select', 'loop', 'catch', 'lock', 'with', 'guard', 'do', 'try'].join('|');
 
-/** Tests lines for a definition of `name` (patterns compiled once per search). */
-function definitionMatcher(name: string, family: CodeFamily): (text: string) => boolean {
+/** Tests the lines of a file (`path`) for a definition of `name` (patterns compiled once per search). */
+function definitionMatcher(name: string, family: CodeFamily): (text: string, path: string) => boolean {
     const patterns = definitionPatterns(name, family);
-    return (text) => {
+    const signature = family === 'other' ? signaturePattern(name) : null;
+    return (text, path) => {
         if (text.length > MAX_PATTERN_LINE || !text.includes(name) || COMMENT_LINE[family].test(text) || IMPORT_LINE[family].test(text)) {
             return false;
         }
         const code = codeOf(text, family);
-        return patterns.some((re) => re.test(code));
+        return patterns.some((re) => re.test(code)) || (signature !== null && hasSignatures(path) && signature.test(code));
     };
 }
 
-/** True if the line defines `name` in the given family. */
-export function definesSymbol(text: string, name: string, family: CodeFamily): boolean {
-    return definitionMatcher(name, family)(text);
+/** True if the line, in the file `path`, defines `name`. */
+export function definesSymbol(text: string, name: string, path: string): boolean {
+    const family = familyOf(path);
+    return family !== null && definitionMatcher(name, family)(text, path);
 }
 
 /** A line of the displayed comparison: file (index and path), hunk, index in the hunk and the side it is read on. */
@@ -224,7 +237,7 @@ export function findDefinitions(files: readonly FileLines[], name: string, from:
         for (const fileIdx of order) {
             const file = files[fileIdx]!;
             file.hunks.forEach((hunk, h) => hunk.lines.forEach((line, index) => {
-                if (onSide(line, side) && defines(line.text)) {
+                if (onSide(line, side) && defines(line.text, file.path)) {
                     refs.push({ fileIdx, path: file.path, hunk: h, index, side, line });
                 }
             }));

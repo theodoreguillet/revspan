@@ -12,8 +12,8 @@ import { useDiscussion } from './useDiscussion.ts';
 import { useGotoDefinition } from './useGotoDefinition.ts';
 import { usePrLoad } from './usePrLoad.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
-import { ALT_LEFT_BACK } from './useShortcuts.ts';
 import { useReviewActions } from './useReviewActions.ts';
+import { ALT_LEFT_BACK } from './useShortcuts.ts';
 import { useTasks } from './useTasks.ts';
 
 const FULL_CONTEXT = 100000;

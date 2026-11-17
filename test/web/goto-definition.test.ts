@@ -99,31 +99,32 @@ describe('tokenClass', () => {
 });
 
 describe('definesSymbol: pattern table', () => {
-    const yes = (family: CodeFamily, name: string, lines: string[]) => {
+    /** The lines, in a file at `path` (its extension gives the language), define / do not define `name`. */
+    const yes = (path: string, name: string, lines: string[]) => {
         for (const text of lines) {
-            expect(definesSymbol(text, name, family), `${family} should define ${name}: ${text}`).toBe(true);
+            expect(definesSymbol(text, name, path), `${path} should define ${name}: ${text}`).toBe(true);
         }
     };
-    const no = (family: CodeFamily, name: string, lines: string[]) => {
+    const no = (path: string, name: string, lines: string[]) => {
         for (const text of lines) {
-            expect(definesSymbol(text, name, family), `${family} should not define ${name}: ${text}`).toBe(false);
+            expect(definesSymbol(text, name, path), `${path} should not define ${name}: ${text}`).toBe(false);
         }
     };
 
     it('TypeScript / JavaScript / Vue: declarations', () => {
-        yes('js', 'Action', [
+        yes('a.ts', 'Action', [
             'export class Action {', 'export default class Action extends Base {', 'abstract class Action<T> {',
             'export interface Action {', 'export type Action = { id: string };', 'const enum Action {', 'namespace Action {',
             'export const Action = defineComponent({',
         ]);
-        yes('js', 'run', [
+        yes('a.ts', 'run', [
             'export function run(data) {', 'export default async function run() {', 'function* run() {', 'function *run() {',
             'let run;', 'var run = {};', 'for (const run of runs) {',
         ]);
     });
 
     it('TypeScript / JavaScript / Vue: class members and object methods', () => {
-        yes('js', 'run', [
+        yes('a.ts', 'run', [
             '    run(data) {', '    async run(data: Data): Promise<void> {', '    private run(', '    static run<T>(x: T): T {',
             '    get run() {', '    private readonly run = new Map<string, number>();', '    protected run?: Handler;',
             '    run = (data) => {', '    run = async (data: Data): Promise<void> => {', '    run: (data) => data.id,',
@@ -132,7 +133,7 @@ describe('definesSymbol: pattern table', () => {
     });
 
     it('TypeScript / JavaScript / Vue: uses, calls, imports, comments and strings are not definitions', () => {
-        no('js', 'run', [
+        no('a.ts', 'run', [
             '        return this.run(id);', '    run(data);', '    run(data).then(() => {', 'runs(data) {', 'const runner = run;',
             '    if (run(x)) {', 'describe(\'run\', () => {', '// function run() is gone', ' * class run', 'const s = \'function run\';',
             'export { run } from \'./run\';', 'import { run } from \'./run\';', 'import type run from \'./run\';',
@@ -141,25 +142,30 @@ describe('definesSymbol: pattern table', () => {
     });
 
     it('Python: def, class and module-level assignments', () => {
-        yes('python', 'run', ['def run(self):', '    async def run(self, data):']);
-        yes('python', 'Action', ['class Action(Base):', 'class Action:']);
-        yes('python', 'MAX_SIZE', ['MAX_SIZE = 3', 'MAX_SIZE: int = 3']);
-        no('python', 'run', ['    run(data)', '    return run()', '    run = 3', 'from tools import run', '# def run', 'x == run']);
+        yes('a.py', 'run', ['def run(self):', '    async def run(self, data):']);
+        yes('a.py', 'Action', ['class Action(Base):', 'class Action:']);
+        yes('a.py', 'MAX_SIZE', ['MAX_SIZE = 3', 'MAX_SIZE: int = 3']);
+        no('a.py', 'run', ['    run(data)', '    return run()', '    run = 3', 'from tools import run', '# def run', 'x == run']);
     });
 
     it('Java, Kotlin, C#, Go, Rust, PHP, Ruby: type and function keywords, method signatures', () => {
-        yes('other', 'Action', [
-            'public class Action {', 'public record Action(String id) {', 'data class Action(val id: String)', 'object Action {',
-            'type Action struct {', 'pub struct Action {', 'enum Action {', 'trait Action {', 'class Action < Base', 'module Action',
-            'public interface Action {', 'public sealed class Action : Base {',
-        ]);
-        yes('other', 'run', [
+        yes('A.java', 'Action', ['public class Action {', 'public record Action(String id) {', 'public interface Action {', 'enum Action {']);
+        yes('a.kt', 'Action', ['data class Action(val id: String)', 'object Action {']);
+        yes('A.cs', 'Action', ['public sealed class Action : Base {']);
+        yes('a.go', 'Action', ['type Action struct {']);
+        yes('a.rs', 'Action', ['pub struct Action {', 'trait Action {']);
+        yes('a.rb', 'Action', ['class Action < Base', 'module Action']);
+        yes('A.java', 'run', [
             'public static void run(String[] args) {', '    @Override public Optional<String> run() {', '    Map<String, Integer> run(int a) {',
-            'fun run(data: Data) {', 'fun <T> run(x: T): T {', 'fun String.run(): Int {', 'func run(data Data) error {',
-            'func (a *Action) run() error {', 'pub fn run(&self) {', '    public function run($data) {', 'def run(data)', 'def self.run',
-            '    public async Task<int> run(int id) {', '    val run = 1', '    private static final int run = 3;',
+            '    private static final int run = 3;',
         ]);
-        no('other', 'run', [
+        yes('A.cs', 'run', ['    public async Task<int> run(int id) {']);
+        yes('a.kt', 'run', ['fun run(data: Data) {', 'fun <T> run(x: T): T {', 'fun String.run(): Int {', '    val run = 1']);
+        yes('a.go', 'run', ['func run(data Data) error {', 'func (a *Action) run() error {']);
+        yes('a.rs', 'run', ['pub fn run(&self) {']);
+        yes('a.php', 'run', ['    public function run($data) {']);
+        yes('a.rb', 'run', ['def run(data)', 'def self.run']);
+        no('A.java', 'run', [
             '    return run(x);', '    x.run(1);', '    if (run(x)) {', '    run(x);', '    go run(x)', '    defer run()',
             'import com.acme.run;', 'use App\\Jobs\\run;', 'impl run {', '    throw new run(x);', '    String s = run(x);',
             '// fun run()',
@@ -167,21 +173,31 @@ describe('definesSymbol: pattern table', () => {
     });
 
     it('Java, Kotlin, C#, Go, Rust, PHP, Ruby: control flow without parentheses calls the name, it does not define it', () => {
-        no('other', 'run', [
-            '    if run(x) {', '    } else if run(x) {', '    for run() {', '    switch run(x) {', '    select run(x)',
-            '    match run(x) {', '    while run(x) {', '    loop run(x)', '    elsif run(x)', '    unless run(x)',
-            '    until run(x)', '    foreach run(x)', '    catch run(x)', '    lock run(x)', '    using run(x)',
-            '    with run(x)', '    guard run(x) else {', '    do run(x)', '    elif run(x):',
-        ]);
+        for (const path of ['a.go', 'a.rs', 'a.rb', 'A.java']) {
+            no(path, 'run', [
+                '    if run(x) {', '    } else if run(x) {', '    for run() {', '    switch run(x) {', '    select run(x)',
+                '    match run(x) {', '    while run(x) {', '    loop run(x)', '    elsif run(x)', '    unless run(x)',
+                '    until run(x)', '    foreach run(x)', '    catch run(x)', '    lock run(x)', '    using run(x)',
+                '    with run(x)', '    guard run(x) else {', '    do run(x)', '    elif run(x):',
+            ]);
+        }
         // a call on another line keeps finding the real definition only
-        yes('other', 'run', ['func run(x int) bool {']);
+        yes('a.go', 'run', ['func run(x int) bool {']);
+    });
+
+    it('a method signature `Type name(` in Java and C# only: elsewhere a word before a call is a call', () => {
+        yes('A.java', 'isValid', ['    boolean isValid(String x) {']);
+        yes('A.cs', 'IsValid', ['    public bool IsValid(string x) {']);
+        no('a.rb', 'isValid', ['    assert_equal isValid(x), y', '    puts format isValid(x)']);
+        no('a.kt', 'isValid', ['        a to isValid(x),', '    val pair = a to isValid(x)']);
+        no('a.go', 'isValid', ['    bool isValid(x)']);
     });
 
     it('a line too long for the patterns (minified code, data) is skipped, and fast', () => {
-        expect(definesSymbol(`export const run = 1;${' '.repeat(2000)}`, 'run', 'js')).toBe(false);
-        expect(definesSymbol(`export const run = 1;${' '.repeat(1900)}`, 'run', 'js')).toBe(true);
+        expect(definesSymbol(`export const run = 1;${' '.repeat(2000)}`, 'run', 'a.ts')).toBe(false);
+        expect(definesSymbol(`export const run = 1;${' '.repeat(1900)}`, 'run', 'a.ts')).toBe(true);
         const start = performance.now();
-        expect(definesSymbol(`run:${' x'.repeat(64000)}`, 'run', 'js')).toBe(false);
+        expect(definesSymbol(`run:${' x'.repeat(64000)}`, 'run', 'a.ts')).toBe(false);
         expect(performance.now() - start).toBeLessThan(50);
     });
 });
@@ -207,6 +223,14 @@ describe('findDefinitions', () => {
 
     it('a file restricted to one path (the file an import points to)', () => {
         expect(where(findDefinitions(files, 'Foo', 0, 'src/b.ts'))).toEqual(['src/b.ts:new:2']);
+    });
+
+    it('a method signature only in the Java and C# files of the family', () => {
+        const mixed = [
+            file('src/Check.kt', hunk(ctx('    val ok = a to isValid(x)'))),
+            file('src/Rules.java', hunk(ctx('    boolean isValid(String x) {'))),
+        ];
+        expect(where(findDefinitions(mixed, 'isValid', 0))).toEqual(['src/Rules.java:new:1']);
     });
 
     it('a file without family (JSON, Markdown) is never searched', () => {

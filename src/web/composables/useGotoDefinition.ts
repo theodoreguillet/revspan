@@ -1,7 +1,7 @@
 // Go to definition in the diff: Ctrl+click (⌘+click on macOS) on a name looks for its definition among the displayed
 // lines (lib/goto-definition.ts), then moves there like the search does (file expanded, line scrolled under the sticky
 // bars, flashed). Several definitions: a choice under the click. None: the import of the name in the same file, with
-// "open the definition in <file>" when it points to a file of the PR. Back: Alt+← or the chip shown after a jump.
+// "Search <file> (whole file)" when it points to a file of the PR. Back: Alt+← or the chip shown after a jump.
 // Nothing runs on mouse moves: the underline is CSS (the `armed` class while the modifier is held, :hover on a token).
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import type { FileDiff } from '../../shared/api.ts';
@@ -44,7 +44,7 @@ export interface GotoChoice {
     row: HTMLElement | null;
 }
 
-/** "Open the definition in <file>": looks for `name` in `file` with "whole file" on. */
+/** "Search <file> (whole file)": looks for `name` in `file` with "whole file" on. */
 export interface GotoOffer {
     name: string;
     file: string;
@@ -56,7 +56,7 @@ export interface GotoOffer {
 /** Notice at the bottom of the window. */
 export interface GotoNotice {
     /**
-     * notFound: no definition of `name` shown (searched in `file` only, after "open the definition in"); atImport: its
+     * notFound: no definition of `name` shown (searched in `file` only, after "Search <file>"); atImport: its
      * import reached instead; notShown: the import clicked, the definition is elsewhere; null: the back chip alone.
      */
     message: 'notFound' | 'atImport' | 'notShown' | null;
@@ -283,7 +283,7 @@ export function useGotoDefinition(files: ComputedRef<FileDiff[]>, hooks: GotoHoo
         }
     }
 
-    /** "Open the definition in <file>": "whole file" on, then the definitions of the name in that file. */
+    /** "Search <file> (whole file)": "whole file" on, then the definitions of the name in that file. */
     async function openOffer(anchor?: DOMRect): Promise<void> {
         const offer = notice.value?.offer;
         if (!offer) {

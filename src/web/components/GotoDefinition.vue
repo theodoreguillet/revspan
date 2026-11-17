@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Go to definition: the choice between several definitions (under the click, keyboard navigable, Escape closes) and
-// the notice at the bottom of the window (back chip, not found, import with "open the definition in <file>").
+// the notice at the bottom of the window (back chip, not found, import with "Search <file> (whole file)").
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { ALT_LEFT_BACK } from '../composables/useShortcuts.ts';
