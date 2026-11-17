@@ -7,7 +7,7 @@ import { usePrLoad } from '../../src/web/composables/usePrLoad.ts';
 import { usePulse, type PulsePage } from '../../src/web/composables/usePulse.ts';
 import { translatorFor } from '../../src/web/i18n/index.ts';
 import {
-    afterOwnWrite, hasNews, pulseIntervalMs, pulseNews, pulseText, refreshNews, refreshText, unplacedThreads, type RefreshNews,
+    afterOwnWrite, afterTaskWrite, hasNews, pulseIntervalMs, pulseNews, pulseText, refreshNews, refreshText, unplacedThreads, type RefreshNews,
 } from '../../src/web/lib/pulse.ts';
 import { prLong, threadById } from './fixtures.ts';
 
@@ -23,7 +23,7 @@ const yann = { uuid: '{yan}', displayName: 'Yann Bernard', nickname: 'ybernard' 
 const MINUTE = 60_000;
 
 const pulse = (over: Partial<PrPulse> = {}): PrPulse => ({
-    updatedOn: '2026-11-16T10:00:00Z', head: 'abc123', commentCount: 4, participants: '{yan}:1:approved', ...over,
+    updatedOn: '2026-11-16T10:00:00Z', head: 'abc123', commentCount: 4, participants: '{yan}:1:approved', taskCount: 0, ...over,
 });
 
 function comment(id: number, raw: string, over: Partial<Comment> = {}): Comment {
@@ -99,6 +99,18 @@ describe('pulse: what changed on Bitbucket', () => {
     it('checks at the configured interval', () => {
         expect(pulseIntervalMs(5)).toBe(5 * MINUTE);
         expect(pulseIntervalMs(1)).toBe(MINUTE);
+    it('afterTaskWrite takes the open count, and Bitbucket\'s updatedOn only when nothing shown moved', () => {
+        const shown = afterOwnWrite(pulse());
+        const quiet = pulse({ updatedOn: '2026-11-16T10:05:00Z', taskCount: 3 });
+        expect(afterTaskWrite(shown, quiet)).toEqual(quiet);
+        expect(hasNews(pulseNews(afterTaskWrite(shown, quiet), quiet))).toBe(false);
+        // a comment by somebody else meanwhile: kept unknown, so the next check still reports it
+        const busy = pulse({ updatedOn: '2026-11-16T10:06:00Z', commentCount: 5, taskCount: 3 });
+        const after = afterTaskWrite(shown, busy);
+        expect(after).toMatchObject({ updatedOn: '', commentCount: 4, taskCount: 3 });
+        expect(pulseNews(after, busy).newComments).toBe(1);
+    });
+
     });
 
     it('refreshNews counts new comments and versions', () => {

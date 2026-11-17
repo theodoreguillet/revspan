@@ -14,7 +14,7 @@ function fixture<T>(name: string): T {
 
 /** The JSON fixtures predate the pulse and the freshness of the detail: neutral values are added. */
 const PULSE_DEFAULTS: Pick<PrDetail, 'pulse' | 'freshness'> = {
-    pulse: { updatedOn: '2026-11-16T10:00:00Z', head: 'head', commentCount: 0, participants: '' },
+    pulse: { updatedOn: '2026-11-16T10:00:00Z', head: 'head', commentCount: 0, participants: '', taskCount: 0 },
     freshness: { loadedAt: '2026-11-16T10:00:00Z', refreshMinutes: 5 },
 };
 

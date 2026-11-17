@@ -6,7 +6,7 @@ import { commentThreadId, insertTask, pendingTask, replaceTask, withoutTask, wit
 import { prLong } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
-    api: { pr: vi.fn(), summary: vi.fn(), tasks: vi.fn(), createTask: vi.fn(), deleteTask: vi.fn(), resolveTask: vi.fn() },
+    api: { pr: vi.fn(), pulse: vi.fn(), summary: vi.fn(), tasks: vi.fn(), createTask: vi.fn(), deleteTask: vi.fn(), resolveTask: vi.fn() },
     showError: vi.fn(),
 }));
 vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
@@ -44,6 +44,7 @@ describe('useTasks', () => {
         const base = prLong().data;
         detail = { ...base, me, pr: { ...base.pr, taskCount: 1 } };
         api.pr.mockReturnValue(new Promise(() => undefined));
+        api.pulse.mockReturnValue(new Promise(() => undefined));
         api.tasks.mockResolvedValue([task(1, 'Add a test'), task(2, 'Changelog', { resolved: true, resolvedBy: cam })]);
     });
 
@@ -80,8 +81,45 @@ describe('useTasks', () => {
         expect(await adding).toBe(true);
         expect(tasks.tasks.value?.map((t) => t.id)).toEqual([1, 2, 3]);
         expect(tasks.tasks.value?.at(-1)).toEqual(created);
-        // the background detail refresh brings the server's count
-        expect(api.pr).toHaveBeenCalledWith(ref, { fresh: true });
+        // one pulse read brings Bitbucket's count, no detail refresh
+        expect(api.pulse).toHaveBeenCalledWith(ref);
+        expect(api.pr).not.toHaveBeenCalled();
+    });
+
+    it('a task write reads the pulse once: Bitbucket\'s open count and the pulse baseline (no false news)', async () => {
+        const load = usePrLoad(ref, detail);
+        const tasks = useTasks(ref, load);
+        const shown = load.detail.value.pulse;
+        api.createTask.mockResolvedValue(task(3, 'Rename', { creator: me, mine: true }));
+        api.pulse.mockResolvedValue({ ...shown, updatedOn: '2026-11-16T12:00:00Z', taskCount: 4 });
+        expect(await tasks.addTask('Rename')).toBe(true);
+        await settle();
+        expect(api.pulse).toHaveBeenCalledOnce();
+        expect(api.pr).not.toHaveBeenCalled();
+        expect(load.detail.value.pr.taskCount).toBe(4);
+        expect(load.detail.value.pulse).toEqual({ ...shown, updatedOn: '2026-11-16T12:00:00Z', taskCount: 4 });
+    });
+
+    it('…kept local when the pulse fails, and dropped when another write started meanwhile', async () => {
+        const load = usePrLoad(ref, detail);
+        const tasks = useTasks(ref, load);
+        api.createTask.mockResolvedValue(task(3, 'Rename', { creator: me, mine: true }));
+        api.pulse.mockRejectedValueOnce(new Error('offline'));
+        expect(await tasks.addTask('Rename')).toBe(true);
+        await settle();
+        expect(load.detail.value.pr.taskCount).toBe(2);
+        expect(showError).not.toHaveBeenCalled();
+
+        const late = deferred<PrDetail['pulse']>();
+        api.pulse.mockReturnValueOnce(late.promise);
+        expect(await tasks.addTask('Second')).toBe(true);
+        const other = deferred();
+        const writing = load.act(() => other.promise);
+        late.resolve({ ...load.detail.value.pulse, taskCount: 9 });
+        await settle();
+        expect(load.detail.value.pr.taskCount).toBe(3);
+        other.resolve();
+        await writing;
     });
 
     it('…restores the text on failure', async () => {

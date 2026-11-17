@@ -31,6 +31,11 @@ export interface ActOptions {
     optimistic?: () => void;
     /** Undoes `optimistic` when the write fails. */
     rollback?: () => void;
+    /**
+     * false: no detail refresh after the write, the caller confirms it itself (a task write reads the PR's light pulse
+     * for its open count). A refresh dropped during the write still runs.
+     */
+    refresh?: boolean;
 }
 
 export function usePrLoad(prRef: PrRef, initial: PrDetail) {
@@ -323,10 +328,10 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
 
     /**
      * Runs a write: `optimistic` first, `rollback` if the write fails, `onDone` once it succeeded, then a background
-     * refresh of the detail (not awaited). Returns true if the write succeeded; false if it failed, or if another is in
+     * refresh of the detail (not awaited; see `refresh`). Returns true if the write succeeded; false if it failed, or if another is in
      * progress (message shown, nothing is sent or forgotten: the draft stays).
      */
-    async function act(write: () => Promise<unknown>, { onDone, key = 'action', optimistic, rollback }: ActOptions = {}): Promise<boolean> {
+    async function act(write: () => Promise<unknown>, { onDone, key = 'action', optimistic, rollback, refresh: refreshAfter = true }: ActOptions = {}): Promise<boolean> {
         if (pendingAction.value !== null) {
             // a write launched (⌘/Ctrl+Enter…) while another one is in progress
             showError(new Error(t('error.busy')));
@@ -353,7 +358,7 @@ export function usePrLoad(prRef: PrRef, initial: PrDetail) {
             // Bitbucket moved the PR's updated_on: until the refresh lands (or if it fails), not news for the check
             detail.value = { ...detail.value, pulse: afterOwnWrite(detail.value.pulse) };
         }
-        if (ok || refreshWanted) {
+        if ((ok && refreshAfter) || refreshWanted) {
             void refreshDetail();
         }
         return ok;

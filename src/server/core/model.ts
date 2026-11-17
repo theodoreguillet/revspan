@@ -204,6 +204,7 @@ export function pulseOf(pr: BbPullRequest): PrPulse {
         head: pr.source?.commit?.hash ?? '',
         commentCount: pr.comment_count ?? 0,
         participants: (pr.participants ?? []).map((p) => `${p.user?.uuid ?? ''}:${p.approved ? 1 : 0}:${p.state ?? ''}`).sort().join(','),
+        taskCount: pr.task_count ?? 0,
     };
 }
 

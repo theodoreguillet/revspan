@@ -1,8 +1,9 @@
 // Tasks tab: the PR's Bitbucket tasks, read only when the tab is opened (and on ↻ while it is open). Writes show at once
-// (pending task, ticked or removed row), are undone if Bitbucket refuses them (the typed text comes back), and the
-// detail is refreshed in the background (open task count).
+// (pending task, ticked or removed row), are undone if Bitbucket refuses them (the typed text comes back), and the open
+// task count is then read from the PR's light pulse (one request, not the whole detail).
 import { ref, shallowRef } from 'vue';
-import type { PrRef, PrTask } from '../../shared/api.ts';
+import type { PrPulse, PrRef, PrTask } from '../../shared/api.ts';
+import { afterTaskWrite } from '../lib/pulse.ts';
 import { insertTask, pendingTask, replaceTask, withoutTask, withTaskResolved } from '../lib/tasks.ts';
 import { api } from '../services/api.ts';
 import { showError } from './useErrors.ts';
@@ -39,7 +40,7 @@ export function useTasks(prRef: PrRef, load: PrLoad) {
         }
     }
 
-    /** Local open count of the tab label, until the background refresh brings the server's. */
+    /** Local open count of the tab label, until the pulse read after the write brings Bitbucket's. */
     function patchCount(delta: number): void {
         load.patchDetail((d) => ({ ...d, pr: { ...d.pr, taskCount: Math.max(0, (d.pr.taskCount ?? 0) + delta) } }));
     }
@@ -85,11 +86,33 @@ export function useTasks(prRef: PrRef, load: PrLoad) {
         }
     }
 
-    /** A task write through the page's single-write lock (`act`); the list read is kept consistent with it. */
+    /**
+     * Bitbucket's open count after a task write: one pulse read, kept unless the detail changed meanwhile (another write
+     * or a refresh, which bring their own). A failure leaves the local count.
+     */
+    async function confirmCount(): Promise<void> {
+        const seq = load.syncSeq();
+        let now: PrPulse;
+        try {
+            now = await api.pulse(prRef);
+        } catch {
+            return;
+        }
+        if (seq !== load.syncSeq() || load.acting.value) {
+            return;
+        }
+        load.patchDetail((d) => ({ ...d, pr: { ...d.pr, taskCount: now.taskCount }, pulse: afterTaskWrite(d.pulse, now) }));
+    }
+
+    /**
+     * A task write through the page's single-write lock (`act`), confirmed by a pulse read instead of a detail refresh;
+     * the list read is kept consistent with it.
+     */
     async function taskAct(write: () => Promise<unknown>, { optimistic, ...options }: ActOptions): Promise<boolean> {
         let started = false;
         const ok = await load.act(write, {
             ...options,
+            refresh: false,
             optimistic: () => {
                 started = true;
                 writesStarted++;
@@ -103,6 +126,9 @@ export function useTasks(prRef: PrRef, load: PrLoad) {
                 reloadWanted = false;
                 void loadTasks();
             }
+        }
+        if (ok) {
+            void confirmCount();
         }
         return ok;
     }

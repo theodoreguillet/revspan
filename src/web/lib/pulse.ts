@@ -42,6 +42,15 @@ export function afterOwnWrite(p: PrPulse, commentDelta = 0): PrPulse {
     return { ...p, updatedOn: UNKNOWN_UPDATED_ON, commentCount: Math.max(0, p.commentCount + commentDelta) };
 }
 
+/**
+ * Pulse of the detail shown once a pulse read after my task write came back: its open task count, and Bitbucket's
+ * `updatedOn` when nothing the detail shows moved meanwhile (otherwise the next check must still report it).
+ */
+export function afterTaskWrite(shown: PrPulse, now: PrPulse): PrPulse {
+    const nothingElse = now.head === shown.head && now.commentCount === shown.commentCount && now.participants === shown.participants;
+    return { ...shown, taskCount: now.taskCount, updatedOn: nothingElse ? now.updatedOn : shown.updatedOn };
+}
+
 export const hasNews = (n: PulseNews): boolean => n.newVersion || n.newComments > 0 || n.otherActivity;
 
 export const sameNews = (a: PulseNews, b: PulseNews): boolean =>

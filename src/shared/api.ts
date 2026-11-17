@@ -322,6 +322,8 @@ export interface PrPulse {
     commentCount: number;
     /** `uuid:approved:state` of each participant, sorted: any approval or change request changes it. */
     participants: string;
+    /** Open (unresolved) tasks, as `PrInfo.taskCount` (the page updates its count after a task write). */
+    taskCount: number;
 }
 
 export type VersionKind = 'creation' | 'code' | 'deps' | 'rebase-only' | 'message-only' | 'none' | 'unavailable';
