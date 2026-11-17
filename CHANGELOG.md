@@ -31,6 +31,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ### Changed
 
+- Timeline: clicking the selected version again compares the whole version with master (a third click goes back to
+  what it changed), without leaving the timeline.
 - Writes show at once: a comment, a reply, a resolution, an edit, a deletion, an approval, a change request, "Mark as
   reviewed" and task changes appear before Bitbucket answers (put back with the error if it refuses), then a background
   read confirms them. The review buttons then act on the new state.

@@ -12,6 +12,7 @@ export const SHORTCUTS = [
     { keys: 'shortcuts.keysAllViewed', label: 'shortcuts.allViewed' },
     { keys: 'shortcuts.keysSearch', label: 'shortcuts.search' },
     { keys: 'shortcuts.keysVersion', label: 'shortcuts.version' },
+    { keys: 'shortcuts.keysClick', label: 'shortcuts.click' },
     { keys: 'shortcuts.keysExtend', label: 'shortcuts.extend' },
     { keys: 'shortcuts.keysSend', label: 'shortcuts.send' },
     { keys: 'shortcuts.keysEscape', label: 'shortcuts.escape' },

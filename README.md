@@ -230,7 +230,7 @@ one request per interval even once finished (see "Build status").
   dot = new to you. Under each symbol, what the author changed
   (`+35 −14`, `deps` = only package.json / lockfile / submodule, `rebase only`, `message`).
   Hovering a symbol shows two short lines: what the version is (`v6 · rebase + code (+3 −1)`), then its date and flags.
-  Click = what this version changed; Shift+click = extend the range; "master" = full version.
+  Click = what this version changed; click it again = the whole version against master (a third click goes back); Shift+click = extend the range; "master" = full version.
 - **Resume**: a "✓ reviewed" mark on your last review (approval, change request or "Mark as reviewed", never a comment),
   a banner with what moved since, blue dots on the new versions.
 - **Diff**: unified or side by side (an added or removed file always unified), "seen" files (the tick is dropped if

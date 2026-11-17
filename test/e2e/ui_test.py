@@ -516,6 +516,22 @@ def run_checks(page):
         assert current_selection(page) == (3, 4)
     click_version(page)
 
+    @check('click on the selected version again = the whole version against master, a third click = back')
+    def click_again(page):
+        page.click('.rv-v[data-i="4"]')
+        expect(readout(page)).to_contain_text('v4 complète · par rapport à sa base sur master')
+        expect_selection(page, 0, 4)
+        page.click('.rv-v[data-i="4"]')
+        expect(readout(page)).to_have_text('Changements de v4 · par rapport à v3 · aucun changement de code')
+        expect_selection(page, 3, 4)
+        page.click('.rv-v[data-i="1"]')
+        expect_selection(page, 0, 1)
+        page.click('.rv-v[data-i="1"]')  # the base of v1 is master: nothing to toggle
+        expect_selection(page, 0, 1)
+        page.click('.rv-v[data-i="4"]')
+        expect_selection(page, 3, 4)
+    click_again(page)
+
     @check('Shift+click: extend, then move the closest bound')
     def shift_click(page):
         page.click(f'.rv-v[data-i="{n}"]', modifiers=['Shift'])

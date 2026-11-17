@@ -27,7 +27,11 @@ export function floorAvailable(k: number, unavailable: Unavailable = NONE): numb
     return index;
 }
 
-/** New range after a click (Shift = extend) on version i (0 = master); an unavailable version does nothing. */
+/**
+ * New range after a click (Shift = extend) on version i (0 = master); an unavailable version does nothing.
+ * A plain click on version i selects what it changed (before -> i); on the version already selected that way it
+ * selects the whole version against master (0 -> i), and one more click comes back to before -> i.
+ */
 export function clickSelection({ from, to }: Range, i: number, shift: boolean, unavailable: Unavailable = NONE): Range {
     if (i === 0) {
         return { from: 0, to };
@@ -37,7 +41,8 @@ export function clickSelection({ from, to }: Range, i: number, shift: boolean, u
     }
     const before = floorAvailable(i - 1, unavailable);
     if (!shift) {
-        return { from: before, to: i };
+        const again = from === before && to === i && before !== 0;
+        return { from: again ? 0 : before, to: i };
     }
     if (i > to) {
         return { from, to: i };

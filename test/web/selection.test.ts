@@ -52,6 +52,23 @@ describe('clickSelection', () => {
         expect(clickSelection({ from: 7, to: 10 }, 4, false)).toEqual({ from: 3, to: 4 });
     });
 
+    it('click on the selected version again: the whole version against master, a third click: back to its own changes', () => {
+        expect(clickSelection({ from: 3, to: 4 }, 4, false)).toEqual({ from: 0, to: 4 });
+        expect(clickSelection({ from: 0, to: 4 }, 4, false)).toEqual({ from: 3, to: 4 });
+    });
+
+    it('click again: nothing to toggle for v1 (its base is master), a click elsewhere is still the version\'s own changes', () => {
+        expect(clickSelection({ from: 0, to: 1 }, 1, false)).toEqual({ from: 0, to: 1 });
+        expect(clickSelection({ from: 3, to: 4 }, 6, false)).toEqual({ from: 5, to: 6 });
+        expect(clickSelection({ from: 3, to: 4 }, 4, true)).toEqual({ from: 3, to: 4 });
+    });
+
+    it('click again after an unavailable previous version: the toggle compares the readable one with master', () => {
+        const gone = new Set([2, 3]);
+        expect(clickSelection({ from: 1, to: 4 }, 4, false, gone)).toEqual({ from: 0, to: 4 });
+        expect(clickSelection({ from: 0, to: 4 }, 4, false, gone)).toEqual({ from: 1, to: 4 });
+    });
+
     it('click on master: full "to" version (from = 0, to unchanged)', () => {
         expect(clickSelection({ from: 3, to: 8 }, 0, false)).toEqual({ from: 0, to: 8 });
         expect(clickSelection({ from: 3, to: 8 }, 0, true)).toEqual({ from: 0, to: 8 });
