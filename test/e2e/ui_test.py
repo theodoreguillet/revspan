@@ -567,6 +567,16 @@ def run_checks(page):
             expect(search).to_have_value('')
             expect(page.locator('.rv-row')).to_have_count(all_rows)
             page.wait_for_function('() => !document.querySelector(\'details[data-group="others"]\').open', timeout=5000)  # back to its state
+            # opened by the user (one click), closed by the user during a search: cleared, the search gives it back open
+            others_title = page.locator('details[data-group="others"] > summary')
+            others_title.click()
+            page.wait_for_function('() => document.querySelector(\'details[data-group="others"]\').open', timeout=5000)
+            search.fill('not about me')
+            others_title.click()
+            page.wait_for_function('() => !document.querySelector(\'details[data-group="others"]\').open', timeout=5000)
+            search.press('Escape')
+            expect(search).to_have_value('')
+            page.wait_for_function('() => document.querySelector(\'details[data-group="others"]\').open', timeout=5000)
         home_search(page)
 
         @check('home: "Refresh" reads Bitbucket again, where a reload reuses the home just computed')

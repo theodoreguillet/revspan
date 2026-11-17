@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef, watchEffect } from 'vue';
+import { computed, nextTick, onMounted, ref, shallowRef, watch, watchEffect } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import type { Home, HomeGroupKey, User } from '../../shared/api.ts';
 import { useFollow } from '../composables/useFollow.ts';
@@ -90,12 +90,34 @@ const noMatch = computed(() => searching.value && baseGroups.value.length > 0 &&
 
 /** The "Other open PRs" fold as the user left it (null: untouched). A search with matches in it opens it meanwhile. */
 const othersOpened = ref<boolean | null>(null);
-const othersOpen = computed(() => (searching.value ? true : (othersOpened.value ?? !home.value?.me)));
+/**
+ * The fold during a search: open when the search starts, then as the user leaves it. Kept apart so that the binding
+ * always follows the fold: closed during a search, it changes again when the search is cleared and Vue reopens it.
+ */
+const othersOpenSearching = ref(true);
+watch(searching, (now) => {
+    if (now) {
+        othersOpenSearching.value = true;
+    }
+});
+const othersOpen = computed(() => (searching.value ? othersOpenSearching.value : (othersOpened.value ?? !home.value?.me)));
 
-/** A click on the fold's title (read before the browser flips it), not its `toggle` event: the search opens it too. */
+/**
+ * A click on the fold's title: the flip is done here (the browser's own is cancelled), so that the binding, applied
+ * right after this handler, cannot undo it; kept for the current mode (the search opens the fold too).
+ */
 function onOthersClick(event: MouseEvent): void {
-    if (!searching.value) {
-        othersOpened.value = !(event.currentTarget as HTMLElement).closest('details')?.open;
+    const details = (event.currentTarget as HTMLElement).closest('details');
+    if (!details) {
+        return;
+    }
+    event.preventDefault();
+    const open = !details.open;
+    details.open = open;
+    if (searching.value) {
+        othersOpenSearching.value = open;
+    } else {
+        othersOpened.value = open;
     }
 }
 
