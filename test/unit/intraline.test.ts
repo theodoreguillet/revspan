@@ -195,6 +195,29 @@ describe('highlightIntraLine', () => {
         expect(Date.now() - start).toBeLessThan(5000); // generous: was ~600 ms with a linear scan per candidate
     });
 
+    it('checks a single insertion only for lines sharing a word, its cost counted in the budget, indentation aside', () => {
+        const indent = ' '.repeat(1900);
+        const index = (i: number): string => String(i).padStart(2, '0');
+        const charsOf = (lines: { del: DiffLine[]; add: DiffLine[] }): number => [...lines.del, ...lines.add].reduce((sum, l) => sum + l.text.length, 0);
+        // no word in common: no insertion check, only the tokens and the bags (one word per line) are paid
+        const apart = run(Array.from({ length: 100 }, (_, i) => `${indent}foo${index(i)}`), Array.from({ length: 100 }, (_, i) => `${indent}bar${index(i)}`));
+        const none = workBudget();
+        highlightIntraLine([...apart.del, ...apart.add], none);
+        expect(none.spent).toBe(charsOf(apart) * 8 + 100 * 100 + 100 * 100);
+        expect(apart.del.every((l) => l.pair === undefined)).toBe(true);
+        // `foo`, `(` and `)` in common but not similar: every pair is checked, each charged its shorter line without
+        // the indentation (12 characters)
+        const close = run(
+            Array.from({ length: 100 }, (_, i) => `${indent}foo(alpha${index(i)})`),
+            Array.from({ length: 100 }, (_, i) => `${indent}foo(beta${index(i)}, gamma${index(i)}, delta${index(i)})`),
+        );
+        const checked = workBudget();
+        highlightIntraLine([...close.del, ...close.add], checked);
+        // bags: 4 distinct tokens per removed line, 7 per added line
+        expect(checked.spent).toBe(charsOf(close) * 8 + 100 * 400 + 100 * 700 + 100 * 100 * 12);
+        expect(close.del.every((l) => l.pair === undefined)).toBe(true);
+    });
+
     it('pairs a run of long similar lines by position when comparing every pair would cost more than the budget', () => {
         const words = (i: number, salt: string): string => Array.from({ length: 270 }, (_, k) => `${k === 135 ? salt : ''}t${i * 1000 + k}`).join(' ');
         const { del, add } = run(Array.from({ length: 100 }, (_, i) => words(i, 'x')), Array.from({ length: 100 }, (_, i) => words(i, 'y')));

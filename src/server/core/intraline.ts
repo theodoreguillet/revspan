@@ -154,13 +154,15 @@ function sharedChars(a: Tokens, b: Tokens): number {
     return common;
 }
 
-/** Index of the first character after the leading indentation. */
-function indentOf(text: string): number {
-    let i = 0;
-    while (i < text.length && kindAt(text, i) === SPACE) {
-        i++;
-    }
-    return i;
+/** Index of the first character after the leading indentation: the end of the first token when it is a space run. */
+function indentOf(tokens: Tokens): number {
+    const first = tokens.ids[0];
+    return first !== undefined && tokens.vocabulary.spaces[first] ? tokens.starts[1]! : 0;
+}
+
+/** Characters after the leading indentation: an upper bound of the characters `singleInsertion` compares. */
+function contentLength(tokens: Tokens): number {
+    return tokens.starts[tokens.starts.length - 1]! - indentOf(tokens);
 }
 
 /**
@@ -169,9 +171,9 @@ function indentOf(text: string): number {
  * without a word (`}`, `});`) must be a plain prefix, the block added at its end (`}` → `} // checked`), so that a lone
  * bracket does not match every line that holds one. Two separate insertions (`a(b)` → `a(x, b, y)`) are not one.
  */
-function singleInsertion(x: string, y: string): boolean {
-    const xFrom = indentOf(x);
-    const yFrom = indentOf(y);
+function singleInsertion(x: string, tx: Tokens, y: string, ty: Tokens): boolean {
+    const xFrom = indentOf(tx);
+    const yFrom = indentOf(ty);
     const xLength = x.length - xFrom;
     const yLength = y.length - yFrom;
     if (xLength === yLength) {
@@ -267,16 +269,23 @@ function pairBySimilarity(dels: readonly DiffLine[], adds: readonly DiffLine[], 
         return null;
     }
     const candidates: { i: number; j: number; similarity: number }[] = [];
-    delTokens.forEach((a, i) => {
-        addTokens.forEach((b, j) => {
+    for (const [i, a] of delTokens.entries()) {
+        for (const [j, b] of addTokens.entries()) {
             const shared = a && b ? sharedChars(a, b) : 0;
-            const similar = a && b && shared >= MIN_SIMILARITY * Math.max(a.solid, b.solid);
-            if (a && b && worthComparing(a, b, shared, !similar && singleInsertion(dels[i]!.text, adds[j]!.text))) {
+            if (!a || !b || shared === 0) {
+                continue;
+            }
+            const similar = shared >= MIN_SIMILARITY * Math.max(a.solid, b.solid);
+            // the insertion check reads the shorter line once (its indentation aside): charged as such
+            if (!similar && !afford(budget, Math.min(contentLength(a), contentLength(b)))) {
+                return null;
+            }
+            if (worthComparing(a, b, shared, !similar && singleInsertion(dels[i]!.text, a, adds[j]!.text, b))) {
                 // how much of each line the other explains: an insertion ranks above a partial overlap
                 candidates.push({ i, j, similarity: (shared / a.solid + shared / b.solid) / 2 });
             }
-        });
-    });
+        }
+    }
     // Sorting, then one binary search per candidate among the accepted pairs.
     const steps = Math.ceil(Math.log2(candidates.length + 1)) + Math.ceil(Math.log2(Math.min(dels.length, adds.length) + 1)) + 1;
     if (!afford(budget, candidates.length * steps)) {
@@ -346,9 +355,10 @@ function markPair(del: DiffLine, add: DiffLine, budget: WorkBudget, tokens?: [To
         pair = [tokenize(a, vocabulary), tokenize(b, vocabulary)];
     }
     const [ta, tb] = pair;
-    const insertion = singleInsertion(a, b);
+    const shared = sharedChars(ta, tb);
+    const insertion = shared > 0 && singleInsertion(a, ta, b, tb);
     // Cheap bound first: most too-different pairs stop here, before the comparison in order.
-    if (!worthComparing(ta, tb, sharedChars(ta, tb), insertion)) {
+    if (!worthComparing(ta, tb, shared, insertion)) {
         return;
     }
     const matches = matchWords(ta, tb, budget);
