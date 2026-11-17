@@ -12,7 +12,7 @@ import { ApiError } from '../../src/web/services/api.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const { api, showError } = vi.hoisted(() => ({
-    api: { pr: vi.fn(), approve: vi.fn(), summary: vi.fn(), compare: vi.fn(), viewed: vi.fn(), comment: vi.fn() },
+    api: { pr: vi.fn(), approve: vi.fn(), requestChanges: vi.fn(), reviewed: vi.fn(), summary: vi.fn(), compare: vi.fn(), viewed: vi.fn(), comment: vi.fn() },
     showError: vi.fn(),
 }));
 vi.mock('../../src/web/services/api.ts', async (importOriginal) => ({ ...await importOriginal<object>(), api }));
@@ -244,6 +244,80 @@ describe('comparison refused because a bound was erased by Bitbucket (410 VERSIO
         expect(api.pr).not.toHaveBeenCalled();
         expect(showError).toHaveBeenCalledTimes(1);
         stop();
+    });
+});
+
+describe('review buttons show the new state at once', () => {
+    let detail: PrDetail;
+    const myPart = (d: PrDetail) => d.participants.find((p) => p.user?.uuid === d.me?.uuid);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        detail = prLong().data;
+        // the background refresh after the write never lands in these tests: the shown state is the local one
+        api.pr.mockReturnValue(new Promise(() => undefined));
+    });
+
+    function setup() {
+        const load = usePrLoad(ref, detail);
+        return { load, review: useReviewActions(ref, load, useDiffOptions(load.detail), () => undefined) };
+    }
+
+    it('Approve: approved on the latest version while the write runs, no news for the check, a second click removes it', async () => {
+        const { load, review } = setup();
+        const write = deferred<{ ok: true }>();
+        api.approve.mockReturnValueOnce(write.promise).mockResolvedValueOnce({ ok: true });
+
+        const approving = review.setApproved(true);
+        expect(myPart(load.detail.value)).toMatchObject({ approved: true, state: 'approved', approvedVersion: 10 });
+        expect(load.detail.value.review).toMatchObject({ lastReviewed: 10, lastReviewedSource: 'approval' });
+        write.resolve({ ok: true });
+        expect(await approving).toBe(true);
+        expect(load.detail.value.pulse.participants).toBe('{me-uuid}:1:approved');
+        expect(load.detail.value.pulse.updatedOn).toBe('');
+
+        // the button now says "Remove approval": the next click sends the removal, never a second approval
+        expect(await review.setApproved(false)).toBe(true);
+        expect(api.approve.mock.calls.map((c) => c[1])).toEqual([true, false]);
+        expect(myPart(load.detail.value)).toMatchObject({ approved: false, state: null, approvedVersion: null });
+    });
+
+    it('Approve refused: my state, the review and the pulse come back; files ticked meanwhile stay', async () => {
+        const { load, review } = setup();
+        const before = load.detail.value;
+        const write = deferred<{ ok: true }>();
+        api.approve.mockReturnValue(write.promise);
+
+        const approving = review.setApproved(true);
+        load.patchReview({ ...load.detail.value.review, viewed: { ...load.detail.value.review.viewed, 'src/D.ts': 'hd' } });
+        write.reject(new Error('refusé'));
+        expect(await approving).toBe(false);
+
+        expect(load.detail.value.participants).toEqual(before.participants);
+        expect(load.detail.value.pulse).toEqual(before.pulse);
+        expect(load.detail.value.review).toEqual({ ...before.review, viewed: { ...before.review.viewed, 'src/D.ts': 'hd' } });
+        expect(showError).toHaveBeenCalledOnce();
+    });
+
+    it('Request changes then withdraw: each click acts on the state shown', async () => {
+        const { load, review } = setup();
+        api.requestChanges.mockResolvedValue({ ok: true });
+        expect(await review.toggleRequestChanges(true)).toBe(true);
+        expect(myPart(load.detail.value)).toMatchObject({ approved: false, state: 'changes_requested', approvedVersion: 10 });
+        expect(await review.toggleRequestChanges(false)).toBe(true);
+        expect(myPart(load.detail.value)?.state).toBeNull();
+        expect(api.requestChanges.mock.calls.map((c) => c[1])).toEqual([true, false]);
+    });
+
+    it('Mark as reviewed: the version is my last reviewed one at once; rolled back if refused', async () => {
+        const { load, review } = setup();
+        const write = deferred<{ ok: true }>();
+        api.reviewed.mockReturnValue(write.promise);
+        const marking = review.markReviewed(10);
+        expect(load.detail.value.review).toMatchObject({ lastReviewed: 10, lastReviewedSource: 'local' });
+        write.reject(new Error('refusé'));
+        await marking;
+        expect(load.detail.value.review).toEqual(detail.review);
     });
 });
 

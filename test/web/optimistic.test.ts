@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Comment, Comparison, DiffLine, FileDiff } from '../../src/shared/api.ts';
-import { replaceComment, withEditedComment, withPendingComment, withPlacement, withResolved } from '../../src/web/lib/optimistic.ts';
+import { replaceComment, withEditedComment, withMyPulseEntry, withMyReview, withPendingComment, withPlacement, withResolved, withReviewedMark } from '../../src/web/lib/optimistic.ts';
 import { prLong, threadById } from './fixtures.ts';
 
 const me = { uuid: '{me-uuid}', displayName: 'Thomas Girard', nickname: 'tgirard' };
@@ -101,5 +101,52 @@ describe('optimistic placement of a new inline thread', () => {
         const next = withPlacement(cmp, 'src/A.ts', 501, 12);
         expect(next.files[1]).toBe(cmp.files[1]);
         expect(withPlacement(cmp, 'src/Missing.ts', 501, 12)).toBe(cmp);
+    });
+});
+
+describe('my review state shown at once', () => {
+    const AT = '2026-11-16T12:00:00Z';
+    const mine = (d: ReturnType<typeof prLong>['data']) => d.participants.find((p) => p.user?.uuid === me.uuid);
+
+    it('approve: approved on the latest version, counted as a review of it, pulse entry matching', () => {
+        const base = prLong().data;
+        const data = { ...base, pulse: { ...base.pulse, participants: '{me-uuid}:0:,{yan}:1:approved' } };
+        const next = withMyReview(data, { approved: true, state: 'approved' }, AT);
+        expect(mine(next)).toMatchObject({ approved: true, state: 'approved', approvedVersion: 10, role: 'REVIEWER' });
+        expect(next.review).toMatchObject({ lastReviewed: 10, lastReviewedSource: 'approval', lastReviewedAt: AT, viewed: data.review.viewed });
+        expect(next.pulse.participants).toBe('{me-uuid}:1:approved,{yan}:1:approved');
+        expect(next.participants.filter((p) => p.user?.uuid !== me.uuid)).toEqual(data.participants.filter((p) => p.user?.uuid !== me.uuid));
+    });
+
+    it('request changes then withdraw: state on the latest version, then neither (the review stays)', () => {
+        const requested = withMyReview(prLong().data, { approved: false, state: 'changes_requested' }, AT);
+        expect(mine(requested)).toMatchObject({ approved: false, state: 'changes_requested', approvedVersion: 10 });
+        expect(requested.review.lastReviewed).toBe(10);
+        const withdrawn = withMyReview(requested, { approved: false, state: null }, AT);
+        expect(mine(withdrawn)).toMatchObject({ approved: false, state: null, approvedVersion: null });
+        expect(withdrawn.review).toEqual(requested.review);
+        expect(withdrawn.pulse.participants).toBe('{me-uuid}:0:');
+    });
+
+    it('not a participant yet: added as a participant', () => {
+        const base = prLong().data;
+        const data = { ...base, participants: base.participants.filter((p) => p.user?.uuid !== me.uuid) };
+        expect(mine(withMyReview(data, { approved: true, state: 'approved' }, AT))).toMatchObject({ user: me, role: 'PARTICIPANT', approved: true });
+    });
+
+    it('no profile (me unknown): unchanged', () => {
+        const data = { ...prLong().data, me: null };
+        expect(withMyReview(data, { approved: true, state: 'approved' }, AT)).toBe(data);
+    });
+
+    it('Mark as reviewed: the version, unless a later one is already reviewed', () => {
+        const data = prLong().data;
+        expect(withReviewedMark(data, 10, AT).review).toMatchObject({ lastReviewed: 10, lastReviewedSource: 'local', lastReviewedAt: AT });
+        expect(withReviewedMark(data, 5, AT)).toBe(data);
+    });
+
+    it('pulse entry: replaced, added, sorted', () => {
+        expect(withMyPulseEntry('', '{me}', { approved: true, state: 'approved' })).toBe('{me}:1:approved');
+        expect(withMyPulseEntry('{zed}:0:,{me}:0:changes_requested', '{me}', { approved: false, state: null })).toBe('{me}:0:,{zed}:0:');
     });
 });

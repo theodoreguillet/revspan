@@ -1,6 +1,7 @@
-// Review: approve, request changes, mark a version reviewed, mark a file seen (optimistic).
+// Review: approve, request changes, mark a version reviewed, mark a file seen; each shown at once (optimistic).
 import { nextTick } from 'vue';
-import type { FileDiff, PrRef } from '../../shared/api.ts';
+import type { FileDiff, PrDetail, PrRef } from '../../shared/api.ts';
+import { withMyReview, withReviewedMark } from '../lib/optimistic.ts';
 import { api } from '../services/api.ts';
 import type { DiffOptions } from './useDiffOptions.ts';
 import { showError } from './useErrors.ts';
@@ -10,9 +11,35 @@ import type { PrLoad } from './usePrLoad.ts';
 export const ACTION_KEYS = { approve: 'approve', requestChanges: 'request-changes', markReviewed: 'mark-reviewed' } as const;
 
 export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOptions, keepFileInView: (path: string) => void) {
-    const setApproved = (approved: boolean): Promise<boolean> => load.act(() => api.approve(prRef, approved), { key: ACTION_KEYS.approve });
-    const toggleRequestChanges = (on: boolean): Promise<boolean> => load.act(() => api.requestChanges(prRef, on), { key: ACTION_KEYS.requestChanges });
-    const markReviewed = (version: number): Promise<boolean> => load.act(() => api.reviewed(prRef, version), { key: ACTION_KEYS.markReviewed });
+    /**
+     * A review write shown at once (`change` of the detail: participants, review, pulse), put back as it was if it fails
+     * (files ticked meanwhile stay ticked). The buttons then act on the new state: a second click undoes the first.
+     */
+    function reviewAct(write: () => Promise<unknown>, key: string, change: (d: PrDetail) => PrDetail): Promise<boolean> {
+        let before: Pick<PrDetail, 'participants' | 'review' | 'pulse'> | null = null;
+        return load.act(write, {
+            key,
+            optimistic: () => {
+                const { participants, review, pulse } = load.detail.value;
+                before = { participants, review, pulse };
+                load.patchDetail(change);
+            },
+            rollback: () => {
+                const saved = before;
+                if (saved) {
+                    load.patchDetail((d) => ({ ...d, ...saved, review: { ...saved.review, viewed: d.review.viewed } }));
+                }
+            },
+        });
+    }
+
+    const now = (): string => new Date().toISOString();
+    const setApproved = (approved: boolean): Promise<boolean> => reviewAct(() => api.approve(prRef, approved), ACTION_KEYS.approve,
+        (d) => withMyReview(d, { approved, state: approved ? 'approved' : null }, now()));
+    const toggleRequestChanges = (on: boolean): Promise<boolean> => reviewAct(() => api.requestChanges(prRef, on), ACTION_KEYS.requestChanges,
+        (d) => withMyReview(d, { approved: false, state: on ? 'changes_requested' : null }, now()));
+    const markReviewed = (version: number): Promise<boolean> => reviewAct(() => api.reviewed(prRef, version), ACTION_KEYS.markReviewed,
+        (d) => withReviewedMark(d, version, now()));
 
     /** Ticks "Seen" for a file in the local state (fingerprint, or undefined = not seen), without touching other files. */
     function patchViewed(path: string, contentHash: string | undefined): void {
