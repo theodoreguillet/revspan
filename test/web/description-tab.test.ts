@@ -59,6 +59,12 @@ describe('description tab', () => {
         expect(root.querySelector('[data-description="empty"]')).toBeNull();
     });
 
+    it('a detail without description (served by an older CLI server) shows the empty state', async () => {
+        setLocale('en');
+        const root = await mountTab(undefined as unknown as string);
+        expect(root.querySelector('[data-description="empty"]')?.textContent?.trim()).toBe('No description.');
+    });
+
     it('says there is no description when empty', async () => {
         setLocale('fr');
         const fr = await mountTab('');

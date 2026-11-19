@@ -24,6 +24,10 @@ describe('plainMessageText', () => {
         }
     });
 
+    it('puts a zero-width space (U+200B) between "]" and "(", and nothing else', () => {
+        expect(plainMessageText('[a](b) and [c](d)')).toBe('[a]\u200B(b) and [c]\u200B(d)');
+    });
+
     it('keeps ordinary text unchanged', () => {
         expect(plainMessageText('feat(records): archive [WIP]')).toBe('feat(records): archive [WIP]');
     });
