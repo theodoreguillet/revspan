@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { secretCookie } from '../http/cli-secret.ts';
 import { writeJsonAtomic } from './config.ts';
+import { isPrivateStat } from './ownership.ts';
 
 export interface RunInfo {
     port: number;
@@ -37,7 +38,7 @@ export function readRunFile(dir: string, uid: number | null = process.getuid?.()
         let text: string;
         try {
             const stat = fs.fstatSync(fd);
-            if (!stat.isFile() || (uid !== null && (stat.uid !== uid || (stat.mode & 0o022) !== 0))) {
+            if (!stat.isFile() || !isPrivateStat(stat, uid)) {
                 return null;
             }
             text = fs.readFileSync(fd, 'utf8');

@@ -36,6 +36,12 @@ describe('launchPlan: how the CLI opens its ?k= address, the secret never in a p
         expect(hostile).not.toContain('<script>');
     });
 
+    it('no private folder for the redirect page (null): Linux only prints the URL, macOS and Windows need none', () => {
+        expect(launchPlan('linux', url, null)).toBeNull();
+        expect(launchPlan('darwin', url, null)).toMatchObject({ command: 'osascript' });
+        expect(launchPlan('win32', url, null)).toMatchObject({ command: 'explorer.exe' });
+    });
+
     it('Windows: explorer.exe with the URL (other standard users cannot read another user\'s command line), never cmd', () => {
         expect(launchPlan('win32', url, tempFile)).toEqual({ command: 'explorer.exe', args: [url] });
     });

@@ -27,7 +27,10 @@ Revspan, nor comment, approve, request changes or change your settings as you, e
 127.0.0.1. The secret never goes into a process argument that other users could list: on macOS the browser is opened
 through `osascript` reading the address on its standard input, on Linux through a temporary page (mode `0600`, in the
 configuration folder, deleted after 10 seconds) given to `xdg-open`, on Windows through `explorer.exe` (other standard
-users cannot read another user's command line). If the page says "Open Revspan from the revspan command", open the
+users cannot read another user's command line). On Linux, a sandboxed browser (snap or Flatpak, as Ubuntu's default
+Firefox and Chromium) cannot read that hidden folder and shows a file error: the command then says to open the printed
+address by hand; if the configuration folder is not private to you (another owner, or writable by others), no page is
+written and the address is only printed. If the page says "Open Revspan from the revspan command", open the
 printed address again, or run `revspan` again: while one runs, a second `revspan [PR URL]` opens the running one
 instead of starting another. Two limits:
 
