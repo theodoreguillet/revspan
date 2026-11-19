@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import type { PrRef } from '../shared/api.ts';
 import type { PrService } from '../server/services/pr-service.ts';
 import { findLocalRepo, type RepoFs } from './lib/repo-path.ts';
+import { plainMessageText } from './lib/plain-text.ts';
 import { fileInRepo } from './lib/webview-messages.ts';
 
 const nodeFs: RepoFs = {
@@ -31,19 +32,19 @@ export async function openLocalFile(prs: PrService, ref: PrRef, filePath: string
     if (!repo) {
         void vscode.window.showWarningMessage(vscode.l10n.t(
             'Repository “{repo}” not found in the workspace (no Bitbucket remote, no {folder} folder, no worktree).',
-            { repo: `${ref.workspace}/${ref.repo}`, folder: ref.repo },
+            { repo: plainMessageText(`${ref.workspace}/${ref.repo}`), folder: plainMessageText(ref.repo) },
         ));
         return;
     }
     const file = fileInRepo(repo.dir, filePath);
     if (!file) {
-        void vscode.window.showWarningMessage(vscode.l10n.t('Path refused: “{path}” is outside the repository {dir}.', { path: filePath, dir: repo.dir }));
+        void vscode.window.showWarningMessage(vscode.l10n.t('Path refused: “{path}” is outside the repository {dir}.', { path: plainMessageText(filePath), dir: plainMessageText(repo.dir) }));
         return;
     }
     if (!fs.existsSync(file)) {
         void vscode.window.showWarningMessage(repo.branch === null
-            ? vscode.l10n.t('“{path}” doesn’t exist in {dir} (unknown branch).', { path: filePath, dir: repo.dir })
-            : vscode.l10n.t('“{path}” doesn’t exist in {dir} (branch {branch}).', { path: filePath, dir: repo.dir, branch: repo.branch }));
+            ? vscode.l10n.t('“{path}” doesn’t exist in {dir} (unknown branch).', { path: plainMessageText(filePath), dir: plainMessageText(repo.dir) })
+            : vscode.l10n.t('“{path}” doesn’t exist in {dir} (branch {branch}).', { path: plainMessageText(filePath), dir: plainMessageText(repo.dir), branch: plainMessageText(repo.branch) }));
         return;
     }
     const position = new vscode.Position(Math.max(0, (line ?? 1) - 1), 0);
@@ -51,6 +52,6 @@ export async function openLocalFile(prs: PrService, ref: PrRef, filePath: string
     if (!repo.onPrBranch) {
         void vscode.window.showInformationMessage(repo.branch === null
             ? vscode.l10n.t('The local copy is on another branch: lines may differ from the PR version.')
-            : vscode.l10n.t('The local copy is on {branch}: lines may differ from the PR version.', { branch: repo.branch }));
+            : vscode.l10n.t('The local copy is on {branch}: lines may differ from the PR version.', { branch: plainMessageText(repo.branch) }));
     }
 }

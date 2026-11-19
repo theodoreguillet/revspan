@@ -9,6 +9,7 @@ import type { DiffDocuments } from './diff-documents.ts';
 import { hostL10n, hostPageLocale } from './host-l10n.ts';
 import { callApi, isSuccessfulWrite } from './lib/bridge.ts';
 import { errorText } from './lib/error-text.ts';
+import { plainMessageText } from './lib/plain-text.ts';
 import { PANEL_VIEW_TYPE, panelTitle, roleTitles, routeOfApiRead, screenOfRoute } from './lib/panel-route.ts';
 import { buildWebviewHtml } from './lib/webview-html.ts';
 import { parseWebviewMessage } from './lib/webview-messages.ts';
@@ -182,7 +183,7 @@ export class RevspanPanel {
             if (message.type === 'request') {
                 await this.post(tab, { type: 'response', id: message.id, status: 500, body: { error: errorPayload(error) } });
             } else {
-                void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: errorText(hostL10n().t, errorPayload(error)) }));
+                void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: plainMessageText(errorText(hostL10n().t, errorPayload(error))) }));
             }
         }
     }

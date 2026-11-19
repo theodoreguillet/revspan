@@ -9,6 +9,7 @@ import { GROUPINGS, isGrouping, type Grouping } from '../shared/home-grouping.ts
 import { hostL10n } from './host-l10n.ts';
 import { HomeTreeProvider, showLoading, type Node } from './home-tree-provider.ts';
 import { errorText } from './lib/error-text.ts';
+import { plainMessageText } from './lib/plain-text.ts';
 import { errorPayload } from '../server/errors.ts';
 import { DIFF_SCHEME } from './lib/diff-uri.ts';
 import { PANEL_VIEW_TYPE, restoredRoute } from './lib/panel-route.ts';
@@ -71,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             const { followed } = app.services.settings.followed();
             await app.services.settings.update({ review: { followed: withFollowed(followed, { uuid: author.uuid, displayName: author.displayName }, follow) } });
         } catch (error) {
-            void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: errorText(hostL10n().t, errorPayload(error)) }));
+            void vscode.window.showErrorMessage(vscode.l10n.t('Revspan: {message}', { message: plainMessageText(errorText(hostL10n().t, errorPayload(error))) }));
         }
         // The followed list is part of the home's key: the home is recomputed without asking Bitbucket for fresh data.
         tree.refresh();

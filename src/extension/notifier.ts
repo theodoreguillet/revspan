@@ -9,6 +9,7 @@ import { hostL10n } from './host-l10n.ts';
 import {
     capNotifications, codeChangedSince, forgetRepositories, planNotifications, versionCandidates, type CodeChanges, type PendingNotification, type VersionCandidate,
 } from './lib/notifications.ts';
+import { notificationMessage } from './lib/notification-text.ts';
 
 /** First poll after activation: late enough not to slow VS Code's startup. */
 const STARTUP_DELAY_MS = 10_000;
@@ -29,20 +30,6 @@ async function eachLimited<T>(items: readonly T[], limit: number, task: (item: T
         }
     };
     await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
-}
-
-function messageOf(notification: PendingNotification): string {
-    const { title, author } = notification;
-    switch (notification.kind) {
-        case 'newPullRequest':
-            return author
-                ? vscode.l10n.t('New PR to review from {author}: {title}', { author, title })
-                : vscode.l10n.t('New PR to review: {title}', { title });
-        case 'newVersion':
-            return vscode.l10n.t('New version to review: {title}', { title });
-        case 'buildFailed':
-            return vscode.l10n.t('Build failed on your PR: {title}', { title });
-    }
 }
 
 export class Notifier implements vscode.Disposable {
@@ -218,7 +205,7 @@ export class Notifier implements vscode.Disposable {
 
     private async show(notification: PendingNotification): Promise<void> {
         const open = vscode.l10n.t('Open');
-        const message = messageOf(notification);
+        const message = notificationMessage(vscode.l10n.t, notification);
         const choice = notification.kind === 'buildFailed'
             ? await vscode.window.showWarningMessage(message, open)
             : await vscode.window.showInformationMessage(message, open);
