@@ -49,7 +49,7 @@ const head = ref<HTMLElement | null>(null);
 const distance = (): number => (head.value?.isConnected
     ? viewportDistance(head.value.getBoundingClientRect().top, props.hunk.lines.length * LINE_PX, window.innerHeight)
     : Infinity);
-const tokens = useHunkTokens(() => props.hunk.lines, () => lang.value, () => props.near, distance);
+const tokens = useHunkTokens(() => props.hunk, () => lang.value, () => props.near, distance);
 const lineIndex = computed(() => ((tokens.value || props.hits.length || props.jump) && props.view === 'split' ? new Map(props.hunk.lines.map((line, k) => [line, k])) : null));
 const indexOf = (line: DiffLine): number => lineIndex.value?.get(line) ?? -1;
 const splitTokens = (line: DiffLine, side: 'old' | 'new') => lineTokens(tokens.value, indexOf(line), side);

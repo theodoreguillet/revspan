@@ -1,18 +1,20 @@
 // Syntax tokens of a hunk: none at first (the lines render plain), then the colors once computed in the background.
 import { onBeforeUnmount, shallowRef, watch, type Ref } from 'vue';
-import type { DiffLine } from '../../shared/api.ts';
-import type { HunkTokens } from '../lib/highlight.ts';
+import type { HunkCode, HunkTokens } from '../lib/highlight.ts';
 import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../services/highlighter.ts';
 
-/** distance: how far the hunk is from the window (px), so that the hunks on screen get their colors first. */
+/**
+ * hunk: its lines and lead-ins (Vue or HTML block). distance: how far the hunk is from the window (px), so that the
+ * hunks on screen get their colors first.
+ */
 export function useHunkTokens(
-    lines: () => readonly DiffLine[], lang: () => string | null, active: () => boolean, distance?: () => number,
+    hunk: () => HunkCode, lang: () => string | null, active: () => boolean, distance?: () => number,
 ): Readonly<Ref<HunkTokens | null>> {
     const theme = useCodeTheme();
     const tokens = shallowRef<HunkTokens | null>(null);
     let controller: AbortController | null = null;
 
-    watch([lines, lang, active, theme], ([current, language, isActive, codeTheme]) => {
+    watch([() => hunk().lines, () => hunk().leadIn, lang, active, theme], ([lines, leadIn, language, isActive, codeTheme]) => {
         controller?.abort();
         controller = null;
         if (!language || !isActive) {
@@ -20,6 +22,7 @@ export function useHunkTokens(
             return;
         }
         // tokens of another content or theme would color wrong: plain until the right ones arrive
+        const current = { lines, leadIn };
         tokens.value = cachedHunkTokens(current, language, codeTheme) ?? null;
         if (tokens.value) {
             return;

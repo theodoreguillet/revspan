@@ -6,6 +6,7 @@ import type {
     Comparison, FileCategory, FileDiff, FileStatus, Thread, ThreadPlacement, Version, VersionKind, VersionSummary,
 } from '../../shared/api.ts';
 import { buildHunks, diffLines, diffStats, NO_EOL, splitDiffLines } from './diff.ts';
+import { withLeadIns } from './lead-in.ts';
 import { merge3 } from './merge3.ts';
 import { mapLine } from './linemap.ts';
 import { compareTreePaths } from '../../shared/file-tree.ts';
@@ -176,12 +177,9 @@ function finishFile(entry: DiffstatEntry, oldSide: Side, newSide: Side, options:
     if (added === 0 && removed === 0 && status === 'modified') {
         return null;
     }
-    return {
-        ...base,
-        added,
-        removed,
-        hunks: options.withHunks ? buildHunks(ops, oldSide.lines, newSide.lines, options.context) : [],
-    };
+    const hunks = options.withHunks ? buildHunks(ops, oldSide.lines, newSide.lines, options.context) : [];
+    // Vue or HTML: each hunk tells the tag of the <script> or <style> block it starts in (the page colors it as such).
+    return { ...base, added, removed, hunks: withLeadIns(hunks, oldSide.lines, newSide.lines, path) };
 }
 
 /** Both sides of a file to compare, and whether an area was touched by both master and the author. */

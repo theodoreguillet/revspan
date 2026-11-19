@@ -80,6 +80,21 @@ describe('compareVersions', () => {
         expect(file!.hunks[0]!.lines.every((l) => !l.text.includes('\u0000'))).toBe(true);
     });
 
+    it('a Vue hunk inside <script setup> carries the block\'s opening tag on each side, the whole file none', async () => {
+        const sfc = (limit: number): string => [
+            '<template>', '    <p>{{ limit }}</p>', '</template>', '', '<script setup lang="ts">', "import { ref } from 'vue';", '',
+            'const first = 1;', 'const second = 2;', `const limit = ref<number>(${limit});`, '</script>', '',
+        ].join('\n');
+        const contents = { old: { text: sfc(20) }, new: { text: sfc(50) } };
+        const [vue] = (await compareVersions(singleFile('src/components/RecordList.vue', contents), oneVersion, 0, 1)).files;
+        expect(vue!.hunks.map((h) => [h.newStart, h.leadIn])).toEqual([[7, { old: '<script setup lang="ts">', new: '<script setup lang="ts">' }]]);
+        const [whole] = (await compareVersions(singleFile('src/components/RecordList.vue', contents), oneVersion, 0, 1, { context: 1_000_000 })).files;
+        expect(whole!.hunks.map((h) => [h.newStart, 'leadIn' in h])).toEqual([[1, false]]);
+        // another kind of file: no lead-in key at all (smaller payload)
+        const [ts] = (await compareVersions(singleFile('src/components/RecordList.ts', contents), oneVersion, 0, 1)).files;
+        expect(ts!.hunks.map((h) => 'leadIn' in h)).toEqual([false]);
+    });
+
     it('files follow the explorer order (folders first), code before dependencies', async () => {
         const order = ['src/z.ts', 'package-lock.json', 'README.md', 'src/core/a.ts', 'src/a.ts', 'docs/x.md'];
         const src: CompareSource = {

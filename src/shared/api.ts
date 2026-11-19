@@ -396,6 +396,12 @@ export interface Hunk {
     /** Enclosing section, git-style (e.g. "export default class CreateRecord ..."). */
     header: string;
     lines: DiffLine[];
+    /**
+     * Vue or HTML file, per side: opening tag line of the <script> or <style> block the hunk's first line is in (e.g.
+     * `<script setup lang="ts">`). The page tokenizes it first and drops its tokens, so the block's code is colored as
+     * such. Absent when neither side has one.
+     */
+    leadIn?: { old?: string; new?: string };
 }
 
 export interface ThreadPlacement {

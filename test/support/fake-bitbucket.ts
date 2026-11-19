@@ -33,7 +33,10 @@ export const FAKE_PRS = {
     others: 47,
     /** v1 erased by Bitbucket (commit not found), v2 and v3 readable; my comment dates from v1. */
     purged: 48,
-    /** I approved its only version (author Yann, not a designated reviewer): "waiting" on the author. */
+    /**
+     * I approved its only version (author Yann, not a designated reviewer): "waiting" on the author. Also changes a Vue
+     * component inside its <script setup lang="ts"> (src/components/RecordList.vue).
+     */
     waiting: 49,
     /** Draft (author Yann, 1 version, nobody concerned): shows "Draft" in the header; asks no review. */
     draft: 51,
@@ -353,12 +356,56 @@ function purgedPr(b: FakeBuilder): void {
     b.repo.commits.delete(hex('purged:v1'));
 }
 
-/** Simple PR with 1 or 2 code versions (mine, never reviewed, others, waiting). */
-function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number, events: BbActivity[] = [], draft = false): void {
-    b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']) });
+/** Vue component of the waiting PR (#49): v1 changes `limit` inside <script setup lang="ts">, far below the tag. */
+const RECORD_LIST_VUE = 'src/components/RecordList.vue';
+
+function recordList(limit: number): string {
+    return lines([
+        '<template>',
+        '    <section class="record-list">',
+        '        <h2>{{ title }}</h2>',
+        '        <ul>',
+        '            <li v-for="record in visible" :key="record.id" @click="emit(\'select\', record)">{{ record.label }}</li>',
+        '        </ul>',
+        '    </section>',
+        '</template>',
+        '',
+        '<script setup lang="ts">',
+        "import { computed, ref } from 'vue';",
+        '',
+        'interface RecordItem {',
+        '    id: number;',
+        '    label: string;',
+        '}',
+        '',
+        'const props = defineProps<{ title: string; records: RecordItem[] }>();',
+        'const emit = defineEmits<{ select: [record: RecordItem] }>();',
+        `const limit = ref<number>(${limit});`,
+        'const visible = computed(() => props.records.slice(0, limit.value));',
+        '</script>',
+        '',
+        '<style scoped lang="scss">',
+        '.record-list {',
+        '    margin: 0;',
+        '}',
+        '</style>',
+    ]);
+}
+
+/**
+ * Simple PR with 1 or 2 code versions (mine, never reviewed, others, waiting). extra: other files, as in master and
+ * as changed by v1.
+ */
+function simplePr(
+    b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number, events: BbActivity[] = [],
+    draft = false, extra: Record<string, { base: string; head: string }> = {},
+): void {
+    const extraFiles = (side: 'base' | 'head'): Record<string, string> => Object.fromEntries(Object.entries(extra).map(([path, file]) => [path, file[side]]));
+    b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']), ...extraFiles('base') });
     const plan: PlanStep[] = [];
     for (let v = 1; v <= versions; v++) {
-        b.derive(`${key}:v${v}`, v === 1 ? `${key}:m0` : `${key}:v${v - 1}`, { [`src/${key}.ts`]: lines(['x', ...Array.from({ length: v }, (_, i) => `y${i + 1}`)]) }, title);
+        const changes = { [`src/${key}.ts`]: lines(['x', ...Array.from({ length: v }, (_, i) => `y${i + 1}`)]), ...(v === 1 ? extraFiles('head') : {}) };
+        b.derive(`${key}:v${v}`, v === 1 ? `${key}:m0` : `${key}:v${v - 1}`, changes, title);
         plan.push({ commit: `${key}:v${v}`, base: `${key}:m0`, date: addDays('2026-10-10T09:00:00Z', v) });
     }
     b.pr(id, { title, author, participants, plan, events, draft });
@@ -471,7 +518,7 @@ export function buildFakeData({ bigPr: withBigPr = false } = {}): FakeData {
     purgedPr(b);
     simplePr(b, FAKE_PRS.waiting, 'waiting', 'DEMO-49 - fix(waiting): approved, waiting on the author', YAN,
         [{ user: ME, role: 'PARTICIPANT', approved: true, state: 'approved' }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 1,
-        [{ approval: { date: '2026-10-12T09:00:00Z', user: ME } }]);
+        [{ approval: { date: '2026-10-12T09:00:00Z', user: ME } }], false, { [RECORD_LIST_VUE]: { base: recordList(20), head: recordList(50) } });
     simplePr(b, FAKE_PRS.draft, 'draft', 'DEMO-51 - feat(draft): work in progress', YAN, [{ user: CAM, role: 'PARTICIPANT', approved: false, state: null }], 1, [], true);
     if (withBigPr) {
         bigPr(b);

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHighlighterCore } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import type { DiffLine } from '../../src/shared/api.ts';
-import { codeThemeFor, languageOf, lineTokens, mergeTokens, nextChunkSize, nextJob, partStyle, tokenizeHunk, withBands } from '../../src/web/lib/highlight.ts';
+import {
+    codeThemeFor, hunkCacheKey, languageOf, leadInLangs, lineTokens, mergeTokens, nextChunkSize, nextJob, partStyle, tokenizeHunk, withBands,
+    type HunkTokens, type SideTokenizer,
+} from '../../src/web/lib/highlight.ts';
 import { cachedHunkTokens, highlightHunk, useCodeTheme } from '../../src/web/services/highlighter.ts';
 
 const line = (t: DiffLine['t'], text: string, hl: [number, number][] = []): DiffLine => ({ t, o: null, n: null, text, hl });
@@ -144,6 +147,71 @@ describe('tokenizeHunk', () => {
     });
 });
 
+describe('tokenizeHunk with a lead-in', () => {
+    const TYPE = '#4EC9B0';
+    const vue = createHighlighterCore({
+        themes: [import('shiki/themes/dark-plus.mjs')],
+        langs: [import('shiki/langs/vue.mjs')],
+        engine: createJavaScriptRegexEngine(),
+    });
+    const tokenize: SideTokenizer = async (code) => (await vue).codeToTokens(code.join('\n'), { lang: 'vue', theme: 'dark-plus' }).tokens;
+    const colorOf = (tokens: HunkTokens, index: number, side: 'old' | 'new', content: string): string | undefined =>
+        lineTokens(tokens, index, side)?.find((t) => t.content === content)?.color;
+    const SCRIPT = '<script setup lang="ts">';
+
+    it('tokenizeHunk reads a Vue hunk inside <script setup> as TypeScript and drops the lead-in\'s tokens', async () => {
+        const lines = [line(' ', 'const count = ref<number>(0);'), line('-', 'const total = 1;'), line('+', 'const total = 2;')];
+
+        // the bug: alone, the hunk is template text (`const` not a keyword) and `ref<number>` even an HTML tag
+        const alone = await tokenizeHunk(lines, tokenize);
+        expect(lineTokens(alone, 0, 'new')?.[0]).toMatchObject({ content: 'const count = ref', color: '#D4D4D4' });
+        expect(colorOf(alone, 0, 'new', 'number')).toBe(KEYWORD);
+
+        const tokens = await tokenizeHunk(lines, tokenize, { old: SCRIPT, new: SCRIPT });
+        expect(lineTokens(tokens, 0, 'new')?.map((t) => t.content).join('')).toBe('const count = ref<number>(0);');
+        expect(colorOf(tokens, 0, 'new', 'const')).toBe(KEYWORD);
+        expect(colorOf(tokens, 0, 'new', 'count')).toBe('#4FC1FF');
+        expect(colorOf(tokens, 0, 'new', 'ref')).toBe('#DCDCAA');
+        expect(colorOf(tokens, 0, 'new', 'number')).toBe(TYPE);
+        expect(colorOf(tokens, 0, 'old', 'number')).toBe(TYPE);
+        expect(colorOf(tokens, 1, 'old', 'const')).toBe(KEYWORD);
+        expect(colorOf(tokens, 2, 'new', 'const')).toBe(KEYWORD);
+        expect(lineTokens(tokens, 1, 'new')).toBeUndefined();
+
+        // each side has its own lead-in
+        const newOnly = await tokenizeHunk(lines, tokenize, { new: SCRIPT });
+        expect(colorOf(newOnly, 2, 'new', 'const')).toBe(KEYWORD);
+        expect(colorOf(newOnly, 1, 'old', 'const')).toBeUndefined();
+    });
+
+    it('a template line needs no lead-in: alone, its Vue directives keep their colors (inside <template> they would not)', async () => {
+        const lines = [line('+', '    <li v-if="ok">{{ item }}</li>')];
+        expect(colorOf(await tokenizeHunk(lines, tokenize), 0, 'new', 'v-if')).toBe('#C586C0');
+        expect(colorOf(await tokenizeHunk(lines, tokenize, { new: '<template>' }), 0, 'new', 'v-if')).toBe('#9CDCFE');
+    });
+
+    it('hunkCacheKey tells the lead-ins apart', () => {
+        const lines = [line('+', 'const a = 1;')];
+        const keys = [
+            hunkCacheKey(lines, 'vue', 'dark-plus'),
+            hunkCacheKey(lines, 'vue', 'dark-plus', { new: SCRIPT }),
+            hunkCacheKey(lines, 'vue', 'dark-plus', { old: SCRIPT }),
+            hunkCacheKey(lines, 'vue', 'dark-plus', { old: SCRIPT, new: SCRIPT }),
+            hunkCacheKey(lines, 'vue', 'dark-plus', { new: '<script lang="ts">' }),
+        ];
+        expect(new Set(keys).size).toBe(keys.length);
+        expect(hunkCacheKey(lines, 'vue', 'dark-plus', {})).toBe(keys[0]);
+    });
+
+    it('leadInLangs gives the languages the lead-ins name, known ones only', () => {
+        expect(leadInLangs({ old: '<style scoped lang="scss">', new: "<script setup lang='ts'>" })).toEqual(['scss', 'typescript']);
+        expect(leadInLangs({ old: '<style lang="scss">', new: '<style lang="scss">' })).toEqual(['scss']);
+        expect(leadInLangs({ new: '<style lang="stylus">' })).toEqual([]);
+        expect(leadInLangs({ new: '<script setup>' })).toEqual([]);
+        expect(leadInLangs(undefined)).toEqual([]);
+    });
+});
+
 describe('nextChunkSize', () => {
     it('grows the chunks while they stay quick, shrinks them when one is slow', () => {
         expect(nextChunkSize(4, 1)).toBe(8);
@@ -166,28 +234,38 @@ describe('nextJob', () => {
 describe('highlighter service', () => {
     it('colors a TypeScript hunk with the theme, without the default text color, then serves it from the cache', async () => {
         const lines = [line(' ', '// note'), line('+', 'const label = "a";\r')];
-        expect(cachedHunkTokens(lines, 'typescript', 'light-plus')).toBeUndefined();
-        const tokens = await highlightHunk(lines, 'typescript', 'light-plus');
+        expect(cachedHunkTokens({ lines }, 'typescript', 'light-plus')).toBeUndefined();
+        const tokens = await highlightHunk({ lines }, 'typescript', 'light-plus');
         expect(lineTokens(tokens, 0, 'new')?.[0]?.color).toBe('#008000');
         const added = lineTokens(tokens, 1, 'new') ?? [];
         expect(added[0]).toMatchObject({ content: 'const', color: '#0000FF' });
         // the default text of the theme takes the page color
         expect(added.find((t) => t.content.includes('='))?.color).toBeUndefined();
         expect(mergeTokens(lines[1]!.text, added, []).map((p) => p.text).join('')).toBe(lines[1]!.text);
-        expect(cachedHunkTokens(lines, 'typescript', 'light-plus')).toBe(tokens);
-        expect(cachedHunkTokens(lines, 'typescript', 'dark-plus')).toBeUndefined();
+        expect(cachedHunkTokens({ lines }, 'typescript', 'light-plus')).toBe(tokens);
+        expect(cachedHunkTokens({ lines }, 'typescript', 'dark-plus')).toBeUndefined();
     });
 
     it('carries a multi-line comment across chunks of a long hunk', async () => {
         const lines = [line('+', '/*'), ...Array.from({ length: 300 }, (_, k) => line('+', `comment ${k}`)), line('+', '*/'), line('+', 'let z;')];
-        const tokens = await highlightHunk(lines, 'typescript', 'dark-plus');
+        const tokens = await highlightHunk({ lines }, 'typescript', 'dark-plus');
         expect(lineTokens(tokens, 250, 'new')?.[0]?.color).toBe(COMMENT);
         expect(lineTokens(tokens, 302, 'new')?.[0]).toMatchObject({ content: 'let', color: KEYWORD });
     });
 
+    it('colors a Vue hunk with its lead-in (the block\'s grammar loaded), cached apart from the same lines without it', async () => {
+        const lines = [line(' ', '.record-list {'), line('+', '    margin: 0;'), line(' ', '}')];
+        const hunk = { lines, leadIn: { old: '<style scoped lang="scss">', new: '<style scoped lang="scss">' } };
+        const tokens = await highlightHunk(hunk, 'vue', 'dark-plus');
+        expect(lineTokens(tokens, 1, 'new')?.find((t) => t.content === 'margin')?.color).toBe('#9CDCFE');
+        expect(lineTokens(tokens, 0, 'old')?.[0]).toMatchObject({ content: '.record-list', color: '#D7BA7D' });
+        expect(cachedHunkTokens(hunk, 'vue', 'dark-plus')).toBe(tokens);
+        expect(cachedHunkTokens({ lines }, 'vue', 'dark-plus')).toBeUndefined();
+    });
+
     it('leaves very large hunks plain', async () => {
         const lines = Array.from({ length: 2001 }, (_, k) => line('+', `const a${k} = ${k};`));
-        expect(await highlightHunk(lines, 'typescript', 'dark-plus')).toBeNull();
+        expect(await highlightHunk({ lines }, 'typescript', 'dark-plus')).toBeNull();
     });
 
     it('colors the hunk closest to the window before those requested earlier', async () => {
@@ -196,9 +274,9 @@ describe('highlighter service', () => {
         const near = [line('+', 'const near = 2;')];
         const other = [line('+', 'const other = 3;')];
         // the first request starts at once; the two others wait, and the nearest one goes first
-        const first = highlightHunk(other, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('other'));
-        const late = highlightHunk(far, 'typescript', 'light-plus', undefined, () => 5000).then(() => order.push('far'));
-        const soon = highlightHunk(near, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('near'));
+        const first = highlightHunk({ lines: other }, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('other'));
+        const late = highlightHunk({ lines: far }, 'typescript', 'light-plus', undefined, () => 5000).then(() => order.push('far'));
+        const soon = highlightHunk({ lines: near }, 'typescript', 'light-plus', undefined, () => 0).then(() => order.push('near'));
         await Promise.all([first, late, soon]);
         expect(order).toEqual(['other', 'near', 'far']);
     });
@@ -206,6 +284,6 @@ describe('highlighter service', () => {
     it('stops when the request is aborted', async () => {
         const controller = new AbortController();
         controller.abort();
-        expect(await highlightHunk([line('+', 'const b = 2;')], 'typescript', 'dark-plus', controller.signal)).toBeNull();
+        expect(await highlightHunk({ lines: [line('+', 'const b = 2;')] }, 'typescript', 'dark-plus', controller.signal)).toBeNull();
     });
 });

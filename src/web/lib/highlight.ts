@@ -1,5 +1,5 @@
 // Syntax highlighting rules: language of a path, theme, hunk tokenized per side, tokens merged with the change emphasis.
-import type { DiffLine } from '../../shared/api.ts';
+import type { DiffLine, Hunk } from '../../shared/api.ts';
 import { highlightParts } from './diff.ts';
 
 /** A token as shiki gives it (color absent: default text color of the page). */
@@ -239,6 +239,12 @@ export function partStyle(p: Part): string | undefined {
     return rules.length ? rules.join(';') : undefined;
 }
 
+/** What a hunk's colors depend on: its lines and, in a Vue or HTML file, the tag of the block it starts in. */
+export type HunkCode = Pick<Hunk, 'lines' | 'leadIn'>;
+
+/** Lead-ins of a hunk, per side (see Hunk.leadIn). */
+export type LeadIn = Hunk['leadIn'];
+
 /** Tokens of each hunk line, by index in `hunk.lines`, per side (a line exists on its side only). */
 export interface HunkTokens {
     old: (readonly CodeToken[] | undefined)[];
@@ -250,9 +256,10 @@ export type SideTokenizer = (code: readonly string[]) => Promise<readonly (reado
 
 /**
  * Each side of the hunk is tokenized as one block (old: context + removed lines, new: context + added lines), so a
- * multi-line comment or string colors right; the tokens are then mapped back to the hunk lines.
+ * multi-line comment or string colors right; the tokens are then mapped back to the hunk lines. A side's lead-in (the
+ * tag of its Vue or HTML block) is tokenized first and its tokens dropped: the grammar starts inside the block.
  */
-export async function tokenizeHunk(lines: readonly DiffLine[], tokenize: SideTokenizer): Promise<HunkTokens> {
+export async function tokenizeHunk(lines: readonly DiffLine[], tokenize: SideTokenizer, leadIn?: LeadIn): Promise<HunkTokens> {
     const out: HunkTokens = { old: new Array(lines.length), new: new Array(lines.length) };
     for (const side of ['old', 'new'] as const) {
         const skip = side === 'old' ? '+' : '-';
@@ -268,12 +275,14 @@ export async function tokenizeHunk(lines: readonly DiffLine[], tokenize: SideTok
         if (!code.length) {
             continue;
         }
-        const tokens = await tokenize(code);
-        if (tokens.length !== code.length) {
+        const lead = leadIn?.[side];
+        const skipped = lead === undefined ? 0 : 1;
+        const tokens = await tokenize(lead === undefined ? code : [lead, ...code]);
+        if (tokens.length !== code.length + skipped) {
             continue;
         }
         index.forEach((k, i) => {
-            out[side][k] = tokens[i];
+            out[side][k] = tokens[i + skipped];
         });
     }
     return out;
@@ -284,7 +293,25 @@ export function lineTokens(tokens: HunkTokens | null | undefined, index: number,
     return tokens?.[side][index];
 }
 
-/** Cache key of a hunk's tokens: its content, language and theme. */
-export function hunkCacheKey(lines: readonly DiffLine[], lang: string, theme: CodeTheme): string {
-    return `${lang}\n${theme}\n${lines.map((l) => l.t + l.text).join('\n')}`;
+/** Cache key of a hunk's tokens: its content, lead-ins, language and theme. */
+export function hunkCacheKey(lines: readonly DiffLine[], lang: string, theme: CodeTheme, leadIn?: LeadIn): string {
+    // \u0001: a line of the key starts with its sign (' ', '+' or '-'), never with this
+    const lead = leadIn?.old === undefined && leadIn?.new === undefined ? '' : `\u0001${leadIn?.old ?? ''}\u0001${leadIn?.new ?? ''}\n`;
+    return `${lang}\n${theme}\n${lead}${lines.map((l) => l.t + l.text).join('\n')}`;
+}
+
+/**
+ * Languages named by a hunk's lead-ins (`<style lang="scss">`): their grammars must be loaded too, the file's grammar
+ * only embeds a few (shiki ids, those Revspan knows).
+ */
+export function leadInLangs(leadIn: LeadIn): string[] {
+    const out = new Set<string>();
+    for (const tag of [leadIn?.old, leadIn?.new]) {
+        const name = tag && /\slang\s*=\s*["']?([\w-]+)/i.exec(tag)?.[1];
+        const lang = name ? LANG_BY_EXT[name.toLowerCase()] : undefined;
+        if (lang) {
+            out.add(lang);
+        }
+    }
+    return [...out];
 }

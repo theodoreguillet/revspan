@@ -11,7 +11,8 @@ run-against-fake.ts starts the fake Bitbucket and the server, then runs this scr
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
     REVSPAN_REQUESTS_URL  Log of every request received by the fake Bitbucket, reads included (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
-    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting, draft.
+    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting, draft
+                        (waiting also changes the Vue component src/components/RecordList.vue).
     REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Credentials of the fake Bitbucket (token put back after deletion).
 Options:
     REVSPAN_SHOTS_DIR   Screenshots folder (default: <tmp>/revspan-shots).
@@ -2077,6 +2078,29 @@ def run_checks(page):
                     page.locator('.rv-head').screenshot(path=os.path.join(SHOTS, f'pr-header-{name}-{scheme}.png'))
             page.emulate_media(color_scheme=None)
         draft_and_copy(page)
+
+        @check('diff: a Vue hunk inside <script setup lang="ts"> gets TypeScript colors (keyword, type)')
+        def vue_script_colors(page):
+            ref = fake_ref('waiting')
+            path = 'src/components/RecordList.vue'
+            hunk = next(f for f in api(f'{pr_api(ref)}/compare?from=0&to=1&context=3')['files'] if f['path'] == path)['hunks'][0]
+            assert hunk['newStart'] > 10, f'the hunk must start below the <script setup> tag (line 10): {hunk["newStart"]}'
+            assert hunk.get('leadIn') == {'old': '<script setup lang="ts">', 'new': '<script setup lang="ts">'}, hunk.get('leadIn')
+            open_pr(page, ref, '?from=0&to=1')
+            block = page.locator(f'.rv-file[data-path="{path}"]')
+            block.scroll_into_view_if_needed()
+            code = block.locator('.rv-l.a[data-n="20"] .c')
+            expect(code).to_have_text('const limit = ref<number>(50);')
+            keyword = code.locator('span[style*="color"]', has_text=re.compile(r'^const$'))
+            expect(keyword).to_have_count(1, timeout=10000)  # alone, the line was template text: `const` uncolored
+            type_name = code.locator('span[style*="color"]', has_text=re.compile(r'^number$'))
+            expect(type_name).to_have_count(1)  # alone, `<number>` was colored as an HTML tag
+            plain = code.evaluate('c => getComputedStyle(c).color')
+            colors = [keyword.evaluate('e => getComputedStyle(e).color'), type_name.evaluate('e => getComputedStyle(e).color')]
+            assert plain not in colors and colors[0] != colors[1], (plain, colors)
+            os.makedirs(SHOTS, exist_ok=True)
+            block.screenshot(path=os.path.join(SHOTS, 'diff-vue-script.png'))
+        vue_script_colors(page)
 
         @check('never reviewed: "First review" then "Mark vN as reviewed"')
         def never_reviewed(page):

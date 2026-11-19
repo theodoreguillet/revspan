@@ -3,10 +3,9 @@
 // next hunk is the one closest to the window (after a fast scroll, the file on screen before those passed on the way).
 import { computed, ref, type ComputedRef } from 'vue';
 import type { GrammarState, HighlighterCore, LanguageRegistration, ThemeRegistration } from 'shiki/core';
-import type { DiffLine } from '../../shared/api.ts';
 import {
-    FIRST_CHUNK_LINES, MAX_HIGHLIGHT_LINES, codeThemeFor, hunkCacheKey, nextChunkSize, nextJob, tokenizeHunk,
-    type CodeTheme, type CodeToken, type HunkTokens, type SideTokenizer,
+    FIRST_CHUNK_LINES, MAX_HIGHLIGHT_LINES, codeThemeFor, hunkCacheKey, leadInLangs, nextChunkSize, nextJob, tokenizeHunk,
+    type CodeTheme, type CodeToken, type HunkCode, type HunkTokens, type SideTokenizer,
 } from '../lib/highlight.ts';
 
 type LangModule = Promise<{ default: LanguageRegistration[] }>;
@@ -57,7 +56,7 @@ const cache = new Map<string, HunkTokens>();
 /** A hunk waiting for its tokens. distance: how far it is from the window (px, 0 on screen; lower runs first). */
 interface Job {
     key: string;
-    lines: readonly DiffLine[];
+    hunk: HunkCode;
     lang: string;
     theme: CodeTheme;
     signal?: AbortSignal;
@@ -86,12 +85,20 @@ function loadOnce(key: string, load: () => Promise<void>): Promise<void> {
     return loading;
 }
 
-async function ready(lang: string, theme: CodeTheme): Promise<HighlighterCore> {
+/**
+ * The highlighter with the theme and the language, and the languages `embedded` that it does not bring (a Vue
+ * `<style lang="scss">` block needs the SCSS grammar, its TypeScript comes with Vue's).
+ */
+async function ready(lang: string, theme: CodeTheme, embedded: readonly string[] = []): Promise<HighlighterCore> {
     const hl = await highlighter();
     await Promise.all([
         loadOnce(`theme:${theme}`, () => hl.loadTheme(THEMES[theme]())),
         loadOnce(`lang:${lang}`, () => hl.loadLanguage(LANGS[lang]!())),
     ]);
+    if (embedded.length) {
+        const missing = embedded.filter((name) => LANGS[name] && !hl.getLoadedLanguages().includes(name));
+        await Promise.all(missing.map((name) => loadOnce(`lang:${name}`, () => hl.loadLanguage(LANGS[name]!()))));
+    }
     return hl;
 }
 
@@ -144,8 +151,8 @@ function remember(key: string, tokens: HunkTokens): void {
 }
 
 /** Tokens already computed for this hunk content, language and theme (no work started). */
-export function cachedHunkTokens(lines: readonly DiffLine[], lang: string, theme: CodeTheme): HunkTokens | undefined {
-    return cache.get(hunkCacheKey(lines, lang, theme));
+export function cachedHunkTokens(hunk: HunkCode, lang: string, theme: CodeTheme): HunkTokens | undefined {
+    return cache.get(hunkCacheKey(hunk.lines, lang, theme, hunk.leadIn));
 }
 
 async function tokens(job: Job): Promise<HunkTokens | null> {
@@ -154,8 +161,8 @@ async function tokens(job: Job): Promise<HunkTokens | null> {
         return done ?? null;
     }
     try {
-        const hl = await ready(job.lang, job.theme);
-        const result = await tokenizeHunk(job.lines, sideTokenizer(hl, job.lang, job.theme, job.signal));
+        const hl = await ready(job.lang, job.theme, leadInLangs(job.hunk.leadIn));
+        const result = await tokenizeHunk(job.hunk.lines, sideTokenizer(hl, job.lang, job.theme, job.signal), job.hunk.leadIn);
         remember(job.key, result);
         return result;
     } catch (error) {
@@ -184,23 +191,23 @@ async function work(): Promise<void> {
 }
 
 /**
- * Tokens of a hunk, computed in the background (one hunk at a time, yielding to the page between chunks).
- * distance: how far the hunk is from the window, read when the next hunk is chosen.
- * null: stays plain (unknown language, hunk too large, aborted, or shiki could not load).
+ * Tokens of a hunk (its lines, and its lead-ins in a Vue or HTML file), computed in the background (one hunk at a
+ * time, yielding to the page between chunks). distance: how far the hunk is from the window, read when the next hunk
+ * is chosen. null: stays plain (unknown language, hunk too large, aborted, or shiki could not load).
  */
 export function highlightHunk(
-    lines: readonly DiffLine[], lang: string, theme: CodeTheme, signal?: AbortSignal, distance?: () => number,
+    hunk: HunkCode, lang: string, theme: CodeTheme, signal?: AbortSignal, distance?: () => number,
 ): Promise<HunkTokens | null> {
-    if (lines.length > MAX_HIGHLIGHT_LINES || !LANGS[lang] || signal?.aborted) {
+    if (hunk.lines.length > MAX_HIGHLIGHT_LINES || !LANGS[lang] || signal?.aborted) {
         return Promise.resolve(null);
     }
-    const key = hunkCacheKey(lines, lang, theme);
+    const key = hunkCacheKey(hunk.lines, lang, theme, hunk.leadIn);
     const hit = cache.get(key);
     if (hit) {
         return Promise.resolve(hit);
     }
     return new Promise((resolve) => {
-        pending.push({ key, lines, lang, theme, signal, distance, resolve });
+        pending.push({ key, hunk, lang, theme, signal, distance, resolve });
         void work();
     });
 }
