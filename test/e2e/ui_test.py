@@ -7,7 +7,7 @@ Normal launch (after "npx --no-install vite build"):
 run-against-fake.ts starts the fake Bitbucket and the server, then runs this script with:
     REVSPAN_BASE_URL    URL of the Revspan server (required).
     REVSPAN_OPEN_URL    Its /open?k=<secret> address (as printed by the CLI): opened once by each browser context.
-    REVSPAN_SECRET      Its per-run secret, sent as the revspan_k cookie by the direct API reads (api()).
+    REVSPAN_SECRET      Its per-run secret, sent as the revspan_k_<port> cookie by the direct API reads (api()).
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
     REVSPAN_REQUESTS_URL  Log of every request received by the fake Bitbucket, reads included (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
@@ -37,6 +37,8 @@ from playwright.sync_api import expect, sync_playwright
 BASE = os.environ.get('REVSPAN_BASE_URL', '').rstrip('/')
 OPEN_URL = os.environ.get('REVSPAN_OPEN_URL')
 SECRET = os.environ.get('REVSPAN_SECRET')
+# The secret cookie is named after the server's port.
+SECRET_COOKIE = f'revspan_k_{urllib.parse.urlsplit(BASE).port}'
 CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
 REQUESTS_URL = os.environ.get('REVSPAN_REQUESTS_URL')
 MAIN_PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/42')
@@ -83,7 +85,7 @@ def http_json(url, headers=None):
 
 
 def api(path):
-    return http_json(f'{BASE}/api{path}', {'Cookie': f'revspan_k={SECRET}'} if SECRET else None)
+    return http_json(f'{BASE}/api{path}', {'Cookie': f'{SECRET_COOKIE}={SECRET}'} if SECRET else None)
 
 
 def new_context(browser, **options):
@@ -2302,14 +2304,19 @@ def secret_checks(browser):
     context = browser.new_context(viewport={'width': 1024, 'height': 800}, locale='fr-FR', timezone_id='Europe/Paris')
     context.set_default_timeout(10000)
 
-    @check('secret: without the cookie the page says to open it from revspan; the ?k= address sets it and lands on the hash')
+    @check('secret: without the cookie (or with a stale ?k=) the page says to open it from revspan; the ?k= address sets it')
     def secret(page):
         page.goto(url(''))
-        expect(page.locator('.rv-panel-msg')).to_contain_text('Ouvre Revspan depuis la commande `revspan`')
+        expect(page.locator('.rv-panel-msg')).to_contain_text('Ouvre Revspan depuis la commande revspan (ou l\'adresse qu\'elle affiche).')
+        # An old address from the history: same redirect, no cookie, the same message.
+        page.goto(f'{BASE}/open?k=stale&to={urllib.parse.quote("#/settings", safe="")}')
+        expect(page).to_have_url(f'{BASE}/#/settings')
+        expect(page.locator('.rv-panel-msg')).to_contain_text('Ouvre Revspan depuis la commande revspan')
+        assert not context.cookies(), context.cookies()
         page.goto(f'{OPEN_URL}&to={urllib.parse.quote("#/settings", safe="")}')
         expect(page).to_have_url(f'{BASE}/#/settings')
         expect(page.locator('.rv-settings h1')).to_have_text('Réglages')
-        cookie = next(c for c in context.cookies() if c['name'] == 'revspan_k')
+        cookie = next(c for c in context.cookies() if c['name'] == SECRET_COOKIE)
         assert cookie['httpOnly'] and cookie['sameSite'] == 'Strict', cookie
         assert page.evaluate('document.cookie') == '', 'the secret cookie must not be readable by the page'
         page.goto(url(''))

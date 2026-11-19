@@ -9,10 +9,10 @@ Common rules:
 - all routes are under `/api`, in JSON;
 - any request other than GET carries the `X-Revspan: 1` header (otherwise 403); a foreign origin is rejected;
 - the `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`;
-- command line only: every `/api` request except `GET /api/health`, reads included, carries the `revspan_k` cookie
-  holding the run's secret (otherwise 401 `NEEDS_SECRET`). The CLI draws a random secret at each start (32 bytes,
-  base64url) and opens `/open?k=<secret>`, which sets the cookie (`HttpOnly`, `SameSite=Strict`, `Path=/`, session).
-  The VS Code extension serves the API in memory and has no secret;
+- command line only: every `/api` request except `GET /api/health`, reads included, carries the `revspan_k_<port>`
+  cookie (named after the server's port) holding the run's secret (otherwise 401 `NEEDS_SECRET`). The CLI draws a
+  random secret at each start (32 bytes, base64url) and opens `/open?k=<secret>`, which sets the cookie (`HttpOnly`,
+  `SameSite=Strict`, `Path=/`, session). The VS Code extension serves the API in memory and has no secret;
 - error: status other than 2xx and body `ApiErrorBody` = `{ error: { code, message, params? } }`:
   - `code` is stable (`ErrorCode`): `NO_TOKEN` (409), `BB_UNAUTHORIZED` (401), `BB_FORBIDDEN` (403), `BB_NOT_FOUND` (404),
     `BB_UNREACHABLE`, `BB_ERROR`, `BAD_REQUEST` (400), `VERSION_UNAVAILABLE` (410), `FORBIDDEN`, `NOT_FOUND`, `INTERNAL`,
@@ -110,7 +110,8 @@ Page: Vue SPA served from `dist/web`, hash routing (`#/`, `#/pr/:ws/:repo/:id?fr
 `GET /open?url=<Bitbucket PR URL>` redirects to `/#/pr/...` (no secret needed: it returns no data, and the page's own
 same-site API calls then send the cookie). `GET /open?k=<secret>[&to=<hash>]` (command line) sets the secret cookie
 and redirects to `/<hash>`; `to` (URL-encoded) must be a hash of the page starting with `#/` (anything else redirects to
-`/`, never to another site), and `url=<Bitbucket PR URL>` may replace it. A wrong `k`: 403 `FORBIDDEN`, no cookie.
+`/`, never to another site), and `url=<Bitbucket PR URL>` may replace it. A wrong or stale `k` redirects the same way
+without setting a cookie: the page works if the browser still holds a valid cookie, otherwise it shows `NEEDS_SECRET`.
 
 In the VS Code extension the same routes are served in memory: the page posts `request` messages
 ([`src/shared/webview-protocol.ts`](../src/shared/webview-protocol.ts)) and the extension hands them to the same Hono

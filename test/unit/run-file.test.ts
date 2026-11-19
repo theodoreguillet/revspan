@@ -60,6 +60,30 @@ describe('run file of the CLI (port + secret of the running instance)', () => {
         }
     });
 
+    it('ignored when another user owns it or when group or others may write it (POSIX)', () => {
+        const dir = tempDir();
+        writeRunFile(dir, { port: 7420, secret: 's', pid: 1 });
+        const owner = fs.statSync(runFile(dir)).uid;
+        expect(readRunFile(dir, owner)).not.toBeNull();
+        expect(readRunFile(dir, owner + 1)).toBeNull();
+        for (const mode of [0o620, 0o602, 0o622, 0o666]) {
+            fs.chmodSync(runFile(dir), mode);
+            expect(readRunFile(dir, owner), mode.toString(8)).toBeNull();
+        }
+        // Readable by others is not a trust problem (the file is written 0600 anyway); only writes are.
+        fs.chmodSync(runFile(dir), 0o644);
+        expect(readRunFile(dir, owner)).not.toBeNull();
+        // Without a uid (Windows), neither check applies.
+        fs.chmodSync(runFile(dir), 0o666);
+        expect(readRunFile(dir, null)).not.toBeNull();
+    });
+
+    it('a directory named run.json is not a run file', () => {
+        const dir = tempDir();
+        fs.mkdirSync(runFile(dir));
+        expect(readRunFile(dir)).toBeNull();
+    });
+
     it('removed only by the process it names: another instance\'s file stays', () => {
         const dir = tempDir();
         writeRunFile(dir, { port: 7420, secret: 's', pid: 1111 });

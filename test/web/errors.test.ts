@@ -35,8 +35,8 @@ describe('error messages translated from the code and its parameters', () => {
     });
 
     it('CLI page opened without its per-run secret: open it from the revspan command', () => {
-        expect(errorText(fr, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Ouvre Revspan depuis la commande `revspan` (ou l\'adresse qu\'elle affiche).');
-        expect(errorText(en, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Open Revspan from the `revspan` command (or the address it prints).');
+        expect(errorText(fr, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Ouvre Revspan depuis la commande revspan (ou l\'adresse qu\'elle affiche).');
+        expect(errorText(en, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Open Revspan from the revspan command (or the address it prints).');
     });
 
     it('settings errors', () => {

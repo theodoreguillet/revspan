@@ -11,7 +11,7 @@ import type { ApiErrorBody, ContributorList, ErrorCode, ErrorParams, Health, PrR
 import { MUTATION_HEADER } from '../../shared/api.ts';
 import { parsePrUrl } from '../../shared/pr-url.ts';
 import { AppError } from '../errors.ts';
-import { SECRET_COOKIE, redirectHash, secretMatches } from './cli-secret.ts';
+import { redirectHash, secretCookie, secretMatches } from './cli-secret.ts';
 import type { HomeService } from '../services/home-service.ts';
 import type { PrService } from '../services/pr-service.ts';
 import type { SettingsService } from '../services/settings-service.ts';
@@ -35,6 +35,14 @@ export interface HttpDeps {
     allowedHosts: () => readonly string[];
     /** CLI's per-run secret, required as a cookie on /api (except /api/health); null/absent: no check (extension, tests). */
     secret?: string | null;
+}
+
+/** Host of the request: over HTTP the Host header is always present; an in-memory call (extension) only has the URL. */
+const hostOf = (c: Context): string => c.req.header('host') ?? new URL(c.req.url).host;
+/** Cookie of this server's secret, named after its port (read from the Host, already checked against allowedHosts). */
+function secretCookieOf(c: Context): string {
+    const host = hostOf(c);
+    return secretCookie(host.slice(host.lastIndexOf(':') + 1));
 }
 
 const refOf = (c: Context): PrRef => parse(prRefSchema, { workspace: c.req.param('ws'), repo: c.req.param('repo'), id: c.req.param('id') });
@@ -65,9 +73,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     app.use('*', async (c, next) => {
         const hosts = allowedHosts();
-        // Over HTTP the Host header is always present; an in-memory call (extension) only has the URL.
-        const host = c.req.header('host') ?? new URL(c.req.url).host;
-        if (!hosts.includes(host)) {
+        if (!hosts.includes(hostOf(c))) {
             return errorResponse(c, 403, 'FORBIDDEN', 'Host refused.');
         }
         if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
@@ -96,7 +102,7 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     // Reads included: the diffs and comments are as private as the writes. /api/health stays open (no data).
     app.use('/api/*', async (c, next) => {
-        if (secret && c.req.path !== '/api/health' && !secretMatches(secret, getCookie(c, SECRET_COOKIE))) {
+        if (secret && c.req.path !== '/api/health' && !secretMatches(secret, getCookie(c, secretCookieOf(c)))) {
             return errorResponse(c, 401, 'NEEDS_SECRET', 'Open Revspan from the revspan command (or the address it prints).');
         }
         await next();
@@ -159,14 +165,15 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
     // ---------- Page ----------
 
     // Direct link from a Bitbucket URL: /open?url=https://bitbucket.org/<ws>/<repo>/pull-requests/<id> (no secret, no data).
-    // CLI: /open?k=<secret>[&to=<#/hash>] sets the secret cookie, then redirects to that hash of the page only.
+    // CLI: /open?k=<secret>[&to=<#/hash>] sets the secret cookie, then redirects to that hash of the page only. A wrong
+    // or stale k (old address from the history) redirects the same way without a cookie: the page works if the browser
+    // still holds a valid cookie, otherwise it says to open Revspan from the revspan command.
     app.get('/open', (c) => {
         const key = c.req.query('k');
         if (secret && key !== undefined) {
-            if (!secretMatches(secret, key)) {
-                return errorResponse(c, 403, 'FORBIDDEN', 'Invalid key: open the address printed by the revspan command.');
+            if (secretMatches(secret, key)) {
+                setCookie(c, secretCookieOf(c), secret, { httpOnly: true, sameSite: 'Strict', path: '/' });
             }
-            setCookie(c, SECRET_COOKIE, secret, { httpOnly: true, sameSite: 'Strict', path: '/' });
             return c.redirect(`/${redirectHash(c.req.query('to')) || prHash(c.req.query('url'))}`, 302);
         }
         return c.redirect(`/${prHash(c.req.query('url'))}`, 302);

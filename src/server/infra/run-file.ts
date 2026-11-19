@@ -2,7 +2,7 @@
 // start, removed at exit). A second `revspan` reads it to open the running instance instead of starting another one.
 import fs from 'node:fs';
 import path from 'node:path';
-import { SECRET_COOKIE } from '../http/cli-secret.ts';
+import { secretCookie } from '../http/cli-secret.ts';
 import { writeJsonAtomic } from './config.ts';
 
 export interface RunInfo {
@@ -26,10 +26,25 @@ export function writeRunFile(dir: string, info: RunInfo): void {
     writeJsonAtomic(runFile(dir), { port: info.port, secret: info.secret, pid: info.pid });
 }
 
-/** null when the file is missing, unreadable or not a run file. */
-export function readRunFile(dir: string): RunInfo | null {
+/**
+ * null when the file is missing, unreadable or not a run file, and on POSIX (`uid` known; null on Windows) when another
+ * user owns it or group or others may write it: such a file could send the CLI to someone else's server.
+ */
+export function readRunFile(dir: string, uid: number | null = process.getuid?.() ?? null): RunInfo | null {
     try {
-        const raw = JSON.parse(fs.readFileSync(runFile(dir), 'utf8')) as Partial<Record<keyof RunInfo, unknown>> | null;
+        // Checked and read through one descriptor: the file checked is the file read.
+        const fd = fs.openSync(runFile(dir), 'r');
+        let text: string;
+        try {
+            const stat = fs.fstatSync(fd);
+            if (!stat.isFile() || (uid !== null && (stat.uid !== uid || (stat.mode & 0o022) !== 0))) {
+                return null;
+            }
+            text = fs.readFileSync(fd, 'utf8');
+        } finally {
+            fs.closeSync(fd);
+        }
+        const raw = JSON.parse(text) as Partial<Record<keyof RunInfo, unknown>> | null;
         const { port, secret, pid } = raw ?? {};
         if (!isInteger(port, 1, 65535) || typeof secret !== 'string' || !secret || !isInteger(pid, 1, Number.MAX_SAFE_INTEGER)) {
             return null;
@@ -72,7 +87,7 @@ export async function runningInstance(dir: string, fetchImpl: typeof fetch = fet
     }
     try {
         const response = await fetchImpl(`http://127.0.0.1:${run.port}${PROBE_ROUTE}`, {
-            headers: { Cookie: `${SECRET_COOKIE}=${run.secret}` },
+            headers: { Cookie: `${secretCookie(run.port)}=${run.secret}` },
             redirect: 'manual',
             signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
         });

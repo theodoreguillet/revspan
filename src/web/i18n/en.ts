@@ -568,7 +568,7 @@ export const en = {
     'error.refused': 'Request refused.',
     'error.internal': 'Revspan internal error: {detail}',
     'error.reloadWindow': 'Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.',
-    'error.needsSecret': 'Open Revspan from the `revspan` command (or the address it prints).',
+    'error.needsSecret': 'Open Revspan from the revspan command (or the address it prints).',
 } as const satisfies Record<string, Entry>;
 
 export type MessageKey = keyof typeof en;

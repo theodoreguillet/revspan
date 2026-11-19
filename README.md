@@ -18,12 +18,23 @@ node bin/revspan.js https://bitbucket.org/<workspace>/<repo>/pull-requests/<id> 
 Node 22.18 or later. The page opens on `http://127.0.0.1:7420` (`--port 7500` and `--no-open` are available).
 Handy: `alias revspan='node /path/to/revspan/bin/revspan.js'`.
 
+### CLI security
+
 The command draws a new secret at each start and opens (and prints, `--no-open` included)
-`http://127.0.0.1:7420/open?k=<secret>`: the browser gets it as a cookie, and the local API answers nothing without
-it, so another user of the machine can neither read your PRs nor comment or approve as you. If the page says
-« Open Revspan from the `revspan` command », open that printed address again (or run `revspan` again: while one runs,
-a second `revspan [PR URL]` opens the running one in the browser instead of starting another). The secret also shows
-in the browser history and in the arguments of the command that opens the browser.
+`http://127.0.0.1:7420/open?k=<secret>`; the browser keeps it as a cookie, and the local API answers nothing without
+it. Another user of the same machine therefore can no longer read your PRs, diffs, comments or settings through
+Revspan, nor comment, approve, request changes or change your settings as you, even though the server listens on
+127.0.0.1. The secret never goes into a process argument that other users could list: on macOS the browser is opened
+through `osascript` reading the address on its standard input, on Linux through a temporary page (mode `0600`, in the
+configuration folder, deleted after 10 seconds) given to `xdg-open`, on Windows through `explorer.exe` (other standard
+users cannot read another user's command line). If the page says "Open Revspan from the revspan command", open the
+printed address again, or run `revspan` again: while one runs, a second `revspan [PR URL]` opens the running one
+instead of starting another. Two limits:
+
+- the `?k=` address stays in your browser history, which only your own account can read;
+- browsers send the cookies of 127.0.0.1 to every port. If the preferred port (7420, or `--port`) is taken, Revspan
+  starts on the next free one and prints a warning: do not open the taken port in that browser, since the program
+  holding it would receive your Revspan cookie.
 
 ## Language
 

@@ -197,7 +197,8 @@ describe('settings and security', () => {
 
     describe('per-run secret (CLI)', () => {
         const SECRET = 's3cr3t-Kq9_xZ-0123456789abcdefghijklmnop';
-        const cookie = { Cookie: `revspan_k=${SECRET}` };
+        /** The cookie is named after the server's port: revspan_k_<port>. */
+        const cookieOf = (app: RunningApp, value = SECRET): { Cookie: string } => ({ Cookie: `revspan_k_${app.port}=${value}` });
         const PR_URL = 'https://bitbucket.org/acme/records-api/pull-requests/12';
 
         it('every /api route needs the cookie: 401 NEEDS_SECRET without it or with a wrong one, 200 with it', async () => {
@@ -206,16 +207,29 @@ describe('settings and security', () => {
             expect(bare.status).toBe(401);
             expect(bare.headers.get('cache-control')).toBe('no-store');
             expect(((await bare.json()) as ApiErrorBody).error).toEqual({ code: 'NEEDS_SECRET', message: expect.stringContaining('revspan') });
-            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: 'revspan_k=wrong' } })).status).toBe(401);
-            expect((await fetch(`${app.url}/api/settings`, { headers: { Cookie: `other=1; revspan_k=${SECRET.slice(0, -1)}` } })).status).toBe(401);
+            expect((await fetch(`${app.url}/api/home`, { headers: cookieOf(app, 'wrong') })).status).toBe(401);
+            expect((await fetch(`${app.url}/api/settings`, { headers: { Cookie: `other=1; revspan_k_${app.port}=${SECRET.slice(0, -1)}` } })).status).toBe(401);
+            // The right secret under another port's name (or no port) is refused.
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: `revspan_k=${SECRET}` } })).status).toBe(401);
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: `revspan_k_${app.port + 1}=${SECRET}` } })).status).toBe(401);
             const write = await fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: '{}' });
             expect(write.status).toBe(401);
             expect((await fetch(`${app.url}/api/nope`)).status).toBe(401);
 
-            expect((await fetch(`${app.url}/api/home`, { headers: cookie })).status).toBe(200);
-            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: `theme=dark; revspan_k=${SECRET}; x=y` } })).status).toBe(200);
-            const saved = await fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { ...cookie, 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: '{}' });
+            expect((await fetch(`${app.url}/api/home`, { headers: cookieOf(app) })).status).toBe(200);
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: `theme=dark; revspan_k_1=x; revspan_k_${app.port}=${SECRET}; x=y` } })).status).toBe(200);
+            const saved = await fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { ...cookieOf(app), 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: '{}' });
             expect(saved.status).toBe(200);
+            // Same port through the localhost Host: same cookie name.
+            const viaLocalhost = await new Promise<number>((resolve, reject) => {
+                const req = http.request({ host: '127.0.0.1', port: app.port, path: '/api/home', headers: { Host: `localhost:${app.port}`, ...cookieOf(app) } }, (res) => {
+                    res.resume();
+                    res.on('end', () => resolve(res.statusCode ?? 0));
+                });
+                req.on('error', reject);
+                req.end();
+            });
+            expect(viaLocalhost).toBe(200);
         });
 
         it('/api/health, static files and /open?url= stay reachable without the cookie, and /open?url= gives none', async () => {
@@ -237,7 +251,7 @@ describe('settings and security', () => {
             expect(open.status).toBe(302);
             expect(open.headers.get('location')).toBe('/#/pr/acme/records-api/12');
             const setCookie = open.headers.get('set-cookie') ?? '';
-            expect(setCookie).toContain(`revspan_k=${SECRET}`);
+            expect(setCookie).toContain(`revspan_k_${app.port}=${SECRET}`);
             expect(setCookie).toContain('HttpOnly');
             expect(setCookie).toContain('SameSite=Strict');
             expect(setCookie).toContain('Path=/');
@@ -250,13 +264,20 @@ describe('settings and security', () => {
             expect(withUrl.headers.get('location')).toBe('/#/pr/acme/records-api/12');
         });
 
-        it('/open?k= with a wrong secret: 403 and no cookie', async () => {
+        it('/open?k= with a wrong or stale secret: the same redirect, no cookie (the page then works or says what to do)', async () => {
             const { app } = await setup({ secret: SECRET });
             for (const k of ['wrong', '', SECRET.slice(0, -1), `${SECRET}x`]) {
-                const open = await fetch(`${app.url}/open?k=${encodeURIComponent(k)}&to=%23%2F`, { redirect: 'manual' });
-                expect(open.status, k).toBe(403);
+                const open = await fetch(`${app.url}/open?k=${encodeURIComponent(k)}&to=%23%2Fpr%2Facme%2Frecords-api%2F12`, { redirect: 'manual' });
+                expect(open.status, k).toBe(302);
+                expect(open.headers.get('location'), k).toBe('/#/pr/acme/records-api/12');
                 expect(open.headers.get('set-cookie'), k).toBeNull();
             }
+            const bad = await fetch(`${app.url}/open?k=stale&to=https%3A%2F%2Fevil.example`, { redirect: 'manual' });
+            expect(bad.headers.get('location')).toBe('/');
+            // A browser that still holds the valid cookie keeps it and goes on working.
+            const withCookie = await fetch(`${app.url}/open?k=stale`, { redirect: 'manual', headers: cookieOf(app) });
+            expect(withCookie.headers.get('set-cookie')).toBeNull();
+            expect((await fetch(`${app.url}/api/home`, { headers: cookieOf(app) })).status).toBe(200);
         });
 
         it('/open?k= never redirects outside the page: anything but a #/ hash goes to /', async () => {
@@ -313,7 +334,7 @@ describe('settings and security', () => {
             expect(fake.requests.length).toBe(before);
 
             await app.settings.update({ token: '' });
-            expect((await fetch(`${app.url}/api/home`, { headers: cookie })).status).toBe(409);
+            expect((await fetch(`${app.url}/api/home`, { headers: cookieOf(app) })).status).toBe(409);
             expect(await runningInstance(dir)).toMatchObject({ port: app.port });
         });
     });
