@@ -114,10 +114,61 @@ const IMPORT_LINE: Readonly<Record<CodeFamily, RegExp>> = {
     other: /^\s*(?:import|use|using|package|require|include)\b/,
 };
 
-/** String literals of a line ('', "", ``; escapes included). */
-const STRING_LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g;
-/** A line with its strings emptied (the quotes stay): a quoted name is neither defined nor imported there. */
-const emptyStrings = (text: string): string => text.replace(STRING_LITERAL, (m) => m[0]! + m[0]!);
+const isQuote = (c: string): boolean => c === '\'' || c === '"' || c === '`';
+/** Characters a backslash cannot escape (`.` of a regex does not match them). */
+const isLineBreak = (c: string | undefined): boolean => c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029';
+
+/**
+ * End of the string literal opened by the quote at `open`: `closed` with the index of its closing quote, or not closed
+ * with the index where the scan stopped (the end of the line, or a backslash before a line break).
+ */
+function stringEnd(text: string, open: number): { closed: boolean; at: number } {
+    const quote = text[open];
+    let i = open + 1;
+    while (i < text.length) {
+        const c = text[i];
+        if (c === quote) {
+            return { closed: true, at: i };
+        }
+        if (c === '\\') {
+            if (i + 1 >= text.length || isLineBreak(text[i + 1])) {
+                return { closed: false, at: i };
+            }
+            i += 2;
+        } else {
+            i++;
+        }
+    }
+    return { closed: false, at: i };
+}
+
+/**
+ * A line with its strings emptied ('', "", ``; escapes included; the quotes stay): a quoted name is neither defined nor
+ * imported there. A quote left open stays as is and the scan goes on after it, as a regex would. Linear time: a quote
+ * of a kind already found open up to some place opens nothing before that place either (the scan from it would read
+ * the same characters the same way), so a line full of escaped quotes left open is read once.
+ */
+export function emptyStrings(text: string): string {
+    /** Per quote kind: where the scan of a string of that kind left open stopped. */
+    const openUntil = new Map<string, number>();
+    let out = '';
+    let copied = 0;
+    for (let i = 0; i < text.length; i++) {
+        const quote = text[i]!;
+        if (!isQuote(quote) || i < (openUntil.get(quote) ?? -1)) {
+            continue;
+        }
+        const end = stringEnd(text, i);
+        if (!end.closed) {
+            openUntil.set(quote, end.at);
+            continue;
+        }
+        out += text.slice(copied, i) + quote + quote;
+        copied = end.at + 1;
+        i = end.at;
+    }
+    return out + text.slice(copied);
+}
 
 /** Longer lines (minified code, data) are not matched: some patterns cost more than linear time on them. */
 export const MAX_PATTERN_LINE = 2000;
@@ -358,7 +409,8 @@ export function findImport(file: FileLines, fileIdx: number, name: string): (Lin
         for (const [h, hunk] of file.hunks.entries()) {
             // one side of the hunk read as consecutive lines (an import list spans several)
             const lines = hunk.lines.map((line, index) => ({ line, index })).filter(({ line }) => line.t !== (side === 'new' ? '-' : '+'));
-            const parts = IMPORTS[family](lines.map(({ line }) => line.text));
+            // a line too long for the patterns reads as empty, as for the definition search
+            const parts = IMPORTS[family](lines.map(({ line }) => (line.text.length > MAX_PATTERN_LINE ? '' : line.text)));
             const at = parts.findIndex((part, k) => part !== null && onSide(lines[k]!.line, side) && named.test(part.names));
             if (at >= 0) {
                 const { line, index } = lines[at]!;

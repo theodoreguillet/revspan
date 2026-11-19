@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Hunk } from '../../src/shared/api.ts';
 import {
-    definesSymbol, familyOf, findDefinitions, findImport, findLine, gotoDefinition, identifierAt, resolveImport, tokenClass,
-    type CodeFamily, type LineRef,
+    definesSymbol, emptyStrings, familyOf, findDefinitions, findImport, findLine, gotoDefinition, identifierAt, MAX_PATTERN_LINE,
+    resolveImport, tokenClass, type CodeFamily, type LineRef,
 } from '../../src/web/lib/goto-definition.ts';
 
 /** A hunk from [sign, text] rows, numbered from 1 on both sides like a real diff. */
@@ -284,6 +284,24 @@ describe('findImport', () => {
         expect(imported(['import "fmt"'], 'fmt', 'a.go')).toBeNull();
     });
 
+    it('an import line too long for the patterns (minified code, data) is skipped, like by the definition search', () => {
+        const line = 'import { Foo } from \'./foo\';';
+        expect(imported([`${line}${' '.repeat(MAX_PATTERN_LINE - line.length)}`], 'Foo')).toMatchObject({ index: 0, spec: './foo' });
+        expect(imported([`${line}${' '.repeat(MAX_PATTERN_LINE)}`], 'Foo')).toBeNull();
+        expect(imported(['import {', `    Bar,${' '.repeat(MAX_PATTERN_LINE)}`, '    Foo,', '} from \'./foo\';'], 'Foo')).toMatchObject({ index: 2 });
+    });
+
+    it.each([
+        ['a.ts', [`import x"${'\\"'.repeat(50000)} from './y';`]],
+        ['A.java', [`import "${'\\"'.repeat(50000)}`]],
+        ['a.py', ['from x import (', `    "${'\\"'.repeat(50000)}`]],
+    ])('%s: a 100 KB line of escaped quotes costs no time (Ctrl/⌘+click)', (path, rows) => {
+        expect(rows.at(-1)!.length).toBeGreaterThan(100_000);
+        const start = performance.now();
+        expect(imported(rows, 'Foo', path)).toBeNull();
+        expect(performance.now() - start).toBeLessThan(50);
+    });
+
     it('the new side first, then the removed lines', () => {
         const ref = findImport(file('src/a.ts', hunk([['-', 'import { Foo } from \'./old\';'], ['+', 'import { Foo } from \'./new\';']])), 0, 'Foo');
         expect(ref).toMatchObject({ side: 'new', spec: './new' });
@@ -392,5 +410,54 @@ describe('string stripping cost', () => {
         const start = performance.now();
         definesSymbol(line, 'x', 'a.ts');
         expect(performance.now() - start).toBeLessThan(50);
+    });
+
+    it('a 100 KB line of escaped quotes left open is stripped in linear time', () => {
+        for (const quote of ['"', '\'', '`']) {
+            const line = `x${quote}${`\\${quote}`.repeat(50000)}`;
+            const start = performance.now();
+            expect(emptyStrings(line)).toBe(line);
+            expect(performance.now() - start).toBeLessThan(50);
+        }
+    });
+
+    it('20 KB: well under what a regex scanning each opening quote to the end of the line takes (quadratic)', () => {
+        const line = 'x"' + '\\"'.repeat(10000);
+        const start = performance.now();
+        emptyStrings(line);
+        expect(performance.now() - start).toBeLessThan(25);
+    });
+});
+
+describe('emptyStrings', () => {
+    it('empties the three kinds of strings, escapes included; the quotes stay', () => {
+        expect(emptyStrings('const a = \'x\', b = "y", c = `z`;')).toBe('const a = \'\', b = "", c = ``;');
+        expect(emptyStrings(String.raw`say("it\"s \\", 'don\'t')`)).toBe('say("", \'\')');
+        expect(emptyStrings('`${a} "b"`')).toBe('``');
+        expect(emptyStrings('no strings here')).toBe('no strings here');
+    });
+
+    it('an unclosed string is kept, and the strings after its opening quote are still emptied', () => {
+        expect(emptyStrings('x = \'it"s a "test')).toBe('x = \'it""test');
+        expect(emptyStrings('a = "open \\" and \'b\'')).toBe('a = "open \\" and \'\'');
+        expect(emptyStrings('`left open')).toBe('`left open');
+    });
+
+    /** The single-pass regex the scanner replaces (quadratic on an unclosed string), as the reference of its output. */
+    const STRING_LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g;
+    const byRegex = (text: string): string => text.replace(STRING_LITERAL, (m) => m[0]! + m[0]!);
+
+    it('gives the output of the string regex on every line, escapes before a line break included', () => {
+        const alphabet = ['\'', '"', '`', '\\', 'a', ' ', '\r', '\u2028'];
+        let seed = 7;
+        const next = (): number => {
+            seed = (seed * 1103515245 + 12345) % 2147483648;
+            return seed;
+        };
+        for (let k = 0; k < 20000; k++) {
+            const length = next() % 14;
+            const text = Array.from({ length }, () => alphabet[next() % alphabet.length]!).join('');
+            expect(emptyStrings(text), JSON.stringify(text)).toBe(byRegex(text));
+        }
     });
 });
