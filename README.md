@@ -225,9 +225,12 @@ HTTP requests; the PR page rows count reads (a read of several pages, like the a
 | Opening a PR: rebase state (any open PR) | up to date: no conflicts read (destination head cached 60 s and shared with the home, merge base on disk); behind: **+1** paginated conflicts read (2 HTTP requests: Bitbucket redirects it), once per source and destination head. Reopening within the interval reads nothing |
 | Tasks tab | **0** until it is opened (the open count comes from the PR already read); opening it: **1** paginated read (100 tasks per page), again on ↻ while it is open |
 
-Windows sharing one profile share the computed home through `home.json` (the last home), `home.lock` (a lease so only
-one window computes) and `home.drop` (a counter bumped on every write, so a result computed before a write is not
-reused), all in the config or storage directory. Trade-off: with several windows, a new push can show up after up to
+Windows share the computed home through `home.json` (the last home of each profile: VS Code profiles share the storage
+directory, up to 4 homes kept), `home.lock` (a lease so only one window computes a home, recording which; a window
+computing another profile's home is not waited for) and `home.drop` (a counter bumped on every write, so a result
+computed before a write is not reused), all in the config or storage directory. In VS Code, the "Revspan" output log
+(View › Output) has one line per "My PRs" load: duration, time waited for another window, hashed home identities and
+error codes, no PR data. Trade-off: with several windows, a new push can show up after up to
 about **1.5 intervals** instead of 1. A home with a repository error is shared for 60 s only, so the error is tried
 again soon without every window recomputing on every poll. During the hour after a push, that PR's build checks cost
 one request per interval even once finished (see "Build status").

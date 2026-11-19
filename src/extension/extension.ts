@@ -7,6 +7,7 @@ import { DiffDocuments } from './diff-documents.ts';
 import { withFollowed } from '../shared/follow.ts';
 import { GROUPINGS, isGrouping, type Grouping } from '../shared/home-grouping.ts';
 import { hostL10n } from './host-l10n.ts';
+import { logHomeLoads } from './home-log.ts';
 import { HomeTreeProvider, showLoading, type Node } from './home-tree-provider.ts';
 import { errorText } from './lib/error-text.ts';
 import { plainMessageText } from './lib/plain-text.ts';
@@ -45,7 +46,10 @@ function groupingLabel(grouping: Grouping): string {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-    const app = await createExtensionApp(context);
+    // Output view, "Revspan": one line per home load (timings, identity hashes, error codes), should "My PRs" stick.
+    const log = vscode.window.createOutputChannel('Revspan', { log: true });
+    context.subscriptions.push(log);
+    const app = await createExtensionApp(context, { onHomeLoad: logHomeLoads(log) });
     const currentGrouping = (): Grouping => {
         const stored = context.globalState.get<unknown>(GROUPING_KEY);
         return isGrouping(stored) ? stored : DEFAULT_GROUPING;

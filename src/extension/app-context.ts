@@ -9,6 +9,7 @@ import { DEFAULT_BASE_URL } from '../server/bitbucket/client.ts';
 import { createHttpApp } from '../server/http/app.ts';
 import { Cache } from '../server/infra/cache.ts';
 import { Store, type RepoSource, type ReviewSource } from '../server/infra/config.ts';
+import type { HomeLoad } from '../server/services/home-service.ts';
 import { createServices, type Services } from '../server/services/index.ts';
 import { DEFAULT_REVIEW_SETTINGS } from '../shared/review-settings.ts';
 import { AppError } from '../server/errors.ts';
@@ -153,12 +154,13 @@ function testOverrides(mode: vscode.ExtensionMode): { baseUrl?: string; email?: 
     };
 }
 
-export async function createExtensionApp(context: vscode.ExtensionContext): Promise<ExtensionApp> {
+/** onHomeLoad: told of every home load ("My PRs", the poll, the home page). */
+export async function createExtensionApp(context: vscode.ExtensionContext, { onHomeLoad }: { onHomeLoad?: (load: HomeLoad) => void } = {}): Promise<ExtensionApp> {
     const dir = context.globalStorageUri.fsPath;
     const store = new Store(dir, { repoSource: vscodeRepoSource(), reviewSource: vscodeReviewSource() });
     const cache = new Cache(path.join(dir, 'cache'));
     const overrides = testOverrides(context.extensionMode);
-    const services = createServices({ store, secrets: vscodeSecretStore(context.secrets), cache, baseUrl: overrides.baseUrl ?? DEFAULT_BASE_URL });
+    const services = createServices({ store, secrets: vscodeSecretStore(context.secrets), cache, baseUrl: overrides.baseUrl ?? DEFAULT_BASE_URL, onHomeLoad });
     if (overrides.email && overrides.token) {
         await services.settings.update({ email: overrides.email, token: overrides.token, ...(overrides.repos ? { repos: overrides.repos } : {}) });
     }

@@ -2,10 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Cache } from '../../src/server/infra/cache.ts';
 import { Store, type NotifiedState, type RepoSource, type ReviewSource } from '../../src/server/infra/config.ts';
+import { HomeService, homeIdentity, type HomeLoad } from '../../src/server/services/home-service.ts';
+import type { BitbucketSession } from '../../src/server/services/session.ts';
 import { planNotifications, type PendingNotification } from '../../src/extension/lib/notifications.ts';
-import type { Home, PrCard } from '../../src/shared/api.ts';
+import type { Home, PrCard, User } from '../../src/shared/api.ts';
 import { DEFAULT_REVIEW_SETTINGS, normalizeReviewSettings, type ReviewSettings } from '../../src/shared/review-settings.ts';
+import { AppError } from '../../src/server/errors.ts';
 
 const dirs: string[] = [];
 const tempDir = (): string => {
@@ -29,6 +33,7 @@ function memorySource(initial: string[]): RepoSource & { value: string[] } {
 }
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }));
 });
@@ -294,6 +299,14 @@ describe('notified state (Store)', () => {
     });
 });
 
+/** The release of a lease this window took (the test fails when the lease was held by another window). */
+function asRelease(claim: ReturnType<Store['claimHomeLease']>): () => void {
+    if (typeof claim !== 'function') {
+        throw new Error(`lease held by ${claim.heldBy}`);
+    }
+    return claim;
+}
+
 describe('home shared between windows (Store)', () => {
     const home: Home = { me: null, repos: ['acme/records-api'], groups: [], errors: [], truncated: [], hideUnfollowed: false, contributors: [] };
 
@@ -301,13 +314,43 @@ describe('home shared between windows (Store)', () => {
         const dir = tempDir();
         const a = new Store(dir);
         const b = new Store(dir);
-        expect(b.homeSnapshot()).toBeNull();
-        a.saveHomeSnapshot({ at: 1000, key: 'k', home }, a.homeGeneration());
-        expect(b.homeSnapshot()).toEqual({ at: 1000, key: 'k', home });
+        expect(b.homeSnapshot('id-a')).toBeNull();
+        a.writeHomeSnapshot('id-a', { at: 1000, key: 'k', home }, a.homeGeneration());
+        expect(b.homeSnapshot('id-a')).toEqual({ at: 1000, key: 'k', home });
+        expect(b.homeSnapshot('id-b')).toBeNull();
         b.dropHomeSnapshot();
-        expect(a.homeSnapshot()).toBeNull();
-        fs.writeFileSync(path.join(dir, 'home.json'), '{"at":"x"}');
-        expect(a.homeSnapshot()).toBeNull();
+        expect(a.homeSnapshot('id-a')).toBeNull();
+        fs.writeFileSync(path.join(dir, 'home.json'), '{"homes":[{"identity":"id-a","at":"x"}]}');
+        expect(a.homeSnapshot('id-a')).toBeNull();
+    });
+
+    it('snapshots per home identity (profiles share the folder): both kept, a fifth identity drops the least recently written', () => {
+        const dir = tempDir();
+        const a = new Store(dir);
+        const b = new Store(dir);
+        const write = (identity: string, at: number): boolean => a.writeHomeSnapshot(identity, { at, key: `k-${identity}`, home }, a.homeGeneration());
+        write('id-a', 1000);
+        b.writeHomeSnapshot('id-b', { at: 900, key: 'k-id-b', home }, b.homeGeneration());
+        expect(a.homeSnapshot('id-a')?.key).toBe('k-id-a');
+        expect(a.homeSnapshot('id-b')?.key).toBe('k-id-b');
+        write('id-c', 1100);
+        write('id-d', 1200);
+        // id-a written again: the most recent now, whatever its computation date.
+        write('id-a', 1300);
+        write('id-e', 1400);
+        expect(['id-a', 'id-b', 'id-c', 'id-d', 'id-e'].filter((identity) => b.homeSnapshot(identity) !== null)).toEqual(['id-a', 'id-c', 'id-d', 'id-e']);
+        expect(b.homeSnapshot('id-a')).toEqual({ at: 1300, key: 'k-id-a', home });
+        write('id-f', 1500);
+        expect(['id-a', 'id-c', 'id-d', 'id-e', 'id-f'].filter((identity) => b.homeSnapshot(identity) !== null)).toEqual(['id-a', 'id-d', 'id-e', 'id-f']);
+    });
+
+    it('a home.json of 3.4 (one snapshot, no identity) reads as empty, nothing thrown; the next write replaces it', () => {
+        const dir = tempDir();
+        fs.writeFileSync(path.join(dir, 'home.json'), JSON.stringify({ at: 1000, key: 'k', home }));
+        const store = new Store(dir);
+        expect(store.homeSnapshot('k')).toBeNull();
+        expect(store.writeHomeSnapshot('id-a', { at: 2000, key: 'k', home }, store.homeGeneration())).toBe(true);
+        expect(new Store(dir).homeSnapshot('id-a')).toEqual({ at: 2000, key: 'k', home });
     });
 
     it('lease: one holder at a time, released by its holder only, taken over once stale', () => {
@@ -316,21 +359,21 @@ describe('home shared between windows (Store)', () => {
             const dir = tempDir();
             const a = new Store(dir);
             const b = new Store(dir);
-            const releaseA = a.claimHomeLease(60_000);
-            expect(releaseA).not.toBeNull();
-            expect(b.claimHomeLease(60_000)).toBeNull();
-            releaseA?.();
-            const releaseB = b.claimHomeLease(60_000);
-            expect(releaseB).not.toBeNull();
+            const releaseA = a.claimHomeLease(60_000, 'id-a');
+            expect(releaseA).toBeTypeOf('function');
+            expect(b.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: 'id-a' });
+            asRelease(releaseA)();
+            const releaseB = b.claimHomeLease(60_000, 'id-a');
+            expect(releaseB).toBeTypeOf('function');
             // A holder that never released (window closed mid-computation) is taken over once stale.
             vi.advanceTimersByTime(60_001);
-            const releaseA2 = a.claimHomeLease(60_000);
-            expect(releaseA2).not.toBeNull();
+            const releaseA2 = a.claimHomeLease(60_000, 'id-a');
+            expect(releaseA2).toBeTypeOf('function');
             // The late release of the old holder does not free the new holder's lease.
-            releaseB?.();
-            expect(b.claimHomeLease(60_000)).toBeNull();
-            releaseA2?.();
-            expect(b.claimHomeLease(60_000)).not.toBeNull();
+            asRelease(releaseB)();
+            expect(b.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: 'id-a' });
+            asRelease(releaseA2)();
+            expect(b.claimHomeLease(60_000, 'id-a')).toBeTypeOf('function');
         } finally {
             vi.useRealTimers();
         }
@@ -343,9 +386,23 @@ describe('home shared between windows (Store)', () => {
         const generation = a.homeGeneration();
         b.dropHomeSnapshot();
         expect(a.homeGeneration()).not.toBe(generation);
-        expect(a.saveHomeSnapshot({ at: 1000, key: 'k', home }, generation)).toBe(false);
-        expect(b.homeSnapshot()).toBeNull();
-        expect(a.saveHomeSnapshot({ at: 2000, key: 'k', home }, a.homeGeneration())).toBe(true);
+        expect(a.writeHomeSnapshot('id-a', { at: 1000, key: 'k', home }, generation)).toBe(false);
+        expect(b.homeSnapshot('id-a')).toBeNull();
+        expect(a.writeHomeSnapshot('id-a', { at: 2000, key: 'k', home }, a.homeGeneration())).toBe(true);
+    });
+
+    it('lease: records the identity of the home being computed; none recorded (older version) or not readable yet (being written)', () => {
+        const dir = tempDir();
+        const lock = path.join(dir, 'home.lock');
+        const store = new Store(dir);
+        const release = asRelease(store.claimHomeLease(60_000, 'id-a'));
+        expect(JSON.parse(fs.readFileSync(lock, 'utf8'))).toEqual({ token: expect.any(String), at: expect.any(Number), identity: 'id-a' });
+        expect(new Store(dir).claimHomeLease(60_000, 'id-b')).toEqual({ heldBy: 'id-a' });
+        release();
+        fs.writeFileSync(lock, JSON.stringify({ token: 'old', at: Date.now() }));
+        expect(store.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: '' });
+        fs.writeFileSync(lock, '');
+        expect(store.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: null });
     });
 
     it('a stale lease that cannot be removed: the caller computes anyway, nothing thrown', () => {
@@ -354,9 +411,9 @@ describe('home shared between windows (Store)', () => {
         fs.mkdirSync(path.join(lock, 'inside'), { recursive: true });
         const past = new Date(Date.now() - 3600_000);
         fs.utimesSync(lock, past, past);
-        const release = new Store(dir).claimHomeLease(60_000);
-        expect(typeof release).toBe('function');
-        expect(() => release?.()).not.toThrow();
+        const release = new Store(dir).claimHomeLease(60_000, 'id-a');
+        expect(release).toBeTypeOf('function');
+        expect(() => asRelease(release)()).not.toThrow();
     });
 
     it('local signature: changed by a "reviewed" mark or a version type, not by seen files', () => {
@@ -375,5 +432,125 @@ describe('home shared between windows (Store)', () => {
             state.reviewedHash = 'abcdef123456';
         });
         expect(store.localSignature()).not.toBe(withKind);
+    });
+});
+
+describe('home computed by one window per home identity (HomeService, VS Code profiles sharing the storage)', () => {
+    const ME: User = { uuid: '{me}', displayName: 'Thomas Girard' };
+    const CAMILLE: User = { uuid: '{cam}', displayName: 'Camille Durand' };
+    const YANN: User = { uuid: '{yann}', displayName: 'Yann Bernard' };
+
+    /**
+     * A window of a profile following `followed` (its review settings are per profile, the folder is shared). No
+     * repository: a computation reads only my profile, through `me` (held while the returned promise is pending).
+     */
+    function profileWindow(dir: string, followed: User[], me: () => Promise<User | null> = async () => ME) {
+        const loads: HomeLoad[] = [];
+        const store = new Store(dir, { reviewSource: memoryReviewSource({ followed }) });
+        const session = { getClient: vi.fn(async () => ({})), me: vi.fn(me) };
+        const service = new HomeService({ session: session as unknown as BitbucketSession, store, cache: new Cache(null), onLoad: (load) => loads.push(load) });
+        return { service, session, loads };
+    }
+
+    function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+        let resolve: (value: T) => void = () => undefined;
+        const promise = new Promise<T>((done) => {
+            resolve = done;
+        });
+        return { promise, resolve };
+    }
+
+    /** Whether a promise settled once the pending work ran (no time passes unless `ms` is given). */
+    async function settledAfter(promise: Promise<unknown>, ms = 0): Promise<boolean> {
+        let settled = false;
+        void promise.finally(() => {
+            settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(ms);
+        return settled;
+    }
+
+    const leaseIdentity = (dir: string): unknown => (JSON.parse(fs.readFileSync(path.join(dir, 'home.lock'), 'utf8')) as { identity?: unknown }).identity;
+
+    it('identity: 16 hex characters of the home key\'s sha256', () => {
+        expect(homeIdentity('key')).toMatch(/^[0-9a-f]{16}$/);
+        expect(homeIdentity('key')).toBe(homeIdentity('key'));
+        expect(homeIdentity('other key')).not.toBe(homeIdentity('key'));
+    });
+
+    it('another profile\'s window holds the lease for its own home: this window computes at once, without waiting or taking it', async () => {
+        vi.useFakeTimers();
+        const dir = tempDir();
+        const meB = deferred<User | null>();
+        const b = profileWindow(dir, [CAMILLE], () => meB.promise);
+        const bLoad = b.service.get();
+        await vi.advanceTimersByTimeAsync(0);
+        const holder = leaseIdentity(dir);
+        expect(holder).toMatch(/^[0-9a-f]{16}$/);
+
+        const a = profileWindow(dir, [YANN]);
+        const aLoad = a.service.get();
+        expect(await settledAfter(aLoad)).toBe(true);
+        expect(a.session.me).toHaveBeenCalledTimes(1);
+        expect(a.loads).toEqual([expect.objectContaining({ fresh: false, source: 'computed', leaseWaitMs: 0, holderIdentity: holder })]);
+        expect(a.loads[0]?.identity).toMatch(/^[0-9a-f]{16}$/);
+        expect(a.loads[0]?.identity).not.toBe(holder);
+        expect(leaseIdentity(dir)).toBe(holder);
+
+        meB.resolve(ME);
+        await bLoad;
+        // Both homes kept: a second window of each profile reuses its own, without computing.
+        const a2 = profileWindow(dir, [YANN]);
+        const b2 = profileWindow(dir, [CAMILLE]);
+        expect(await a2.service.get()).toEqual(await aLoad);
+        expect(await b2.service.get()).toEqual(await bLoad);
+        expect(a2.session.me).not.toHaveBeenCalled();
+        expect(b2.session.me).not.toHaveBeenCalled();
+        expect([a2.loads[0]?.source, b2.loads[0]?.source]).toEqual(['shared', 'shared']);
+    });
+
+    it('a window of the same profile holds the lease: this window waits for its home, no second computation', async () => {
+        vi.useFakeTimers();
+        const dir = tempDir();
+        const meA1 = deferred<User | null>();
+        const a1 = profileWindow(dir, [YANN], () => meA1.promise);
+        const a1Load = a1.service.get();
+        await vi.advanceTimersByTimeAsync(0);
+
+        const a2 = profileWindow(dir, [YANN]);
+        const a2Load = a2.service.get();
+        expect(await settledAfter(a2Load, 5_000)).toBe(false);
+        meA1.resolve(ME);
+        const computed = await a1Load;
+        expect(await settledAfter(a2Load, 100)).toBe(true);
+        expect(await a2Load).toEqual(computed);
+        expect(a2.session.me).not.toHaveBeenCalled();
+        expect(a2.loads).toEqual([expect.objectContaining({ source: 'shared', leaseWaitMs: 5_100, holderIdentity: a2.loads[0]?.identity })]);
+        expect(a2.loads[0]?.identity).toBe(a1.loads[0]?.identity);
+    });
+
+    it('a lease left by an older version (no identity recorded) is not waited for', async () => {
+        vi.useFakeTimers();
+        const dir = tempDir();
+        fs.writeFileSync(path.join(dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() }));
+        const a = profileWindow(dir, [YANN]);
+        expect(await settledAfter(a.service.get())).toBe(true);
+        expect(a.loads).toEqual([expect.objectContaining({ source: 'computed', leaseWaitMs: 0, holderIdentity: '' })]);
+    });
+
+    it('load events: duration, fresh, and the error code of a failed load (no PR data)', async () => {
+        vi.useFakeTimers();
+        const dir = tempDir();
+        const me = deferred<User | null>();
+        const a = profileWindow(dir, [YANN], () => me.promise);
+        const load = a.service.get({ fresh: true });
+        await vi.advanceTimersByTimeAsync(1_500);
+        me.resolve(ME);
+        await load;
+        expect(a.loads).toEqual([{ fresh: true, startedAt: expect.any(Number), durationMs: 1_500, leaseWaitMs: 0, identity: expect.stringMatching(/^[0-9a-f]{16}$/), source: 'computed' }]);
+
+        a.session.getClient.mockRejectedValueOnce(new AppError(409, 'NO_TOKEN', 'No token'));
+        await expect(a.service.get()).rejects.toThrow('No token');
+        expect(a.loads[1]).toEqual({ fresh: false, startedAt: expect.any(Number), durationMs: 0, leaseWaitMs: 0, identity: a.loads[0]?.identity, error: 'NO_TOKEN' });
     });
 });

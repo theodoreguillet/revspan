@@ -29,7 +29,7 @@ export interface NotifiedState {
     seen: Record<string, string>;
 }
 
-/** Last home computed by any window of the profile, reused by the others for a while (HomeService). */
+/** Last home computed for one home identity by any window, reused by the others for a while (HomeService). */
 export interface HomeSnapshot {
     /** Date.now() when its computation started. */
     at: number;
@@ -126,31 +126,69 @@ class JsonFile<T> {
     }
 }
 
-function homeSnapshotOf(raw: unknown): HomeSnapshot | null {
-    const value = raw as Partial<HomeSnapshot> | null;
-    return value && typeof value.at === 'number' && typeof value.key === 'string' && typeof value.home === 'object' && value.home !== null
-        ? { at: value.at, key: value.key, home: value.home }
-        : null;
+/**
+ * Homes kept in home.json, one per home identity: VS Code shares the extension's storage across profiles, and two
+ * profiles following other contributors compute different homes.
+ */
+const MAX_HOME_SNAPSHOTS = 4;
+
+/** A home snapshot with the identity of the home it holds (an entry of home.json). */
+interface HomeEntry extends HomeSnapshot {
+    identity: string;
+}
+
+/** home.json: the homes, most recently written first. */
+interface HomeFile {
+    homes: HomeEntry[];
+}
+
+/** Valid entries of home.json. Anything else, the single snapshot of 3.4 included, reads as no home. */
+function homeFileOf(raw: unknown): HomeFile {
+    const homes = (raw as { homes?: unknown } | null)?.homes;
+    if (!Array.isArray(homes)) {
+        return { homes: [] };
+    }
+    const valid = homes.flatMap((entry: Partial<HomeEntry> | null): HomeEntry[] => (
+        entry && typeof entry.identity === 'string' && typeof entry.at === 'number' && typeof entry.key === 'string' && typeof entry.home === 'object' && entry.home !== null
+            ? [{ identity: entry.identity, at: entry.at, key: entry.key, home: entry.home }]
+            : []
+    ));
+    return { homes: valid.slice(0, MAX_HOME_SNAPSHOTS) };
 }
 
 interface Lease {
     token: string;
     at: number;
+    /** Identity of the home its holder computes; '' when none is recorded (a lease written by 3.4). */
+    identity: string;
+}
+
+/**
+ * The home lease is held by another window: the identity of the home it computes ('' when it recorded none, an older
+ * version), or null when its file cannot be read yet (being written).
+ */
+export interface HomeLeaseHeld {
+    heldBy: string | null;
 }
 
 function readLease(file: string): Lease | null {
     try {
         const value = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Lease>;
-        return typeof value.token === 'string' && typeof value.at === 'number' ? { token: value.token, at: value.at } : null;
+        return typeof value.token === 'string' && typeof value.at === 'number'
+            ? { token: value.token, at: value.at, identity: typeof value.identity === 'string' ? value.identity : '' }
+            : null;
     } catch {
         return null;
     }
 }
 
-/** Age of a lease file by its modification time (a lease being written cannot be read yet). */
+/**
+ * Age of a lease file by its modification time (a lease being written cannot be read yet). Whole milliseconds, as
+ * Date.now(): a file created within the current millisecond is not from the future.
+ */
 function fileAgeMs(file: string): number {
     try {
-        return Date.now() - fs.statSync(file).mtimeMs;
+        return Date.now() - Math.floor(fs.statSync(file).mtimeMs);
     } catch {
         return Infinity;
     }
@@ -192,7 +230,7 @@ export class Store {
     private readonly reviewSource: ReviewSource | null;
     private readonly configFile: JsonFile<AppConfig>;
     private readonly stateFile: JsonFile<StateFile>;
-    private readonly homeFile: JsonFile<HomeSnapshot | null>;
+    private readonly homeFile: JsonFile<HomeFile>;
     /** Count of drops of the shared home (home.drop), so a computation started before one is never shared. */
     private readonly dropFile: JsonFile<{ generation: number }>;
     private readonly leaseFile: string;
@@ -208,7 +246,7 @@ export class Store {
             return { ...value, review: normalizeReviewSettings(value.review) };
         });
         this.stateFile = new JsonFile(path.join(dir, 'state.json'), (raw) => ({ prs: {}, ...(raw as Partial<StateFile>) }));
-        this.homeFile = new JsonFile(path.join(dir, 'home.json'), homeSnapshotOf);
+        this.homeFile = new JsonFile(path.join(dir, 'home.json'), homeFileOf);
         this.dropFile = new JsonFile(path.join(dir, 'home.drop'), (raw) => {
             const generation = (raw as { generation?: unknown } | null)?.generation;
             return { generation: typeof generation === 'number' && Number.isInteger(generation) ? generation : 0 };
@@ -290,9 +328,10 @@ export class Store {
         return this.localSig.value;
     }
 
-    /** Last home computed by a window of this profile (null if none or unreadable). */
-    homeSnapshot(): HomeSnapshot | null {
-        return this.homeFile.read();
+    /** Last home computed for this home identity by any window (null if none or unreadable). */
+    homeSnapshot(identity: string): HomeSnapshot | null {
+        const entry = this.homeFile.read().homes.find((candidate) => candidate.identity === identity);
+        return entry ? { at: entry.at, key: entry.key, home: entry.home } : null;
     }
 
     /** Drops of the shared home so far (any window): read before a computation, checked when saving it. */
@@ -301,15 +340,17 @@ export class Store {
     }
 
     /**
-     * Shares a computed home with the other windows, unless the shared home was dropped since `generation` was read (a
-     * write during the computation: its home may predate the write). Returns whether it was saved.
+     * Shares a computed home with the other windows, under its home identity, unless the shared home was dropped since
+     * `generation` was read (a write during the computation: its home may predate the write). The homes of other
+     * identities stay, up to MAX_HOME_SNAPSHOTS, the least recently written dropped first. Returns whether it was saved.
      */
-    saveHomeSnapshot(snapshot: HomeSnapshot, generation: number): boolean {
+    writeHomeSnapshot(identity: string, snapshot: HomeSnapshot, generation: number): boolean {
         if (this.homeGeneration() !== generation) {
             return false;
         }
         try {
-            this.homeFile.write(snapshot);
+            const others = this.homeFile.read().homes.filter((entry) => entry.identity !== identity);
+            this.homeFile.write({ homes: [{ identity, ...snapshot }, ...others].slice(0, MAX_HOME_SNAPSHOTS) });
             return true;
         } catch (error) {
             console.warn(`revspan: cannot share the home (${(error as Error).message})`);
@@ -328,15 +369,15 @@ export class Store {
     }
 
     /**
-     * Takes the right to compute the home for every window of the profile (a file created exclusively). Returns its
-     * release, or null while another window holds it; a lease older than staleMs (window closed mid-computation) is taken
-     * over. When no lease can be written at all, the caller computes anyway.
+     * Takes the right to compute the home of `identity` for every window (a file created exclusively, recording the
+     * identity). Returns its release, or who holds it while another window does; a lease older than staleMs (window
+     * closed mid-computation) is taken over. When no lease can be written at all, the caller computes anyway.
      */
-    claimHomeLease(staleMs: number): (() => void) | null {
+    claimHomeLease(staleMs: number, identity: string): (() => void) | HomeLeaseHeld {
         const token = randomUUID();
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                fs.writeFileSync(this.leaseFile, JSON.stringify({ token, at: Date.now() }), { flag: 'wx', mode: 0o600 });
+                fs.writeFileSync(this.leaseFile, JSON.stringify({ token, at: Date.now(), identity }), { flag: 'wx', mode: 0o600 });
                 return () => {
                     try {
                         if (readLease(this.leaseFile)?.token === token) {
@@ -353,7 +394,7 @@ export class Store {
                 const held = readLease(this.leaseFile);
                 const age = held ? Date.now() - held.at : fileAgeMs(this.leaseFile);
                 if (age >= 0 && age < staleMs) {
-                    return null;
+                    return { heldBy: held ? held.identity : null };
                 }
                 try {
                     fs.rmSync(this.leaseFile, { force: true });
@@ -363,6 +404,7 @@ export class Store {
                 }
             }
         }
-        return null;
+        // A stale lease again after removing one (another window re-created it in between): looked at again shortly.
+        return { heldBy: null };
     }
 }

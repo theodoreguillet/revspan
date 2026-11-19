@@ -9,7 +9,11 @@ import type { ApiErrorBody, Comment, Comparison, ContributorList, FollowedList, 
 import { DEFAULT_REVIEW_SETTINGS } from '../../src/shared/review-settings.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
+import { Store } from '../../src/server/infra/config.ts';
 import { runningInstance, writeRunFile } from '../../src/server/infra/run-file.ts';
+import { createSecretStore } from '../../src/server/infra/secrets.ts';
+import { createServices } from '../../src/server/services/index.ts';
+import type { HomeService } from '../../src/server/services/home-service.ts';
 import {
     FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall, type RecordedRequest,
 } from '../support/fake-bitbucket.ts';
@@ -1155,6 +1159,11 @@ describe('request budget', () => {
     }
 
     const labels = (list: RecordedRequest[]): string[] => list.map(label).sort();
+    /** Homes the windows share on disk (home.json), whatever their identity. */
+    const sharedHomes = (dir: string): unknown[] => {
+        const file = path.join(dir, 'home.json');
+        return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, 'utf8')) as { homes: unknown[] }).homes : [];
+    };
     const home = async (route = '/api/home'): Promise<Home> => (await api<Home>('GET', route)).body;
     /** Time goes by (only Date is faked: the HTTP servers keep their real timers). */
     const elapse = (ms: number): void => {
@@ -1279,6 +1288,46 @@ describe('request budget', () => {
         }
     });
 
+    /**
+     * A window of another VS Code profile: same storage folder (VS Code shares the extension's storage across profiles),
+     * token and repositories, but its own review settings (per profile), here following Camille.
+     */
+    async function otherProfileHome(current: Env): Promise<HomeService> {
+        const followed = [{ uuid: '{cam}', displayName: 'Camille Durand' }];
+        const store = new Store(current.dir, { reviewSource: { get: () => ({ ...DEFAULT_REVIEW_SETTINGS, followed }), set: async () => undefined } });
+        const secrets = await createSecretStore({ dir: current.dir, env: { REVSPAN_TOKEN_STORE: 'file' } });
+        return createServices({ store, secrets, cache: new Cache(path.join(current.dir, 'cache')), baseUrl: current.fake.url }).home;
+    }
+
+    it('(d) a window of another profile holds the lease for its own home: this window computes at once, no wait', async () => {
+        fakeTime();
+        const current = await setup();
+        fs.writeFileSync(path.join(current.dir, 'home.lock'), JSON.stringify({ token: 'other-profile', at: Date.now(), identity: '0123456789abcdef' }));
+        const spent = await requestsOf(home);
+        expect(labels(spent).filter((l) => l.startsWith('list '))).toEqual(['list p1']);
+    });
+
+    it('(d) two profiles following different contributors: each home is shared with its own profile\'s windows, neither evicts the other', async () => {
+        fakeTime();
+        const current = await setup();
+        const firstA = await home();
+        const firstB = await (await otherProfileHome(current)).get();
+        expect(firstB).not.toEqual(firstA);
+        elapse(MINUTE_MS);
+        const secondA = await startRevspan(current.dir, current.fake);
+        const secondB = await otherProfileHome(current);
+        try {
+            let reused: unknown[] = [];
+            const spent = await requestsOf(async () => {
+                reused = [await (await fetch(`${secondA.url}/api/home`)).json(), await secondB.get()];
+            });
+            expect(spent).toEqual([]);
+            expect(reused).toEqual([firstA, firstB]);
+        } finally {
+            await secondA.close();
+        }
+    });
+
     it('(e) several PRs of mine in one repository share a single branch-head read', async () => {
         fakeTime();
         const { fake } = await setup();
@@ -1337,7 +1386,7 @@ describe('request budget', () => {
 
     it('a write while a computation is in flight: its pre-write home is not shared, the next read computes again', async () => {
         fakeTime();
-        const { fake, app } = await setup();
+        const { fake, dir } = await setup();
         await home();
         elapse(INTERVAL_MS + 1000);
         let release = (): void => undefined;
@@ -1350,7 +1399,7 @@ describe('request budget', () => {
         delete fake.data.holdList;
         release();
         expect(cardOf(await inFlight, FAKE_PRS.waiting)?.myApproval).toBe(true);
-        expect(app.store.homeSnapshot()).toBeNull();
+        expect(sharedHomes(dir)).toEqual([]);
         expect(cardOf(await home(), FAKE_PRS.waiting)?.myApproval).toBe(false);
     });
 
@@ -1452,7 +1501,7 @@ describe('request budget', () => {
         await restart(current);
         await fetch(`http://127.0.0.1:${current.fake.port}/__fail-next?status=403`);
         expect((await home()).me).toBeNull();
-        expect(current.app.store.homeSnapshot()).toBeNull();
+        expect(sharedHomes(current.dir)).toEqual([]);
     });
 
     it('a write on a PR drops the shared home: the next read shows it at once', async () => {

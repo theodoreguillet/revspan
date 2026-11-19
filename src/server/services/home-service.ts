@@ -1,11 +1,13 @@
 // "My PRs" home: open PRs of the configured repositories, grouped by the review queue (core/review-queue.ts).
 //
 // Request budget (the background poll runs every review.refreshMinutes in every VS Code window):
-// - a home computed by any window of the profile is shared on disk and reused for half an interval;
+// - a home computed by any window is shared on disk, per home identity (VS Code profiles share the storage), and reused
+//   for half an interval; a window waits only for another window computing the same home;
 // - only the PR lists are always read; a PR's activity is kept on disk while its head, last update, comment count and
 //   approvals are unchanged; settled build checks are kept per head once it is an hour old; other checks and branch heads
 //   are read at most once per interval; merge bases are immutable.
-import type { Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
+import { createHash } from 'node:crypto';
+import type { ErrorCode, Home, HomeGroup, HomeGroupKey, PrCard, PrRef, User } from '../../shared/api.ts';
 import { approvalHoldsSince } from '../../shared/approval.ts';
 import { isOwnGroup } from '../../shared/home-grouping.ts';
 import { reactionOf, reactionReplies } from '../../shared/reactions.ts';
@@ -24,7 +26,7 @@ import type { BitbucketSession } from './session.ts';
 const MINUTE_MS = 60_000;
 /** Timer drift between two polls: live data read by one poll is always stale for the next one. */
 const POLL_JITTER_MS = 15_000;
-/** A window computing the home for the others: taken over past this age (closed mid-computation). */
+/** A window computing a home for the others: taken over past this age (closed mid-computation). */
 const LEASE_MS = 60_000;
 /** Pause between two looks at the home another window is computing. */
 const WAIT_STEP_MS = 100;
@@ -51,6 +53,30 @@ interface Card {
     open: boolean;
 }
 
+/** How a load got its home: computed by this window, or reused (another window's, or this window's recent one). */
+export type HomeSource = 'computed' | 'shared';
+
+/** One home load (get()), for the diagnostic log: timings and identity hashes only, never PR data or tokens. */
+export interface HomeLoad {
+    fresh: boolean;
+    /** Date.now() when the load started. */
+    startedAt: number;
+    durationMs: number;
+    /** Time spent waiting for another window computing the same home. */
+    leaseWaitMs: number;
+    /** Identity of the home loaded (homeIdentity). */
+    identity: string;
+    /** Identity of the home computed by the window found holding the lease ('' when it recorded none: older version). */
+    holderIdentity?: string;
+    /** Absent when the load failed. */
+    source?: HomeSource;
+    /** Code of the error that failed the load. */
+    error?: ErrorCode;
+}
+
+/** Lease part of a load, filled while it waits (the loads joining the same computation share it). */
+type LeaseWait = Pick<HomeLoad, 'leaseWaitMs' | 'holderIdentity'>;
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Age past which unsettled build checks and branch heads are read again: once per poll. */
@@ -58,13 +84,12 @@ const recheckAgeMs = (refreshMinutes: number): number => Math.max(refreshMinutes
 
 /**
  * What the home depends on besides Bitbucket (account, repositories, approval rule, followed contributors, local marks):
- * a change shows at once instead of waiting for the shared home to expire.
+ * a change shows at once instead of waiting for the shared home to expire. VS Code profiles share the storage but not
+ * their settings: two profiles following other contributors have different keys.
  */
-function homeKey(email: string, repos: readonly string[], review: ReviewSettings, local: string, generation: number): string {
+function homeKey(email: string, repos: readonly string[], review: ReviewSettings, local: string): string {
     return JSON.stringify({
         format: HOME_FORMAT,
-        // Bumped by every write on a PR: a read after a write never joins a computation started before it.
-        generation,
         email,
         repos,
         approvals: review.requiredApprovals,
@@ -72,6 +97,11 @@ function homeKey(email: string, repos: readonly string[], review: ReviewSettings
         followed: review.followed.map((u) => u.uuid),
         local,
     });
+}
+
+/** Short name of a home key (home.json entries, the lease, the log): 16 hex characters of its sha256. */
+export function homeIdentity(key: string): string {
+    return createHash('sha256').update(key).digest('hex').slice(0, 16);
 }
 
 /**
@@ -144,8 +174,8 @@ export class HomeService {
     private readonly session: BitbucketSession;
     private readonly store: Store;
     private readonly cache: Cache;
-    /** Computations in progress in this window, per home key (the tree and the poll share one). */
-    private readonly pending = new Map<string, Promise<Home>>();
+    /** Computations in progress in this window, per home key (the tree and the poll share one), with their lease wait. */
+    private readonly pending = new Map<string, { loaded: Promise<{ home: Home; source: HomeSource }>; wait: LeaseWait }>();
     /**
      * Last home this window computed, reused like the shared one, including a home that is not shared (profile unknown):
      * the tree refresh after a poll must not compute it again.
@@ -153,11 +183,14 @@ export class HomeService {
     private last: { key: string; at: number; home: Home } | null = null;
     /** Per PR, the list key under which the activity read did not match the list (kept if the next read still does not). */
     private readonly mismatched = new Map<string, string>();
+    /** Told of every load (the VS Code extension logs them). */
+    private readonly onLoad: ((load: HomeLoad) => void) | undefined;
 
-    constructor({ session, store, cache }: { session: BitbucketSession; store: Store; cache: Cache }) {
+    constructor({ session, store, cache, onLoad }: { session: BitbucketSession; store: Store; cache: Cache; onLoad?: (load: HomeLoad) => void }) {
         this.session = session;
         this.store = store;
         this.cache = cache;
+        this.onLoad = onLoad;
     }
 
     /**
@@ -166,24 +199,57 @@ export class HomeService {
      * bases) stays.
      */
     async get({ fresh = false }: { fresh?: boolean } = {}): Promise<Home> {
+        const startedAt = Date.now();
+        const { email, repos, review } = this.store.config;
+        const content = homeKey(email, repos, review, this.store.localSignature());
+        const identity = homeIdentity(content);
+        const lease: LeaseWait = { leaseWaitMs: 0 };
+        const tell = (outcome: Pick<HomeLoad, 'source' | 'error'>): void => {
+            this.report({ fresh, startedAt, durationMs: Date.now() - startedAt, identity, ...lease, ...outcome });
+        };
+        try {
+            const { home, source } = await this.load(content, identity, repos, review, fresh, lease);
+            tell({ source });
+            // A display setting, applied to whichever home is returned (it may come from a window with other workspace
+            // settings): switching it never recomputes the home. Without my profile nothing is mine: nothing is hidden.
+            return { ...home, hideUnfollowed: home.me !== null && hidesUnfollowed(review) };
+        } catch (error) {
+            tell({ error: errorPayload(error).code });
+            throw error;
+        }
+    }
+
+    /** The home of a key: computed when fresh, otherwise shared or computed for every window; `lease` gets the lease wait. */
+    private async load(content: string, identity: string, repos: readonly string[], review: ReviewSettings, fresh: boolean, lease: LeaseWait): Promise<{ home: Home; source: HomeSource }> {
         // No network here: the token is read, the profile is only fetched by a computation.
         const client = await this.session.getClient();
-        const { email, repos, review } = this.store.config;
         const generation = this.store.homeGeneration();
-        const key = homeKey(email, repos, review, this.store.localSignature(), generation);
-        const compute = (): Promise<Home> => this.compute(client, key, generation, repos, review, fresh);
-        // A display setting, applied to whichever home is returned (it may come from a window with other workspace
-        // settings): switching it never recomputes the home. Without my profile nothing is mine: nothing is hidden.
-        const withDisplay = (home: Home): Home => ({ ...home, hideUnfollowed: home.me !== null && hidesUnfollowed(review) });
+        // The generation is bumped by every write on a PR: a read after a write never joins a computation started before it.
+        const key = `${generation}:${content}`;
+        const compute = (): Promise<Home> => this.compute(client, key, identity, generation, repos, review, fresh);
         if (fresh) {
-            return withDisplay(await compute());
+            return { home: await compute(), source: 'computed' };
         }
         let pending = this.pending.get(key);
         if (!pending) {
-            pending = this.sharedOrComputed(key, review.refreshMinutes * MINUTE_MS / 2, compute).finally(() => this.pending.delete(key));
+            const wait: LeaseWait = { leaseWaitMs: 0 };
+            const loaded = this.sharedOrComputed(key, identity, review.refreshMinutes * MINUTE_MS / 2, compute, wait).finally(() => this.pending.delete(key));
+            pending = { loaded, wait };
             this.pending.set(key, pending);
         }
-        return withDisplay(await pending);
+        try {
+            return await pending.loaded;
+        } finally {
+            Object.assign(lease, pending.wait);
+        }
+    }
+
+    private report(load: HomeLoad): void {
+        try {
+            this.onLoad?.(load);
+        } catch {
+            // A failing log never fails a load.
+        }
     }
 
     /**
@@ -201,9 +267,9 @@ export class HomeService {
      * The home this window or another one computed less than reuseMs ago for the same key, if any (at most
      * ERROR_REUSE_MS ago for a home with a repository error).
      */
-    private shared(key: string, reuseMs: number): Home | null {
+    private shared(key: string, identity: string, reuseMs: number): Home | null {
         // The more recent of this window's own home and the shared one.
-        const latest = [this.last, this.store.homeSnapshot()]
+        const latest = [this.last, this.store.homeSnapshot(identity)]
             .filter((candidate) => candidate?.key === key)
             .reduce<{ at: number; home: Home } | null>((best, candidate) => (candidate && (!best || candidate.at > best.at) ? candidate : best), null);
         if (!latest) {
@@ -216,31 +282,40 @@ export class HomeService {
 
     /**
      * The shared home when recent enough; otherwise this window takes the lease and computes it for every window. While
-     * another window holds the lease, waits for its home (or takes over once the lease is stale).
+     * another window holds the lease for the same home, waits for its home (or takes over once the lease is stale). A
+     * lease held for another home (another profile, or an older version recording none) is not waited for: this window
+     * computes its own at once, without taking the lease. `wait` records the time waited and the holder's identity.
      */
-    private async sharedOrComputed(key: string, reuseMs: number, compute: () => Promise<Home>): Promise<Home> {
+    private async sharedOrComputed(key: string, identity: string, reuseMs: number, compute: () => Promise<Home>, wait: LeaseWait): Promise<{ home: Home; source: HomeSource }> {
+        const startedAt = Date.now();
         for (let waited = 0; ; waited += WAIT_STEP_MS) {
-            const shared = this.shared(key, reuseMs);
+            wait.leaseWaitMs = Date.now() - startedAt;
+            const shared = this.shared(key, identity, reuseMs);
             if (shared) {
-                return shared;
+                return { home: shared, source: 'shared' };
             }
-            const release = this.store.claimHomeLease(LEASE_MS);
-            if (release) {
+            const claim = this.store.claimHomeLease(LEASE_MS, identity);
+            if (typeof claim === 'function') {
                 try {
                     // Another window may have finished between the look above and the claim.
-                    return this.shared(key, reuseMs) ?? await compute();
+                    const sharedMeanwhile = this.shared(key, identity, reuseMs);
+                    return sharedMeanwhile ? { home: sharedMeanwhile, source: 'shared' } : { home: await compute(), source: 'computed' };
                 } finally {
-                    release();
+                    claim();
                 }
             }
-            if (waited >= LEASE_MS) {
-                return compute();
+            if (claim.heldBy !== null) {
+                wait.holderIdentity = claim.heldBy;
+            }
+            // heldBy null: the lease is being written, its identity is read at the next look.
+            if ((claim.heldBy !== null && claim.heldBy !== identity) || waited >= LEASE_MS) {
+                return { home: await compute(), source: 'computed' };
             }
             await sleep(WAIT_STEP_MS);
         }
     }
 
-    private async compute(client: BitbucketClient, key: string, generation: number, repos: readonly string[], review: ReviewSettings, fresh: boolean): Promise<Home> {
+    private async compute(client: BitbucketClient, key: string, identity: string, generation: number, repos: readonly string[], review: ReviewSettings, fresh: boolean): Promise<Home> {
         const startedAt = Date.now();
         const me = await this.session.me();
         const recheckMs = recheckAgeMs(review.refreshMinutes);
@@ -293,7 +368,7 @@ export class HomeService {
         // A home without my profile (every PR in "others") is never shared. One with a repository error is, for
         // ERROR_REUSE_MS only (see shared()).
         if (me !== null) {
-            this.store.saveHomeSnapshot({ at: startedAt, key, home }, generation);
+            this.store.writeHomeSnapshot(identity, { at: startedAt, key, home }, generation);
         }
         return home;
     }

@@ -52,6 +52,13 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'chat.disableAIFeatures': true,
 }));
 
+// A window of another profile computing its own home when this one starts (VS Code shares the extension's storage across
+// profiles): its lease must not hold "My PRs" back.
+const homeLockAt = Date.now();
+const storage = path.join(userData, 'User', 'globalStorage', 'theodoreguillet.revspan');
+fs.mkdirSync(storage, { recursive: true });
+fs.writeFileSync(path.join(storage, 'home.lock'), JSON.stringify({ token: 'other-profile', at: homeLockAt, identity: 'other' }));
+
 // Variables of the current VS Code session removed: otherwise the new process would attach to it.
 const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VSCODE_') && key !== 'ELECTRON_RUN_AS_NODE'));
 Object.assign(env, {
@@ -108,6 +115,7 @@ try {
                 ...process.env,
                 CDP_URL: `http://127.0.0.1:${port}`,
                 PR_TITLE: main.pr.title ?? '',
+                HOME_LOCK_AT: String(homeLockAt),
                 REVSPAN_CALLS_URL: `http://127.0.0.1:${fake.port}/__calls`,
                 SHOTS_DIR: process.env.REVSPAN_SHOTS_DIR ?? path.join(tmp, 'shots'),
             },
@@ -119,6 +127,17 @@ try {
     const reposSaved = JSON.stringify(userSettings['revspan.repositories']) === JSON.stringify([`${WS}/${REPO}`]);
     console.log(`${reposSaved ? 'PASS' : 'FAIL'}  VS Code setting revspan.repositories written`);
     if (!reposSaved) {
+        status = 1;
+    }
+    // The "Revspan" log output channel, as VS Code wrote it to the profile's logs: home loads, no PR data or token.
+    const logsDir = path.join(userData, 'logs');
+    const log = fs.readdirSync(logsDir, { recursive: true, encoding: 'utf8' })
+        .filter((file) => file.includes('theodoreguillet.revspan') && file.endsWith('.log'))
+        .map((file) => fs.readFileSync(path.join(logsDir, file), 'utf8'))
+        .join('');
+    const logged = /home load: source=(computed|shared) /.test(log) && ![main.pr.title || '-', FAKE_TOKEN, 'Thomas Girard'].some((secret) => log.includes(secret));
+    console.log(`${logged ? 'PASS' : 'FAIL'}  "Revspan" log: one line per home load, no PR title, name or token${logged ? '' : ` — ${log.slice(0, 400)}`}`);
+    if (!logged) {
         status = 1;
     }
 } catch (error) {
