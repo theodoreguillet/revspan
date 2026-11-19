@@ -31,6 +31,11 @@
         "src/web/components/SafeHtml.vue",
         "src/web/components/PrHeader.vue",
         "src/web/components/BuildBadge.vue",
+        "src/web/components/DiffFile.vue",
+        "src/web/components/DiffHunk.vue",
+        "src/web/components/Composer.vue",
+        "src/web/components/ThreadCard.vue",
+        "src/web/components/I18nText.vue",
         "vite.config.ts",
         "vitest.config.ts",
         "src/extension/**/*.ts"

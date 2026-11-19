@@ -17,6 +17,7 @@ import {
 } from '../lib/diff.ts';
 import { familyOf } from '../lib/goto-definition.ts';
 import { languageOf, lineTokens } from '../lib/highlight.ts';
+import { clipSpan, inSpan, newLinesSpan, spanKey, type LineSpan } from '../lib/range-drag.ts';
 import { lineMarks, NO_HITS, type SearchHit } from '../lib/search.ts';
 import { isVsCode, openLocalFile } from '../services/host.ts';
 import Composer from './Composer.vue';
@@ -37,7 +38,12 @@ const page = usePrPage();
 /** The browser tells when it starts or stops skipping a block (content-visibility: auto). */
 const REPORTS_SKIPPED = typeof window !== 'undefined' && 'ContentVisibilityAutoStateChangeEvent' in window;
 
-const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
+/** A drag on a "+" selects lines of this file: the composer's own range here is not marked meanwhile (the drag's is). */
+const hideComposerRange = computed(() => !!page.dragRange && page.composer?.path === props.path && page.composer.startLine != null);
+const input = computed(() => ({
+    path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer,
+    hideComposerRange: hideComposerRange.value,
+}));
 const rows = computed(() => (props.view === 'unified' ? unifiedRows(input.value) : []));
 const splitRows = computed(() => (props.view === 'split' ? sideBySideRows(input.value) : []));
 
@@ -125,15 +131,40 @@ const blockStyle = (block: RowBlock): Record<string, string> => {
 const unifiedIn = (block: RowBlock) => rows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 const splitIn = (block: RowBlock) => splitRows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 
-const lineClass = (row: LineView) =>
-    [row.line.t === '+' ? 'rv-l a' : row.line.t === '-' ? 'rv-l r' : 'rv-l', { 'in-range': row.inRange, composing: row.composing }];
-const cellClass = (cell: SplitCellView, line: DiffLine) => ['half', {
-    r: line.t !== ' ' && cell.side === 'old', a: line.t !== ' ' && cell.side === 'new', 'in-range': cell.inRange, composing: cell.composing,
-}];
+// Lines being selected by a drag on a "+": marked like the composer's range. Only the hunks, then the blocks, whose part
+// of the range changed render again as it grows (a block's memo key is that part).
+const hunkLines = computed(() => newLinesSpan(props.hunk.lines));
+const dragged = computed((previous?: LineSpan | null) => {
+    const drag = page.dragRange;
+    const span = clipSpan(drag?.path === props.path ? drag : null, hunkLines.value);
+    return span && previous && span.first === previous.first && span.last === previous.last ? previous : span;
+});
+/** New-side lines of each block (by its first row). */
+const blockLines = computed(() => new Map(blocks.value.map((block) => [block.start, props.view === 'unified'
+    ? newLinesSpan(rows.value.slice(block.start, block.end).map((row) => row.line))
+    : newLinesSpan(splitRows.value.slice(block.start, block.end).map((row) => row.cells[1].line))])));
+const dragIn = (block: RowBlock): string => spanKey(clipSpan(dragged.value, blockLines.value.get(block.start) ?? null));
+
+const lineClass = (row: LineView) => {
+    const drag = inSpan(dragged.value, row.line);
+    return [row.line.t === '+' ? 'rv-l a' : row.line.t === '-' ? 'rv-l r' : 'rv-l', { 'in-range': row.inRange || drag, composing: row.composing || drag }];
+};
+const cellClass = (cell: SplitCellView, line: DiffLine) => {
+    const drag = cell.side === 'new' && inSpan(dragged.value, line);
+    return ['half', {
+        r: line.t !== ' ' && cell.side === 'old', a: line.t !== ' ' && cell.side === 'new', 'in-range': cell.inRange || drag, composing: cell.composing || drag,
+    }];
+};
 /** Shift+click on a "+" (a range of lines): no text selected between the two clicks, the focus stays in the composer. */
 const onPlusDown = (event: MouseEvent): void => {
     if (event.shiftKey) {
         event.preventDefault();
+    }
+};
+/** A click on a "+", unless it ends a drag (its release already opened the composer). */
+const onPlusClick = (target: ComposerTarget, event: MouseEvent): void => {
+    if (!page.takeReleasedClick()) {
+        page.openComposer(target, event.shiftKey);
     }
 };
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
@@ -147,7 +178,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
         <div
             v-for="block in blocks"
             :key="block.start"
-            v-memo="[rendered(block), rows, tokens, blockHits(block), curIn(block), jumpIn(block), locale]"
+            v-memo="[rendered(block), rows, tokens, blockHits(block), curIn(block), jumpIn(block), dragIn(block), locale]"
             class="rv-blk"
             :style="blockStyle(block)"
             @contentvisibilityautostatechange="onBlockState(block, $event)"
@@ -177,8 +208,9 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                             tabindex="-1"
                             data-action="add-comment"
                             :title="plusTitle(row.target)"
+                            @pointerdown="page.startRangeDrag($event, row.target)"
                             @mousedown="onPlusDown"
-                            @click="page.openComposer(row.target, $event.shiftKey)"
+                            @click="onPlusClick(row.target, $event)"
                         >
                             +
                         </button>
@@ -193,7 +225,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
         <div
             v-for="block in blocks"
             :key="block.start"
-            v-memo="[rendered(block), splitRows, tokens, blockHits(block), curIn(block), jumpIn(block), locale]"
+            v-memo="[rendered(block), splitRows, tokens, blockHits(block), curIn(block), jumpIn(block), dragIn(block), locale]"
             class="rv-blk"
             :style="blockStyle(block)"
             @contentvisibilityautostatechange="onBlockState(block, $event)"
@@ -231,8 +263,9 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                                     tabindex="-1"
                                     data-action="add-comment"
                                     :title="plusTitle(cell.target)"
+                                    @pointerdown="page.startRangeDrag($event, cell.target)"
                                     @mousedown="onPlusDown"
-                                    @click="page.openComposer(cell.target, $event.shiftKey)"
+                                    @click="onPlusClick(cell.target, $event)"
                                 >
                                     +
                                 </button>

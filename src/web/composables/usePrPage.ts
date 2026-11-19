@@ -4,6 +4,7 @@ import { computed, inject, nextTick, onScopeDispose, provide, reactive, watch, t
 import type { FileDiff, PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
 import { nextUnseenIndex, viewedStatus } from '../lib/diff.ts';
 import { PREFETCH_CONTEXT } from '../lib/prefetch.ts';
+import { newLineTarget } from '../lib/range-drag.ts';
 import { commentThreadId } from '../lib/tasks.ts';
 import { useDiffNav } from './useDiffNav.ts';
 import { useDiffOptions } from './useDiffOptions.ts';
@@ -11,6 +12,7 @@ import { useDiffSearch } from './useDiffSearch.ts';
 import { useDiscussion } from './useDiscussion.ts';
 import { useGotoDefinition } from './useGotoDefinition.ts';
 import { usePrLoad } from './usePrLoad.ts';
+import { useRangeDrag } from './useRangeDrag.ts';
 import { useRangeSelection } from './useRangeSelection.ts';
 import { useReviewActions } from './useReviewActions.ts';
 import { ALT_LEFT_BACK } from './useShortcuts.ts';
@@ -30,6 +32,19 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     const threadsById = computed(() => new Map(load.detail.value.threads.map((t) => [t.id, t])));
     const canInlineComment = computed(() => load.compare.value?.to === range.n.value && load.detail.value.pr.state === 'OPEN');
     const files = computed(() => load.compare.value?.files ?? []);
+
+    // drag on a line's "+": released, the composer opens as a click on the line pressed then a Shift+click on the other
+    const rangeDrag = useRangeDrag({
+        open: (anchor, end) => {
+            discussion.openComposer(anchor);
+            if (end) {
+                discussion.openComposer(end, true);
+            }
+        },
+        targetAt: (path, line) => newLineTarget(files.value.find((f) => f.path === path), line),
+        stickyHeight: () => nav.stickyHeight.value,
+        releasePin: nav.releasePin,
+    });
 
     const context = (): number => (options.fullContext.value ? FULL_CONTEXT : PREFETCH_CONTEXT);
     const compareParams = () => ({ from: range.from.value, to: range.to.value, context: context() });
@@ -268,6 +283,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         ref: prRef,
         ...load, ...range, ...options, ...nav, ...discussion, ...review, ...tasks,
         search, goto, listedFiles, markAllViewed, threadsById, canInlineComment, gotoFile, updateCurrentFromScroll, placementOf, showInDiff, showComment, handleKey,
+        dragRange: rangeDrag.range, startRangeDrag: rangeDrag.start, takeReleasedClick: rangeDrag.takeReleasedClick,
     });
 }
 

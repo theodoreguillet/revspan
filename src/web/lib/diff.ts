@@ -284,6 +284,8 @@ export interface HunkViewInput {
     byLine: Map<number, PlacedThread[]>;
     canComment: boolean;
     composer: ComposerTarget | null;
+    /** Lines are being selected by a drag on a "+": the composer's own range is not marked meanwhile (the drag's is). */
+    hideComposerRange?: boolean;
 }
 
 const threadsAt = (byLine: Map<number, PlacedThread[]>, line: DiffLine | null): PlacedThread[] =>
@@ -295,8 +297,8 @@ export function fileView(file: Pick<FileDiff, 'status'>, view: 'unified' | 'spli
 }
 
 /** Lines of a hunk in unified view, with threads and composer to insert below. */
-export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkViewInput): LineView[] {
-    const composing = composerRange(composer, path);
+export function unifiedRows({ path, lines, byLine, canComment, composer, hideComposerRange }: HunkViewInput): LineView[] {
+    const composing = hideComposerRange ? [] : composerRange(composer, path);
     const ranges = [...threadRanges(byLine), ...composing];
     return lines.map((line) => {
         const target = canComment ? composerTargetFor(path, line, 'both') : null;
@@ -308,8 +310,8 @@ export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkV
 }
 
 /** Lines of a hunk in side-by-side view (old on the left, new on the right). */
-export function sideBySideRows({ path, lines, byLine, canComment, composer }: HunkViewInput): SplitRowView[] {
-    const composing = composerRange(composer, path);
+export function sideBySideRows({ path, lines, byLine, canComment, composer, hideComposerRange }: HunkViewInput): SplitRowView[] {
+    const composing = hideComposerRange ? [] : composerRange(composer, path);
     const ranges = [...threadRanges(byLine), ...composing];
     const cell = (side: 'old' | 'new', line: DiffLine | null): SplitCellView => ({
         side, line, target: line && canComment ? composerTargetFor(path, line, side) : null,

@@ -227,6 +227,11 @@ def readout(page):
     return page.locator('.rv-readout')
 
 
+def frames(page, count=2):
+    """Lets the page render `count` frames (a scroll or a layout change settles), without a fixed delay."""
+    page.evaluate('(n) => new Promise((done) => { const next = (k) => (k ? requestAnimationFrame(() => next(k - 1)) : done()); next(n); })', count)
+
+
 def wait_pr_ready(page):
     expect(page.locator('.rv-track .rv-v')).not_to_have_count(0, timeout=20000)
     expect(page.locator('.rv-tabs')).to_be_visible()
@@ -938,6 +943,72 @@ def run_checks(page):
             page.locator('.rv-seg button[data-seg="unified"]').click()
         expect(block.locator('.rv-l.in-range')).to_have_count(expected)
     range_comment(page)
+
+    @check('range by drag: hold the "+" of a line, move over a later one (live marks), release: « Lignes a–b », one POST with start_to')
+    def range_drag(page):
+        new_side = lambda h: [ln['n'] for ln in h['lines'] if ln['t'] != '-' and ln['n'] is not None]  # noqa: E731
+        lines = next(ns for ns in map(new_side, code_file['hunks']) if len(ns) >= 4)
+        start, end = lines[0], lines[3]
+        expected = sum(1 for h in code_file['hunks'] for n in new_side(h) if start <= n <= end)
+        block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
+        row = lambda n: block.locator(f'.rv-l[data-n="{n}"]').first  # noqa: E731
+        composing = block.locator('.rv-l.in-range.composing')
+
+        def press_and_move():
+            # mid-window: far from the edges, where the page would scroll by itself
+            row(start).evaluate('(e) => window.scrollBy(0, e.getBoundingClientRect().top - innerHeight / 2)')
+            frames(page)
+            row(start).hover()
+            plus = row(start).locator('.rv-plus').bounding_box()
+            x = plus['x'] + plus['width'] / 2
+            page.mouse.move(x, plus['y'] + plus['height'] / 2)
+            page.mouse.down()
+            to = row(end).bounding_box()
+            page.mouse.move(x, to['y'] + to['height'] / 2, steps=8)
+
+        # Escape while the button is held cancels: no composer, nothing marked, the release then does nothing
+        press_and_move()
+        try:
+            expect(composing).to_have_count(expected)
+            expect(page.locator('.rv-comp')).to_have_count(0)
+            page.keyboard.press('Escape')
+            expect(composing).to_have_count(0)
+        finally:
+            page.mouse.up()
+        expect(page.locator('.rv-comp')).to_have_count(0)
+
+        press_and_move()
+        try:
+            # the lines are marked while the button is held (new side only), no composer yet
+            expect(composing).to_have_count(expected)
+            expect(page.locator('.rv-comp')).to_have_count(0)
+        finally:
+            page.mouse.up()
+        expect(page.locator('.rv-comp .q')).to_contain_text(f'Lignes {start}–{end} de v{exp_to}')
+        expect(composing).to_have_count(expected)
+        under = page.evaluate('''() => {
+            let e = document.querySelector('.rv-comp').previousElementSibling;
+            while (e && !e.classList.contains('rv-l')) e = e.previousElementSibling;
+            return e && e.dataset.n;
+        }''')
+        assert under == str(end), f'the composer should follow line {end}, follows {under}'
+        composer = page.locator('.rv-comp textarea')
+        expect(composer).to_be_focused()
+        assert page.evaluate('() => String(window.getSelection())') == '', 'the drag selected text'
+        assert not page.evaluate('() => document.documentElement.classList.contains("rv-range-drag")'), 'text still unselectable after the drag'
+        composer.fill('Plage choisie en glissant')
+        calls.start()
+        composer.press('ControlOrMeta+Enter')
+        call = calls.wait(lambda c: is_post_comment(c) and comment_raw(c) == 'Plage choisie en glissant', 'POST comments inline (drag)')
+        assert call is None or body_of(call)['inline'] == {'path': code_file['path'], 'to': end, 'start_to': start}, call
+        card = page.locator('.rv-diff .rv-th', has_text='Plage choisie en glissant')
+        expect(card).to_contain_text(f'Posté sur v{exp_to} · lignes {start}–{end}', timeout=10000)
+        expect(page.locator('.rv-comp')).to_have_count(0)
+        expect(page.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(block.locator('.rv-l.in-range')).to_have_count(expected)
+        if CALLS_URL:
+            assert sum(1 for c in calls.all()[calls.mark:] if is_post_comment(c)) == 1, 'one POST for the dragged range'
+    range_drag(page)
 
     @check('reply to a thread, then delete my reply: it goes, no "deleted comment" left behind')
     def reply_and_delete(page):
@@ -1915,6 +1986,51 @@ def run_checks(page):
             track = page.evaluate("() => document.querySelector('.rv-track').getBoundingClientRect().bottom")
             assert track - max(lows) < 14, 'the bar sits at the bottom of the track row'
         range_bar_aligned(page)
+
+        @check('range by drag with auto-scroll: held near the bottom edge, the page scrolls and the range reaches lines off screen')
+        def range_drag_scroll(page):
+            ref = fake_ref('long')
+            open_pr(page, ref, '?from=0&to=34')
+            path = 'src/Long.ts'
+            block = page.locator(f'.rv-file[data-path="{path}"]')
+            first = block.locator('.rv-l.a[data-n]').first
+            expect(first.locator('.rv-plus')).to_be_attached()
+            start = int(first.get_attribute('data-n'))
+            # the line pressed sits 100 px above the bottom of the window, the rest of the file below it (again while the
+            # blocks coming into view take their real height)
+            for _ in range(10):
+                gap = page.evaluate('(sel) => { const r = document.querySelector(sel).getBoundingClientRect(); window.scrollBy(0, r.bottom - (innerHeight - 100)); return r.bottom - (innerHeight - 100); }',
+                                    f'.rv-file[data-path="{path}"] .rv-l[data-n="{start}"]')
+                frames(page)
+                if abs(gap) < 1:
+                    break
+            tops = page.evaluate('''(sel) => Object.fromEntries([...document.querySelectorAll(sel)]
+                .filter((e) => e.dataset.n).map((e) => [e.dataset.n, e.getBoundingClientRect().top]))''', f'.rv-file[data-path="{path}"] .rv-l')
+            height = page.evaluate('innerHeight')
+            off_screen = sorted(int(n) for n, top in tops.items() if top >= height)
+            assert off_screen, f'no line below the window to reach: {tops}'
+            first.hover()
+            plus = first.locator('.rv-plus').bounding_box()
+            x = plus['x'] + plus['width'] / 2
+            page.mouse.move(x, plus['y'] + plus['height'] / 2)
+            page.mouse.down()
+            try:
+                y0 = page.evaluate('scrollY')
+                page.mouse.move(x, height - 8, steps=6)
+                # held there: the page scrolls by itself and the range follows the lines coming under the pointer
+                page.wait_for_function('''([sel, min]) => Math.max(0, ...[...document.querySelectorAll(sel)].map((e) => Number(e.dataset.n) || 0)) >= min''',
+                                       arg=[f'.rv-file[data-path="{path}"] .rv-l.composing', off_screen[0]], timeout=15000)
+                assert page.evaluate('scrollY') > y0, 'the page did not scroll'
+            finally:
+                page.mouse.up()
+            label = page.locator('.rv-comp .q')
+            expect(label).to_contain_text(f'Lignes {start}–')
+            reached = int(re.search(rf'Lignes {start}–(\d+)', label.inner_text()).group(1))
+            assert reached in off_screen, f'range end {reached} was on screen at the press (off screen: {off_screen})'
+            assert page.evaluate('() => String(window.getSelection())') == '', 'the drag selected text'
+            page.locator('.rv-comp textarea').press('Escape')
+            expect(page.locator('.rv-comp')).to_have_count(0)
+        range_drag_scroll(page)
 
         @check('only rebases since my review: home group and quick re-approval')
         def fast_path(page):

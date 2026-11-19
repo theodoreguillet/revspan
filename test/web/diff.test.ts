@@ -229,6 +229,18 @@ describe('range of lines (Shift+click on a second "+")', () => {
         ]);
         expect(rows[1]?.rightComposer?.startLine).toBe(4);
     });
+
+    it('while a drag on a "+" selects lines, the composer\'s own range is not marked; its box stays under its last line', () => {
+        const composer = rangeTarget(target(ranged.path, 5), target(ranged.path, 7));
+        const input = { path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer, hideComposerRange: true };
+        const rows = unifiedRows(input);
+        // the thread's range (6-7) stays marked
+        expect(rows.map((r) => [r.line.n, r.inRange, r.composing])).toEqual([[4, false, false], [null, false, false], [5, false, false], [6, true, false], [7, true, false]]);
+        expect(rows[4]?.composer).toEqual(composer);
+        const split = sideBySideRows(input);
+        expect(split.some((r) => r.cells.some((c) => c.composing))).toBe(false);
+        expect(split[3]?.rightComposer).toEqual(composer);
+    });
 });
 
 describe('firstChangedLine', () => {

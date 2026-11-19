@@ -233,6 +233,32 @@ def run() -> None:
                 page.wait_for_timeout(400)
             liked_thread.screenshot(path=f'{SHOTS}/03b-like-chip.png')
 
+        # Range by drag in the webview: hold a line's "+", move two lines down, release: the composer takes the lines
+        # (then Escape: no write). The mouse is the workbench's: frame boxes are given in its coordinates.
+        drag_rows = frame.locator('.rv-file:not(.folded)', has=frame.locator('.rv-l .rv-plus')).first.locator('.rv-l:not(.r)[data-n]')
+        if drag_rows.count() >= 3:
+            first_row, last_row = drag_rows.nth(0), drag_rows.nth(2)
+            first_row.evaluate('(e) => window.scrollBy(0, e.getBoundingClientRect().top - innerHeight / 2)')
+            first_row.hover()
+            plus = first_row.locator('.rv-plus').bounding_box()
+            to = last_row.bounding_box()
+            label = ''
+            if plus and to:
+                x = plus['x'] + plus['width'] / 2
+                page.mouse.move(x, plus['y'] + plus['height'] / 2)
+                page.mouse.down()
+                page.mouse.move(x, to['y'] + to['height'] / 2, steps=6)
+                page.mouse.up()
+                composer = frame.locator('.rv-comp .q')
+                label = composer.inner_text() if wait_until(lambda: composer.count() > 0, 10) else 'no composer'
+            expected = f"Lines {first_row.get_attribute('data-n')}–{last_row.get_attribute('data-n')} of v"
+            check('panel: dragging a line\'s + over two more lines opens the composer on the three of them', label.startswith(expected),
+                  f'{label!r}, expected {expected!r}')
+            if frame.locator('.rv-comp textarea').count():
+                frame.locator('.rv-comp textarea').press('Escape')
+        else:
+            check('panel: dragging a line\'s + over two more lines opens the composer on the three of them', False, 'not 3 new-side lines')
+
         # Native VS Code diff on the first file.
         file_block = frame.locator('.rv-file').first
         file_path = file_block.locator('.rv-fh').first.inner_text()

@@ -149,6 +149,34 @@ def scenario_expand(page, path, label):
     record(label, tasks, {'paint': paint, 'rows': file_block(page, path).locator('.rv-l').count()})
 
 
+def scenario_range_drag(page, path):
+    """Drag on the "+" of a line of the big file (5 000 lines, one hunk): 20 lines by hand, then held near the bottom
+    edge while the page scrolls by itself (the range follows). Recorded apart: the drag, then the release (the composer
+    opens on the range, as after a Shift+click)."""
+    row = file_block(page, path).locator('.rv-l[data-n="200"]')
+    row.evaluate('(e) => window.scrollBy(0, e.getBoundingClientRect().top - 300)')
+    settle(page, now(page))
+    row.hover()
+    plus = row.locator('.rv-plus').bounding_box()
+    x, y = plus['x'] + plus['width'] / 2, plus['y'] + plus['height'] / 2
+    height = page.evaluate('innerHeight')
+    top = page.evaluate('scrollY')
+    since = now(page)
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x, y + 20 * 20, steps=20)
+    page.mouse.move(x, height - 10, steps=5)
+    page.wait_for_timeout(1500)
+    released = now(page)
+    tasks = page.evaluate('([since, end]) => window.__lt.filter((e) => e.start >= since && e.start < end).map((e) => e.duration)', [since, released])
+    page.mouse.up()
+    label = page.locator('.rv-comp .q').inner_text()
+    record('drag on a + of the big file', tasks, {'scrolled': round(page.evaluate('scrollY') - top), 'range': label.split(' of ')[0]})
+    record('release: composer on the range', settle(page, released))
+    page.locator('.rv-comp textarea').press('Escape')
+    settle(page, now(page))
+
+
 def scenario_context(page):
     since = now(page)
     click_and_paint(page, '.rv-dtb [data-seg="full"]')
@@ -227,6 +255,7 @@ def main():
         scenario_list_clicks(page, [services[len(services) // 2], BIG, paths[-1], GENERATED, paths[0], services[-1]])
         scenario_jk(page)
         scenario_expand(page, BIG, 'expanding the big file (5 000 lines)')
+        scenario_range_drag(page, BIG)
         scenario_expand(page, GENERATED, 'expanding Generated.ts (125 hunks)')
         scenario_search(page, 'handler12', 'typing a narrow query (9 keys)')
         scenario_search(page, 'weight', 'typing a broad query (6 keys)')

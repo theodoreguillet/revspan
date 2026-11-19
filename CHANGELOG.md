@@ -11,8 +11,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 - Description tab on the PR page: the PR description, rendered like a comment.
 - Draft chip in the PR header ("Draft" instead of "Open") for a Bitbucket draft PR.
 - Copy-link button in the PR header, next to the "Bitbucket ↗" link.
-- Comment a range of lines: click a line's **+**, then Shift+click the **+** of another line of the same file. Comments
-  on several lines show as a range of lines.
+- Comment a range of lines: click a line's **+**, then Shift+click the **+** of another line of the same file, or hold a
+  line's **+** and drag over the other lines (the page scrolls near its edges). Comments on several lines show as a
+  range of lines.
 - `v` marks the current file seen and moves to the next unseen one (pressed again on a seen file: unmark).
 - VS Code: a "Revspan" output channel (View › Output) logs each "My PRs" load (duration, wait, error codes, no PR data).
 

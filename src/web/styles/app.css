@@ -324,6 +324,8 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
    bar and a light tint (layered over the added / removed backgrounds). */
 .rv-l.in-range, .rv-sl .half.in-range { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--rv-new) 60%, transparent); }
 .rv-l.composing, .rv-sl .half.composing { box-shadow: inset 3px 0 0 var(--accent); background-image: linear-gradient(var(--rv-range), var(--rv-range)); }
+/* drag on a "+" to select lines (useRangeDrag.ts): no text selected on the way */
+:root.rv-range-drag, :root.rv-range-drag * { user-select: none !important; }
 
 .rv-split-right .rv-th, .rv-split-right .rv-comp { margin-left: calc(50% + 8px); }
 .rv-split-left .rv-comp { margin-left: 12px; margin-right: calc(50% + 8px); }

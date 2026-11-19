@@ -180,7 +180,7 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
             expect(n.pinHolds()).toBe(true);
         });
 
-        it('is released by any other scroll set by the page: thread, search match, definition, tabs', () => {
+        it('is released by any other scroll set by the page: thread, search match, definition, tabs, drag near an edge', () => {
             const line = at(800);
             document.body.append(line);
             const releases: [string, (n: ReturnType<typeof nav>) => void][] = [
@@ -200,6 +200,10 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
                     n.registerTabs(at(-500));
                     y = 2000;
                     n.scrollToTabsIfBelow();
+                }],
+                // a drag on a "+" scrolling near an edge
+                ['drag', (n) => {
+                    n.releasePin();
                 }],
             ];
             for (const [what, release] of releases) {

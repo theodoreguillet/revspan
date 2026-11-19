@@ -296,10 +296,11 @@ one request per interval even once finished (see "Build status").
   syntax color, plus a keyword list per family for lines not colored yet.
 - **Discussions**: threads relocated onto the displayed version ("line modified since"), replies, 👍, resolution
   (**Reopen** on the folded bar of a resolved thread); comment on a line of the latest version, or on a range of lines:
-  click a line's **+**, then `Shift+click` the **+** of another line of the same file (the lines in between are marked,
-  the comment goes under the last one); **Edit** or delete your own comments. Multi-line comments, yours or written in
-  Bitbucket, show as "lines 220–227" with their lines marked in the diff. A comment, a reply, a 👍 or a resolution shows
-  at once, then Bitbucket's answer replaces it.
+  click a line's **+**, then `Shift+click` the **+** of another line of the same file, or hold a line's **+** and drag
+  over the other lines like in Bitbucket (the page scrolls when the pointer nears its top or bottom edge, `Esc`
+  cancels); the lines in between are marked, the comment goes under the last one. **Edit** or delete your own
+  comments. Multi-line comments, yours or written in Bitbucket, show as "lines 220–227" with their lines marked in the
+  diff. A comment, a reply, a 👍 or a resolution shows at once, then Bitbucket's answer replaces it.
 - **Tasks** (tab after Builds, with the open count): the PR's Bitbucket tasks, read when the tab is opened. Tick or
   reopen a task, delete yours, add one with the input at the bottom; a task created under a comment links to its
   thread ("see the comment").
@@ -315,8 +316,9 @@ one request per interval even once finished (see "Build status").
   itself. Reopening a PR within that interval shows it at once, with no read.
 
 Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen and next unseen file (on a seen file: unmark), `Shift+V` all files
-seen, `[`/`]` version, `/` search, `Shift+click` on a line's **+** comment a range of lines, `Ctrl+click` (`⌘+click`)
-go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[` and `]` typed with Option or AltGr work too.
+seen, `[`/`]` version, `/` search, `Shift+click` on a line's **+** (or drag the **+**) comment a range of lines,
+`Ctrl+click` (`⌘+click`) go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[` and `]` typed with Option
+or AltGr work too.
 
 ## Develop
 
@@ -381,9 +383,11 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 - **Comment on a line**: only on the latest version (Bitbucket anchors comments on the current version). On a deleted
   line, the tool posts a general comment that quotes the line. A range of lines covers the new side only: `Shift+click`
   on a deleted line's **+** is ignored while a comment on new lines is open (it keeps its range; a plain click comments
-  the deleted line), and a range may span lines hidden between two hunks. A range written in Bitbucket on removed lines
-  shows its lines in the thread, at file level like any comment on removed lines. A range relocated onto another
-  version keeps its lines when its first line still comes before its last one, otherwise it shows on its last line.
+  the deleted line), and a range may span lines hidden between two hunks. A drag on a **+** stays on the new side of
+  its file: over a removed line, a hunk header or another file, the range keeps the last new-side line reached; a
+  release outside the window, like `Esc`, cancels it. A range written in Bitbucket on removed lines shows its lines in
+  the thread, at file level like any comment on removed lines. A range relocated onto another version keeps its lines
+  when its first line still comes before its last one, otherwise it shows on its last line.
 - **Go to definition** reads patterns on the displayed lines, not the code: a local name defined in several functions
   lists them all, a definition outside the hunks is found only with "whole file" (or through its import), and only
   relative TS / JS imports lead to a file of the PR (no path aliases such as `@/`, no Python or Java packages).

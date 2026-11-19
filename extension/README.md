@@ -36,8 +36,8 @@ versions, without the noise brought in by rebases.
 - **Description tab**: the PR description, rendered like a comment.
 - **PR header**: a "Draft" chip for a draft PR, and a copy icon next to "Bitbucket ↗" that copies the PR link.
 - **Comments**: threads placed on the displayed version, replies, resolution, new comments on a line of the latest
-  version or on a range of lines (click a line's **+**, then Shift+click the **+** of another line); multi-line
-  comments show as ranges.
+  version or on a range of lines (click a line's **+**, then Shift+click the **+** of another line, or drag the **+**
+  over the other lines); multi-line comments show as ranges.
 - **Approve or request changes**, showing which version each person approved.
 - **Open file**: opens the file from the repository cloned in your workspace, at the line. The clone is found by its
   Bitbucket remote, then by folder name. A git worktree checked out on the PR's branch is preferred.

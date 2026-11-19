@@ -111,9 +111,14 @@ export function useDiffNav() {
         return false;
     }
 
+    /** The page scrolls by itself away from the pinned file (a drag near an edge): the scroll drives `curFile` again. */
+    function releasePin(): void {
+        pin = null;
+    }
+
     /** A scroll set by the page to something else than the pinned file: the scroll drives `curFile` again. */
     function scrollAway(el: Element, offset: number): void {
-        pin = null;
+        releasePin();
         scrollToElement(el, offset);
     }
 
@@ -249,7 +254,7 @@ export function useDiffNav() {
 
     return {
         tlHeight, toolbarHeight, stickyHeight, curFile,
-        registerFile, registerTabs, registerThread, unregisterThread, registerMatch, registerJump, clearJump, pinFile, pinHolds,
+        registerFile, registerTabs, registerThread, unregisterThread, registerMatch, registerJump, clearJump, pinFile, pinHolds, releasePin,
         scrollToFile, scrollToMatch, revealJump, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
     };
 }
