@@ -248,6 +248,8 @@ export const en = {
     'readout.manyVersions': '{versions}… ({count} versions)',
 
     // ---------- Tabs ----------
+    'tabs.description': 'Description',
+    'description.empty': 'No description.',
     'tabs.diff': 'Diff',
     'tabs.discussions': 'Discussions',
     'tabs.versions': 'Versions',

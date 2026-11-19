@@ -84,6 +84,9 @@ Common rules:
   (`needsRebase === true`), which leave `mine`. Once a contributor is followed, `to-do` keeps only the followed
   authors', designated and engaged PRs (see DESIGN.md). `HomeGroup` is `{ key, prs }`, with no title: the page and the
   VS Code tree each translate the key. The old keys `to-review`, `rebase-only` and `up-to-date` are gone.
+- `PrDetail.pr.descriptionHtml: string`: the PR description as Bitbucket renders it (`summary.html` of the PR object, no
+  extra request; `''` when none), untrusted HTML that a client must sanitize like a comment body. `pr.description`
+  stays the raw text. `PrDetail.pr.draft: boolean`: Bitbucket's `draft` flag (`true` only when set; read-only).
 - `PrDetail.build: BuildCheck[] | null`: the checks of the head commit (`key`, `name`, `state` of `success`, `failed`,
   `running` or `stopped`, `url`, `updatedOn`). `[]` means no build is attached, `null` means the statuses could not be
   read. `PrDetail.needsRebase: boolean | null` is computed like the card's, but for any open PR, mine or not (`null` on

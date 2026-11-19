@@ -157,7 +157,7 @@ class FakeBuilder {
         return { id: this.nextTaskId(), state: 'UNRESOLVED', creator, created_on: date, updated_on: date, content: { raw, html: `<p>${escapeHtml(raw)}</p>` }, ...extra };
     }
 
-    pr(id: number, { title, author, participants, plan, events = [], comments = [], tasks = [] }: {
+    pr(id: number, { title, author, participants, plan, events = [], comments = [], tasks = [], description, descriptionHtml }: {
         title: string;
         author: BbUser;
         participants: BbParticipant[];
@@ -165,6 +165,9 @@ class FakeBuilder {
         events?: BbActivity[];
         comments?: BbComment[];
         tasks?: BbTask[];
+        /** Raw description and the HTML Bitbucket renders from it (default: a one-word description, no summary). */
+        description?: string;
+        descriptionHtml?: string;
     }): void {
         const first = plan[0];
         const last = plan[plan.length - 1];
@@ -178,7 +181,8 @@ class FakeBuilder {
             pr: {
                 id,
                 title,
-                description: 'Démo',
+                description: description ?? 'Démo',
+                ...(descriptionHtml === undefined ? {} : { summary: { html: descriptionHtml } }),
                 state: 'OPEN',
                 author,
                 source: { branch: { name: `feature/DEMO-${id}-demo` }, commit: { hash: hex(last.commit).slice(0, 12) } },
@@ -255,6 +259,9 @@ function mainPr(b: FakeBuilder): void {
             b.comment(AI, '2026-10-01T10:06:00Z', 'critical: missing check', { inline: { path: 'src/Action.ts', to: 4, from: null }, resolution: { user: CAM } }),
         ],
         tasks,
+        description: 'Archives records in bulk.\n\n- keeps the history\n- see the [guide](https://example.com/guide)',
+        descriptionHtml: '<p>Archives records in bulk.</p><ul><li>keeps the history</li></ul>'
+            + '<p>See the <a href="https://example.com/guide">guide</a>.</p><script>window.__descriptionPwned = 1</script>',
     });
 }
 

@@ -293,6 +293,10 @@ def screenshots(browser, fixed_time):
                 else:
                     page.wait_for_timeout(800)
                 page.screenshot(path=os.path.join(SHOTS, f'{name}-{scheme}-{width}.png'))
+                if name == 'pr' and width == 1440:
+                    page.locator('.rv-tab[data-tab="description"]').click()
+                    page.wait_for_timeout(200)
+                    page.screenshot(path=os.path.join(SHOTS, f'pr-description-{scheme}.png'))
                 if name == 'pr-long':
                     page.locator('.rv-tl').screenshot(path=os.path.join(SHOTS, f'timeline-{scheme}-{width}.png'))
                     page.goto(url(f'pr/{fake_ref("long")}?from=0&to=34'))  # wide range: the bar under every item
@@ -1944,6 +1948,31 @@ def run_checks(page):
                 expect(page.locator('.rv-tab.on[data-tab="diff"]')).to_be_visible()
                 expect(page.locator(f'.rv-diff .rv-th[data-thread="{cid}"]')).to_be_visible()
             tasks_tab(page)
+
+        @check('description_tab: first tab, Diff stays selected on open, shows the sanitized description, no extra request')
+        def description_tab(page):
+            open_pr(page, MAIN_PR)
+            wait_fake_quiet()
+            tabs = page.locator('.rv-tabs .rv-tab')
+            expect(tabs.first).to_have_attribute('data-tab', 'description')
+            expect(tabs.first).to_have_text('Description')
+            expect(page.locator('.rv-tab.on')).to_have_attribute('data-tab', 'diff')
+            before = len(bitbucket_requests())
+            tabs.first.click()
+            expect(tabs.first).to_have_attribute('aria-selected', 'true')
+            body = page.locator('.rv-description .rv-html')
+            expect(body).to_contain_text('Archives records in bulk.')
+            expect(body.locator('li')).to_have_text('keeps the history')
+            link = body.locator('a')
+            expect(link).to_have_attribute('href', 'https://example.com/guide')
+            expect(link).to_have_attribute('rel', 'noopener noreferrer')
+            expect(body.locator('script')).to_have_count(0)
+            assert page.evaluate('window.__descriptionPwned') is None, 'script of the description ran'
+            wait_fake_quiet()
+            assert len(bitbucket_requests()) == before, 'opening the tab must not read Bitbucket'
+            tabs.nth(1).click()
+            expect(page.locator('.rv-tab.on')).to_have_attribute('data-tab', 'diff')
+        description_tab(page)
 
         @check('PR page: follow toggle on the author; my PR shows "needs rebase" and its running build')
         def follow_header(page):

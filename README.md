@@ -190,6 +190,9 @@ Generic: Revspan reads the statuses Bitbucket attaches to the PR's latest commit
 CI. A badge shows the aggregate (`failed`, `running`, `success`, or nothing) on the cards and in the PR header, and the
 PR page has a **Builds** tab listing each check with its link.
 
+The PR page also has a **Description** tab (first in the tab bar; the diff stays the tab shown on open) with the PR
+description as Bitbucket renders it, sanitized like comments. It comes with the PR already read: no extra request.
+
 For the first hour after a push, the checks are read again once per interval even when they all look finished: a
 second CI (tests after lint, for example) may not have posted yet. Past that hour, finished checks are kept for that
 commit and never read again by the home.

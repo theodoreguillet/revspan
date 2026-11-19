@@ -21,6 +21,8 @@ export interface BbPullRequest {
     id: number;
     title?: string;
     description?: string;
+    /** The description as Bitbucket renders it (HTML). */
+    summary?: { html?: string };
     state?: 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED';
     author?: BbUser;
     source?: { branch?: { name?: string }; commit?: BbCommitRef };

@@ -247,6 +247,8 @@ export const fr: Catalog = {
     'readout.manyVersions': '{versions}… ({count} versions)',
 
     // ---------- Tabs ----------
+    'tabs.description': 'Description',
+    'description.empty': 'Pas de description.',
     'tabs.diff': 'Diff',
     'tabs.discussions': 'Discussions',
     'tabs.versions': 'Versions',

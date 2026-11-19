@@ -345,6 +345,8 @@ export function prInfo(ref: PrRef, pr: BbPullRequest): PrInfo {
         ...ref,
         title: pr.title ?? '',
         description: pr.description ?? '',
+        descriptionHtml: pr.summary?.html ?? '',
+        draft: pr.draft === true,
         state: pr.state ?? 'OPEN',
         author: userOf(pr.author),
         sourceBranch: pr.source?.branch?.name ?? '',

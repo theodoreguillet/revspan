@@ -194,6 +194,10 @@ export type PrState = 'OPEN' | 'MERGED' | 'DECLINED' | 'SUPERSEDED';
 export interface PrInfo extends PrRef {
     title: string;
     description: string;
+    /** The description as Bitbucket renders it (HTML, untrusted: sanitized by the page); '' when none. */
+    descriptionHtml: string;
+    /** Draft PR (read-only on Bitbucket's side). */
+    draft: boolean;
     state: PrState;
     author: User | null;
     sourceBranch: string;

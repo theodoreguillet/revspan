@@ -25,6 +25,9 @@ onBeforeUnmount(() => page.registerTabs(null));
 
 <template>
     <div ref="root" class="rv-tabs" role="tablist">
+        <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'description' }]" data-tab="description" :aria-selected="page.tab === 'description'" @click="pick('description')">
+            {{ t('tabs.description') }}
+        </button>
         <button type="button" role="tab" :class="['rv-tab', { on: page.tab === 'diff' }]" data-tab="diff" :aria-selected="page.tab === 'diff'" @click="pick('diff')">
             {{ t('tabs.diff') }} <span class="n">{{ diffCount }}</span>
         </button>

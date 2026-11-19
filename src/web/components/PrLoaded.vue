@@ -12,6 +12,7 @@ import PrHeader from './PrHeader.vue';
 import PrTabs from './PrTabs.vue';
 import PulseBanner from './PulseBanner.vue';
 import ResumeBanner from './ResumeBanner.vue';
+import DescriptionTab from './DescriptionTab.vue';
 import TasksTab from './TasksTab.vue';
 import Timeline from './Timeline.vue';
 import VersionsTab from './VersionsTab.vue';
@@ -52,7 +53,8 @@ onBeforeUnmount(() => {
     <ResumeBanner />
     <PrTabs />
     <div class="rv-content">
-        <DiffTab v-if="page.tab === 'diff'" />
+        <DescriptionTab v-if="page.tab === 'description'" />
+        <DiffTab v-else-if="page.tab === 'diff'" />
         <DiscussionsTab v-else-if="page.tab === 'discussions'" />
         <VersionsTab v-else-if="page.tab === 'versions'" />
         <TasksTab v-else-if="page.tab === 'tasks'" />

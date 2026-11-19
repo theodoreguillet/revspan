@@ -26,6 +26,7 @@
         "src/web/composables/**/*.ts",
         "src/web/components/DiffCode.vue",
         "src/web/components/CommentItem.vue",
+        "src/web/components/DescriptionTab.vue",
         "src/web/components/ConfirmButton.vue",
         "src/web/components/SafeHtml.vue",
         "vite.config.ts",

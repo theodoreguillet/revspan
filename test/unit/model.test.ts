@@ -201,6 +201,14 @@ describe('buildThreads', () => {
 describe('tasks', () => {
     const ref = { workspace: 'acme', repo: 'records-api', id: 212 };
 
+    it('prInfo maps summary.html to descriptionHtml (empty when absent) and draft only when true', () => {
+        expect(prInfo(ref, { ...pr, summary: { html: '<p>Why</p>' } }).descriptionHtml).toBe('<p>Why</p>');
+        expect(prInfo(ref, pr).descriptionHtml).toBe('');
+        expect(prInfo(ref, { ...pr, draft: true }).draft).toBe(true);
+        expect(prInfo(ref, { ...pr, draft: false }).draft).toBe(false);
+        expect(prInfo(ref, pr).draft).toBe(false);
+    });
+
     it('prInfo carries the open task count of the PR object (0 when absent)', () => {
         expect(prInfo(ref, { ...pr, task_count: 2 }).taskCount).toBe(2);
         expect(prInfo(ref, pr).taskCount).toBe(0);
