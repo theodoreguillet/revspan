@@ -48,7 +48,11 @@ export interface BbComment {
     content?: { raw?: string; html?: string };
     deleted?: boolean;
     parent?: { id: number };
-    inline?: { path: string; to?: number | null; from?: number | null };
+    /**
+     * Inline comment: `to` a new-side line, `from` an old-side one. A comment on several lines also has the first line of
+     * its range on that side: `start_to` (new side) or `start_from` (old side).
+     */
+    inline?: { path: string; to?: number | null; from?: number | null; start_to?: number | null; start_from?: number | null };
     resolution?: { user?: BbUser } | null;
 }
 

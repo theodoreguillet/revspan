@@ -36,10 +36,17 @@ export const settingsUpdateSchema: z.ZodType<SettingsUpdate> = z.object({
 const rawSchema = (what: string) => z.string().trim().min(1, `The ${what} is empty.`).max(32000);
 const commentRawSchema = rawSchema('comment');
 
+/** Inline comment: one new-side line `to`, or the range `startTo` to `to` (Bitbucket's multi-line comment). */
+const inlineSchema = z.object({
+    path: z.string().min(1).max(4096),
+    to: z.number().int().positive(),
+    startTo: z.number().int().positive().optional(),
+}).refine((inline) => inline.startTo === undefined || inline.startTo < inline.to, { message: 'The range must start before its last line.', path: ['startTo'] });
+
 export const newCommentSchema: z.ZodType<NewComment> = z.object({
     raw: commentRawSchema,
     parentId: z.number().int().positive().optional(),
-    inline: z.object({ path: z.string().min(1).max(4096), to: z.number().int().positive() }).optional(),
+    inline: inlineSchema.optional(),
 });
 
 export const editCommentSchema: z.ZodType<EditComment> = z.object({

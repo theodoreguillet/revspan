@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FileDiff } from '../../src/shared/api.ts';
+import type { FileDiff, Thread, ThreadPlacement } from '../../src/shared/api.ts';
 import {
     budgetedSource, compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource, type CompareVersion, type FileContent,
 } from '../../src/server/core/compare.ts';
@@ -7,6 +7,7 @@ import { scenario } from '../support/fake-repo.ts';
 
 const changed = (file: FileDiff): string[] => file.hunks.flatMap((h) => h.lines.filter((l) => l.t !== ' ').map((l) => `${l.t}${l.text.trim()}`));
 const paths = (files: readonly FileDiff[]): string[] => files.map((f) => f.path);
+const lineAnchor = (to: number): Thread['anchor'] => ({ to, from: null, startTo: null, startFrom: null });
 
 /** Source with a single file modified between "old" and "new". */
 function singleFile(path: string, contents: Record<string, FileContent>): CompareSource {
@@ -250,17 +251,62 @@ describe('placeThreads', () => {
         const src = repo.source();
         const result = await compareVersions(src, versions, 2, 5);
         await placeThreads(src, versions, result, [
-            { id: 1, path: 'src/Action.ts', anchor: { to: 3, from: null }, version: 2 }, // id line, unchanged since v2
-            { id: 2, path: 'src/Action.ts', anchor: { to: 7, from: null }, version: 2 }, // return this.save → modified in v5
-            { id: 3, path: 'src/Action.ts', anchor: { to: 1, from: null }, version: 5 }, // posted on v5
-            { id: 4, path: 'src/Other.ts', anchor: { to: 1, from: null }, version: 2 }, // file absent from the comparison
+            { id: 1, path: 'src/Action.ts', anchor: lineAnchor(3), version: 2 }, // id line, unchanged since v2
+            { id: 2, path: 'src/Action.ts', anchor: lineAnchor(7), version: 2 }, // return this.save → modified in v5
+            { id: 3, path: 'src/Action.ts', anchor: lineAnchor(1), version: 5 }, // posted on v5
+            { id: 4, path: 'src/Other.ts', anchor: lineAnchor(1), version: 2 }, // file absent from the comparison
             { id: 5, path: null, anchor: null, version: 2 }, // general comment
         ]);
         expect(result.files.find((f) => f.path === 'src/Action.ts')!.threads).toEqual([
-            { threadId: 3, line: 1, moved: false, outOfHunks: true },
-            { threadId: 1, line: 3, moved: false, outOfHunks: true },
-            { threadId: 2, line: 7, moved: true, outOfHunks: false },
+            { threadId: 3, line: 1, startLine: null, moved: false, outOfHunks: true },
+            { threadId: 1, line: 3, startLine: null, moved: false, outOfHunks: true },
+            { threadId: 2, line: 7, startLine: null, moved: true, outOfHunks: false },
         ]);
+    });
+
+    describe('multi-line comments (range start mapped like the end line)', () => {
+        const OLD = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        // v1 -> v2: one line inserted at the top, "c" and "d" removed, "f" modified
+        const NEW = ['top', 'a', 'b', 'e', 'f2', 'g', 'h'];
+        const contents: Record<string, FileContent> = { v1: { text: `${OLD.join('\n')}\n` }, v2: { text: `${NEW.join('\n')}\n` } };
+        const src: CompareSource = {
+            diffstat: async () => [{ status: 'modified', oldPath: 'r.ts', newPath: 'r.ts', added: 2, removed: 3 }],
+            content: async (hash) => contents[hash] ?? { missing: true },
+        };
+        const version = (index: number): CompareVersion => ({ index, hash: `v${index}`, base: 'base', message: '', isRebase: false, messageChanged: false });
+        const versions = [version(1), version(2)];
+        const rangeAnchor = (startTo: number, to: number): Thread['anchor'] => ({ to, from: null, startTo, startFrom: null });
+        const placed = async (threads: Parameters<typeof placeThreads>[3]): Promise<ThreadPlacement[]> =>
+            (await placeThreads(src, versions, await compareVersions(src, versions, 1, 2), threads)).files[0]!.threads;
+
+        it('posted on the shown version: the range as written', async () => {
+            expect(await placed([{ id: 1, path: 'r.ts', anchor: rangeAnchor(2, 5), version: 2 }]))
+                .toEqual([{ threadId: 1, line: 5, startLine: 2, moved: false, outOfHunks: false }]);
+        });
+
+        it('posted on an older version: start and end mapped; a changed start or end counts as moved', async () => {
+            expect(await placed([
+                { id: 1, path: 'r.ts', anchor: rangeAnchor(1, 2), version: 1 }, // a..b, unchanged
+                { id: 2, path: 'r.ts', anchor: rangeAnchor(3, 7), version: 1 }, // c (removed)..g: start on the closest line
+                { id: 3, path: 'r.ts', anchor: rangeAnchor(2, 6), version: 1 }, // b..f (modified end)
+            ])).toEqual([
+                { threadId: 1, line: 3, startLine: 2, moved: false, outOfHunks: false },
+                { threadId: 3, line: 5, startLine: 3, moved: true, outOfHunks: false },
+                { threadId: 2, line: 6, startLine: 4, moved: true, outOfHunks: false },
+            ]);
+        });
+
+        it('a start that cannot be mapped before the end: shown at its end line, as a single line', async () => {
+            // c..d both removed: start and end land on the same line
+            expect(await placed([{ id: 1, path: 'r.ts', anchor: rangeAnchor(3, 4), version: 1 }]))
+                .toEqual([{ threadId: 1, line: 4, startLine: null, moved: true, outOfHunks: false }]);
+        });
+
+        it('an anchor without range fields (detail cached by an older version): a single line', async () => {
+            const legacy = { to: 5, from: null } as unknown as Thread['anchor'];
+            expect(await placed([{ id: 1, path: 'r.ts', anchor: legacy, version: 2 }]))
+                .toEqual([{ threadId: 1, line: 5, startLine: null, moved: false, outOfHunks: false }]);
+        });
     });
 });
 

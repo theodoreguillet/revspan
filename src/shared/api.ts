@@ -304,7 +304,12 @@ export interface Thread {
     id: number;
     /** null = general comment. */
     path: string | null;
-    anchor: { to: number | null; from: number | null } | null;
+    /**
+     * Line of an inline comment: `to` on the new side, `from` on the old side (a removed line). A comment on a range of
+     * lines (Bitbucket's multi-line comment) also has its first line on that side: `startTo` before `to`, `startFrom`
+     * before `from`; null for a single line.
+     */
+    anchor: { to: number | null; from: number | null; startTo: number | null; startFrom: number | null } | null;
     version: number;
     resolved: boolean;
     resolvedBy: User | null;
@@ -408,6 +413,11 @@ export interface ThreadPlacement {
     threadId: number;
     /** Line on the "to" side where to show the thread; null = file level. */
     line: number | null;
+    /**
+     * First line of a range comment on the "to" side, mapped like `line` (always before it); null for a single line, or
+     * when the range's start cannot be placed before its end (the thread then shows at `line` as a single line).
+     */
+    startLine: number | null;
     /** The original line changed since the comment. */
     moved: boolean;
     /** The line exists but outside the displayed hunks. */
@@ -451,7 +461,8 @@ export interface Comparison {
 export interface NewComment {
     raw: string;
     parentId?: number;
-    inline?: { path: string; to: number };
+    /** Inline comment on new-side line `to`; on lines `startTo` to `to` with `startTo` (positive, before `to`). */
+    inline?: { path: string; to: number; startTo?: number };
 }
 
 export interface EditComment {

@@ -320,6 +320,10 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-sl .s { width: 16px; text-align: center; color: var(--text-tertiary); flex-shrink: 0; user-select: none; }
 .rv-sl .rv-plus { left: 32px; }
 .rv-sl-full { grid-column: 1 / -1; }
+/* Range of lines (new side): a shown thread's gets a thin bar in the gutter; the composer's, while it is open, a stronger
+   bar and a light tint (layered over the added / removed backgrounds). */
+.rv-l.in-range, .rv-sl .half.in-range { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--rv-new) 60%, transparent); }
+.rv-l.composing, .rv-sl .half.composing { box-shadow: inset 3px 0 0 var(--accent); background-image: linear-gradient(var(--rv-range), var(--rv-range)); }
 
 .rv-split-right .rv-th, .rv-split-right .rv-comp { margin-left: calc(50% + 8px); }
 .rv-split-left .rv-comp { margin-left: 12px; margin-right: calc(50% + 8px); }
@@ -409,6 +413,7 @@ button.armed { color: var(--rv-del) !important; font-weight: 600; }
 .rv-comp .row { display: flex; gap: 6px; justify-content: flex-end; align-items: center; margin-top: 6px; font-size: 11px; color: var(--text-secondary); }
 .rv-comp .row .k { margin-right: auto; }
 .rv-comp .q { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+.rv-comp .q .hint { color: var(--text-tertiary); }
 .rv-sl-full .rv-comp { margin-left: 12px; }
 
 /* ---------- Discussions ---------- */

@@ -881,6 +881,64 @@ def run_checks(page):
         expect(page.locator('.rv-comp')).to_have_count(0)
     inline_comment(page)
 
+    @check('range comment: "+" then Shift+click "+" on a later line, range marked, one POST with start_to, card « lignes a–b »')
+    def range_comment(page):
+        new_side = lambda h: [ln['n'] for ln in h['lines'] if ln['t'] != '-' and ln['n'] is not None]  # noqa: E731
+        lines = next(ns for ns in map(new_side, code_file['hunks']) if len(ns) >= 4)
+        start, end = lines[0], lines[3]
+        expected = sum(1 for h in code_file['hunks'] for n in new_side(h) if start <= n <= end)
+        block = page.locator(f'.rv-file[data-path="{code_file["path"]}"]')
+
+        def plus(n, shift=False):
+            row = block.locator(f'.rv-l[data-n="{n}"]').first
+            row.hover()
+            row.locator('.rv-plus').click(modifiers=['Shift'] if shift else None)
+
+        plus(start)
+        composer = page.locator('.rv-comp textarea')
+        expect(composer).to_be_focused()
+        composer.fill('Commentaire sur une plage')
+        expect(block.locator('.rv-l.in-range')).to_have_count(0)
+        plus(end, shift=True)
+        # the range is marked, the composer moved under its last line with the text typed, still focused
+        expect(block.locator('.rv-l.in-range.composing')).to_have_count(expected)
+        expect(page.locator('.rv-comp')).to_have_count(1)
+        expect(page.locator('.rv-comp .q')).to_contain_text(f'Lignes {start}–{end} de v{exp_to}')
+        under = page.evaluate('''() => {
+            let e = document.querySelector('.rv-comp').previousElementSibling;
+            while (e && !e.classList.contains('rv-l')) e = e.previousElementSibling;
+            return e && e.dataset.n;
+        }''')
+        assert under == str(end), f'the composer should follow line {end}, follows {under}'
+        expect(composer).to_have_value('Commentaire sur une plage')
+        expect(composer).to_be_focused()
+        # the browser did not select the text between the two clicks
+        assert page.evaluate('() => String(window.getSelection())') == '', 'Shift+click selected text'
+        calls.start()
+        composer.press('ControlOrMeta+Enter')
+        call = calls.wait(lambda c: is_post_comment(c) and (body_of(c).get('inline') or {}).get('start_to') == start, f'POST comments inline start_to={start}')
+        assert call is None or body_of(call)['inline'] == {'path': code_file['path'], 'to': end, 'start_to': start}, call
+        card = page.locator('.rv-diff .rv-th', has_text='Commentaire sur une plage')
+        expect(card).to_contain_text(f'Posté sur v{exp_to} · lignes {start}–{end}', timeout=10000)
+        expect(page.locator('.rv-comp')).to_have_count(0)
+        # after the background refresh, the server's thread (start_to read back) keeps its lines marked
+        expect(page.locator('.rv-head [data-action="refresh"]')).not_to_have_attribute('aria-busy', 'true', timeout=10000)
+        expect(card.locator('.rv-cm')).not_to_have_class(re.compile(r'\bpending\b'))
+        assert int(card.get_attribute('data-thread')) > 0
+        expect(block.locator('.rv-l.composing')).to_have_count(0)
+        expect(block.locator('.rv-l.in-range')).to_have_count(expected)
+        if CALLS_URL:
+            assert sum(1 for c in calls.all()[calls.mark:] if is_post_comment(c)) == 1, 'one POST for the range comment'
+        # side by side: the new-side cells only
+        page.locator('.rv-seg button[data-seg="split"]').click()
+        try:
+            expect(block.locator('.rv-sl .half.in-range')).to_have_count(expected)
+            expect(block.locator('.rv-sl .half.in-range[data-o]')).to_have_count(0)
+        finally:
+            page.locator('.rv-seg button[data-seg="unified"]').click()
+        expect(block.locator('.rv-l.in-range')).to_have_count(expected)
+    range_comment(page)
+
     @check('reply to a thread, then delete my reply: it goes, no "deleted comment" left behind')
     def reply_and_delete(page):
         assert my_thread, 'no open thread of mine'

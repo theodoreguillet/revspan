@@ -42,7 +42,7 @@ Common rules:
 | GET | `/api/pr/:ws/:repo/:id/pulse` | — | `PrPulse` (one Bitbucket read: `updatedOn`, `head`, `commentCount`, `participants`, `taskCount`; the page compares it to `PrDetail.pulse`, and reads it after a task write to update the open count) |
 | GET | `/api/pr/:ws/:repo/:id/summary` | — | `Summary` (slow the first time, then disk cache; an unavailable version has kind `unavailable`, the next one has `since`) |
 | GET | `/api/pr/:ws/:repo/:id/compare?from=&to=&context=` | — | `Comparison` (`from=0`: full version against its base; 410 `VERSION_UNAVAILABLE` if a bound is unavailable) |
-| POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` (`parentId`: the comment it answers, null for a thread root; `reactions: []`). A like is a reply `{ raw: "👍", parentId }`, an unlike the DELETE of that reply: no route of its own |
+| POST | `/api/pr/:ws/:repo/:id/comments` | `NewComment` | `Comment` (`parentId`: the comment it answers, null for a thread root; `reactions: []`). A like is a reply `{ raw: "👍", parentId }`, an unlike the DELETE of that reply: no route of its own. `inline: { path, to, startTo? }` comments a new-side line, or the lines `startTo` to `to` (see "Range comments") |
 | PUT | `/api/pr/:ws/:repo/:id/comments/:cid` | `EditComment` | `Comment` (404 if the comment was deleted meanwhile) |
 | DELETE | `/api/pr/:ws/:repo/:id/comments/:cid` | — | `Ok` |
 | POST / DELETE | `/api/pr/:ws/:repo/:id/comments/:cid/resolve` | — | `Ok` |
@@ -63,6 +63,19 @@ Common rules:
   was compared with. Pairings never cross. The side-by-side view puts each pair on one row and lines up the unpaired
   lines between two pairs by position; without `pair` (unpaired lines, or a comparison without it) a run lines up by
   position as before.
+
+## Range comments
+
+- `NewComment.inline.startTo` (optional, a positive whole number before `to`, otherwise 400): the comment covers the
+  new-side lines `startTo` to `to`. It is posted to Bitbucket in the same single request as a one-line comment,
+  `inline: { path, to, start_to }` (Bitbucket Cloud's multi-line comment). Old-side ranges are never created.
+- `Thread.anchor` is `{ to, from, startTo, startFrom }`: Bitbucket's `inline.to` / `from` and the first line of a
+  multi-line comment on each side (`start_to` / `start_from`); `startTo` / `startFrom` are null for a single line, and
+  when Bitbucket's value is not a whole number before the end line of its side.
+- `ThreadPlacement.startLine`: the first line of the range on the "to" side, mapped from the thread's version like
+  `line` (a changed first line also sets `moved`); null for a single line, for a range on the old side (shown at file
+  level, as every comment on removed lines), or when the mapped start does not come before `line` (the thread then
+  shows on `line` as a single line).
 
 ## Review queue contract
 

@@ -146,9 +146,105 @@ describe('PR page writes without waiting for a reload', () => {
         await settle();
 
         expect(api.compare).toHaveBeenCalledOnce();
-        expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 502, line: 12, moved: false, outOfHunks: false }]);
+        expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 502, line: 12, startLine: null, moved: false, outOfHunks: false }]);
         expect(threadById(load.detail.value, 502)).toMatchObject({ path: 'src/A.ts', anchor: { to: 12, from: null } });
         expect(api.pr).toHaveBeenCalledOnce();
+    });
+
+    describe('comment on a range of lines (Shift+click on a second "+")', () => {
+        const at = (n: number, path = 'src/A.ts', t: DiffLine['t'] = ' ') => {
+            const target = composerTargetFor(path, { t, o: t === '+' ? null : n, n: t === '-' ? null : n, text: `line ${n}`, hl: [] }, 'both');
+            if (!target) {
+                throw new Error('no composer target');
+            }
+            return target;
+        };
+
+        it('Shift+click on another line of the file makes a range from the first line clicked; the text typed follows the composer', () => {
+            const discussion = useDiscussion(ref, usePrLoad(ref, detail));
+            discussion.openComposer(at(5));
+            discussion.setDraft(at(5).key, 'These lines');
+            discussion.openComposer(at(8), true);
+            expect(discussion.composer.value).toMatchObject({ key: at(8).key, line: 8, startLine: 5 });
+            // the draft lives under the composer's last line
+            expect(discussion.draft(at(8).key)).toBe('These lines');
+            expect(discussion.draft(at(5).key)).toBe('');
+            // the first line clicked stays the anchor: shorter, then on the other side of it
+            discussion.openComposer(at(7), true);
+            expect(discussion.composer.value).toMatchObject({ line: 7, startLine: 5 });
+            discussion.openComposer(at(2), true);
+            expect(discussion.composer.value).toMatchObject({ key: at(5).key, line: 5, startLine: 2 });
+            expect(discussion.draft(at(5).key)).toBe('These lines');
+            // back on the anchor: that line alone
+            discussion.openComposer(at(5), true);
+            expect(discussion.composer.value).toEqual(at(5));
+        });
+
+        it('a draft already waiting under the new last line is kept after the text being typed', () => {
+            const discussion = useDiscussion(ref, usePrLoad(ref, detail));
+            discussion.setDraft(at(8).key, 'Older note');
+            discussion.openComposer(at(5));
+            discussion.setDraft(at(5).key, 'These lines');
+            discussion.openComposer(at(8), true);
+            expect(discussion.draft(at(8).key)).toBe('These lines\n\nOlder note');
+        });
+
+        it('Shift+click with no composer, on another file or on a removed line: a plain click', () => {
+            const discussion = useDiscussion(ref, usePrLoad(ref, detail));
+            discussion.openComposer(at(8), true);
+            expect(discussion.composer.value).toEqual(at(8));
+            discussion.openComposer(at(3, 'src/B.ts'), true);
+            expect(discussion.composer.value).toEqual(at(3, 'src/B.ts'));
+            discussion.openComposer(at(6, 'src/B.ts', '-'), true);
+            expect(discussion.composer.value).toEqual(at(6, 'src/B.ts', '-'));
+            // from a removed line's composer, Shift+click on a new-side line opens that line alone
+            discussion.openComposer(at(7, 'src/B.ts'), true);
+            expect(discussion.composer.value).toEqual(at(7, 'src/B.ts'));
+            // closed (Escape, Cancel): the next Shift+click starts afresh
+            discussion.closeComposer();
+            discussion.openComposer(at(9, 'src/B.ts'), true);
+            expect(discussion.composer.value).toEqual(at(9, 'src/B.ts'));
+        });
+
+        it('sends startTo in one request, shows the range at once, and restores the range if the send fails', async () => {
+            api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+            const load = usePrLoad(ref, detail);
+            const discussion = useDiscussion(ref, load);
+            await load.loadCompare({ from: 7, to: 10, context: 3 });
+            discussion.openComposer(at(9));
+            discussion.openComposer(at(12), true);
+            const range = discussion.composer.value!;
+            const sent = deferred<Comment>();
+            api.comment.mockReturnValue(sent.promise);
+
+            const sending = discussion.submitComposer(range, 'These lines');
+            expect(api.comment).toHaveBeenCalledOnce();
+            expect(api.comment).toHaveBeenCalledWith(ref, { raw: 'These lines', inline: { path: 'src/A.ts', to: 12, startTo: 9 } });
+            const pending = load.detail.value.threads.find((t) => t.comments[0]?.pending);
+            expect(pending?.anchor).toEqual({ to: 12, from: null, startTo: 9, startFrom: null });
+            expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: pending?.id, line: 12, startLine: 9, moved: false, outOfHunks: false }]);
+            expect(discussion.composer.value).toBeNull();
+
+            sent.reject(new Error('refused'));
+            expect(await sending).toBe(false);
+            expect(discussion.composer.value).toEqual(range);
+            expect(discussion.draft(range.key)).toBe('These lines');
+        });
+
+        it('the server\'s comment replaces the pending one, placed on the range', async () => {
+            api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve(comparison(from, to)));
+            api.comment.mockResolvedValue(serverComment(504, 'These lines'));
+            api.pr.mockReturnValue(new Promise(() => undefined));
+            const load = usePrLoad(ref, detail);
+            const discussion = useDiscussion(ref, load);
+            await load.loadCompare({ from: 7, to: 10, context: 3 });
+            discussion.openComposer(at(12));
+            discussion.openComposer(at(10), true);
+
+            expect(await discussion.submitComposer(discussion.composer.value!, 'These lines')).toBe(true);
+            expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 504, line: 12, startLine: 10, moved: false, outOfHunks: false }]);
+            expect(threadById(load.detail.value, 504).anchor).toEqual({ to: 12, from: null, startTo: 10, startFrom: null });
+        });
     });
 
     it('drops a refresh that started before the latest write', async () => {
@@ -226,7 +322,7 @@ describe('PR page writes without waiting for a reload', () => {
         // the range ending at the last version keeps its local placement, without a new computation
         await load.loadCompare({ from: 7, to: 10, context: 3 });
         expect(api.compare).toHaveBeenCalledTimes(3);
-        expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 502, line: 12, moved: false, outOfHunks: false }]);
+        expect(load.compare.value?.files[0]?.threads).toEqual([{ threadId: 502, line: 12, startLine: null, moved: false, outOfHunks: false }]);
     });
 
     it('does not keep a diff computed before a new inline thread', async () => {

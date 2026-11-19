@@ -8,7 +8,7 @@ import type {
 import { buildHunks, diffLines, diffStats, NO_EOL, splitDiffLines } from './diff.ts';
 import { withLeadIns } from './lead-in.ts';
 import { merge3 } from './merge3.ts';
-import { mapLine } from './linemap.ts';
+import { mapLines } from './linemap.ts';
 import { compareTreePaths } from '../../shared/file-tree.ts';
 import { categoryOf, sameHash } from './classify.ts';
 import { isReadable, previousAvailable } from './model.ts';
@@ -357,7 +357,10 @@ export async function fileSides(
     return { oldText: sideText(oldSide, before), newText: sideText(newSide, path) };
 }
 
-/** Places the comment threads on the files of the comparison ("to" side). */
+/**
+ * Places the comment threads on the files of the comparison ("to" side). A range comment's first line is mapped like its
+ * last one; it is dropped (single line at the end) when it does not land before the end.
+ */
 export async function placeThreads(
     src: CompareSource,
     versions: readonly CompareVersion[],
@@ -374,11 +377,15 @@ export async function placeThreads(
             return;
         }
         let line: number | null = null;
+        let startLine: number | null = null;
         let moved = false;
         const anchorLine = thread.anchor?.to;
+        // a detail cached before range comments has no startTo
+        const anchorStart = thread.anchor?.startTo ?? null;
         if (anchorLine && file.status !== 'removed' && !file.binary && !file.tooLarge) {
             if (thread.version === result.to) {
                 line = anchorLine;
+                startLine = anchorStart;
             } else {
                 // Thread version unavailable (commit erased): original position unreadable, thread left at file level.
                 const vc = versions[thread.version - 1];
@@ -387,15 +394,23 @@ export async function placeThreads(
                     const oldSide = sideOf(oldContent);
                     const newSide = sideOf(newContent);
                     if (oldSide.text !== null && newSide.text !== null) {
-                        const mapped = mapLine(oldSide.lines, newSide.lines, anchorLine);
-                        line = mapped.line;
-                        moved = mapped.changed;
+                        const [end, start] = mapLines(oldSide.lines, newSide.lines, anchorStart === null ? [anchorLine] : [anchorLine, anchorStart]);
+                        line = end?.line ?? null;
+                        moved = end?.changed ?? false;
+                        if (start?.line != null && line !== null && start.line < line) {
+                            startLine = start.line;
+                            // a line of the range changed since the comment
+                            moved ||= start.changed;
+                        }
                     }
                 }
             }
         }
+        if (startLine !== null && (line === null || startLine >= line)) {
+            startLine = null;
+        }
         const outOfHunks = line !== null && !file.hunks.some((h) => line! >= h.newStart && line! < h.newStart + h.newLines);
-        const placement: ThreadPlacement = { threadId: thread.id, line, moved, outOfHunks };
+        const placement: ThreadPlacement = { threadId: thread.id, line, startLine, moved, outOfHunks };
         file.threads.push(placement);
     }));
     for (const file of result.files) {

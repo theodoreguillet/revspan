@@ -38,7 +38,7 @@ function detailOf(loadedAt = '2026-11-16T10:00:00Z', minutes = 5, p: PrPulse = p
 const withThread = (d: PrDetail, thread: Thread): PrDetail => ({ ...d, threads: [...d.threads, thread] });
 
 function inlineThread(id: number, path: string): Thread {
-    return { id, path, anchor: { to: 3, from: null }, version: 10, resolved: false, resolvedBy: null, comments: [comment(id, 'Why?')] };
+    return { id, path, anchor: { to: 3, from: null, startTo: null, startFrom: null }, version: 10, resolved: false, resolvedBy: null, comments: [comment(id, 'Why?')] };
 }
 
 function comparison(from: number, to: number, paths: string[], placed: number[] = []): Comparison {
@@ -47,7 +47,7 @@ function comparison(from: number, to: number, paths: string[], placed: number[] 
         files: paths.map((path, i) => ({
             path, oldPath: null, status: 'modified' as const, category: 'code' as const, binary: false, tooLarge: false, added: 1, removed: 0,
             contentHash: 'h', conflict: false, hunks: [],
-            threads: i === 0 ? placed.map((threadId) => ({ threadId, line: 3, moved: false, outOfHunks: false })) : [],
+            threads: i === 0 ? placed.map((threadId) => ({ threadId, line: 3, startLine: null, moved: false, outOfHunks: false })) : [],
         })),
     };
 }

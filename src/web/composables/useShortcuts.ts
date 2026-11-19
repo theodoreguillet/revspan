@@ -22,6 +22,7 @@ export const SHORTCUTS = [
     { keys: 'shortcuts.keysClick', label: 'shortcuts.click' },
     { keys: 'shortcuts.keysExtend', label: 'shortcuts.extend' },
     { keys: 'shortcuts.keysSend', label: 'shortcuts.send' },
+    { keys: 'shortcuts.keysRange', label: 'shortcuts.range' },
     { keys: 'shortcuts.keysEscape', label: 'shortcuts.escape' },
     { keys: 'shortcuts.keysHomeSearch', label: 'shortcuts.homeSearch' },
     { keys: 'shortcuts.keysHelp', label: 'shortcuts.help' },

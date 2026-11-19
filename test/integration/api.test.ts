@@ -547,6 +547,31 @@ describe('actions', () => {
         expect(fake.calls[1]?.body).toEqual({ content: { raw: 'Nit' }, inline: { path: 'src/Action.ts', to: 3 } });
     });
 
+    it('comment on a range of lines: start_to posted (one request), the thread and its placement carry the range', async () => {
+        const { fake } = await setup();
+        const created = await api<Comment>('POST', `${prPath()}/comments`, { raw: 'These lines', inline: { path: 'src/Action.ts', to: 5, startTo: 3 } });
+        expect(created.status).toBe(200);
+        expect(fake.calls.map(shortCall)).toEqual(['POST /comments']);
+        expect(fake.calls[0]?.body).toEqual({ content: { raw: 'These lines' }, inline: { path: 'src/Action.ts', to: 5, start_to: 3 } });
+        // the fake answers like Bitbucket Cloud: the start of each side, null when not set
+        expect(fake.data.prs.get(FAKE_PRS.main)?.comments.at(-1)?.inline).toEqual({ path: 'src/Action.ts', to: 5, from: null, start_to: 3, start_from: null });
+
+        const thread = (await detail()).threads.find((t) => t.id === created.body.id);
+        expect(thread?.anchor).toEqual({ to: 5, from: null, startTo: 3, startFrom: null });
+        const { body: cmp } = await api<Comparison>('GET', `${prPath()}/compare?from=2&to=6`);
+        expect(cmp.files.flatMap((f) => f.threads).find((p) => p.threadId === created.body.id)).toMatchObject({ line: 5, startLine: 3 });
+    });
+
+    it('comment on a range: a start not before the last line is refused (400), nothing posted', async () => {
+        const { fake } = await setup();
+        for (const startTo of [5, 9, 0, -1, 2.5]) {
+            const res = await api<ApiErrorBody>('POST', `${prPath()}/comments`, { raw: 'Range', inline: { path: 'src/Action.ts', to: 5, startTo } });
+            expect(res.status).toBe(400);
+            expect(res.body.error.message).toContain('inline.startTo');
+        }
+        expect(fake.calls).toEqual([]);
+    });
+
     it('like = a "👍" reply shown as a reaction on that comment; unlike = deleting it (no new route)', async () => {
         const { fake } = await setup();
         const thread = (await detail()).threads.find((t) => t.path === 'src/Action.ts' && !t.resolved);

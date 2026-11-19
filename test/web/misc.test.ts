@@ -4,7 +4,7 @@ import { createTranslator } from '../../src/web/i18n/translator.ts';
 import { ago, daysBetween, gapLabel, masterMasked, openedSince, relTime } from '../../src/web/lib/format.ts';
 import { GROUP_TITLES, cardBadges, cardSubtitle, cardTooltip, emptyHome, truncatedNotice } from '../../src/web/lib/home.ts';
 import { prRoute } from '../../src/web/lib/prUrl.ts';
-import { initials, likedByMe, newActivity, reactionChips, threadGroups } from '../../src/web/lib/threads.ts';
+import { anchorSpan, initials, likedByMe, newActivity, placementSpan, reactionChips, sameSpan, spanLabel, spanText, threadGroups } from '../../src/web/lib/threads.ts';
 import { commentById, prLong } from './fixtures.ts';
 
 // French, the language these expectations are written in; English variants are checked next to them.
@@ -154,6 +154,36 @@ describe('threads', () => {
         expect(g.fresh.map((t) => t.id)).toEqual([120]);
         expect(g.open.map((t) => t.id)).toEqual([110]);
         expect(g.resolved.map((t) => t.id).sort()).toEqual([101, 103, 105]);
+    });
+
+    it('lines of a thread: the range written on its side (new side first), « lignes 5–8 » / "lines 5–8"', () => {
+        const range = anchorSpan({ to: 227, from: null, startTo: 220, startFrom: null });
+        expect(range).toEqual({ start: 220, end: 227, old: false });
+        expect(spanLabel(fr, range!)).toBe('lignes 220–227');
+        expect(spanLabel(en, range!)).toBe('lines 220–227');
+        expect(spanText(range!)).toBe('220–227');
+        // written on removed lines (old side)
+        expect(anchorSpan({ to: null, from: 12, startTo: null, startFrom: 10 })).toEqual({ start: 10, end: 12, old: true });
+        // one line, as before
+        const single = anchorSpan({ to: 5, from: null, startTo: null, startFrom: null });
+        expect(single).toEqual({ start: null, end: 5, old: false });
+        expect(spanLabel(fr, single!)).toBe('ligne 5');
+        expect(spanText(single!)).toBe('5');
+        // a detail cached before ranges existed has no start fields
+        expect(anchorSpan({ to: 5, from: null } as unknown as Parameters<typeof anchorSpan>[0])).toEqual({ start: null, end: 5, old: false });
+        // the start of the other side never makes a range
+        expect(anchorSpan({ to: 5, from: 4, startTo: null, startFrom: 2 })).toEqual({ start: null, end: 5, old: false });
+        expect(anchorSpan(null)).toBeNull();
+    });
+
+    it('lines where a thread is shown: its placement, null at file level; same lines or not', () => {
+        expect(placementSpan({ threadId: 1, line: 8, startLine: 5, moved: false, outOfHunks: false })).toEqual({ start: 5, end: 8 });
+        expect(placementSpan({ threadId: 1, line: 8, startLine: null, moved: false, outOfHunks: false })).toEqual({ start: null, end: 8 });
+        expect(placementSpan({ threadId: 1, line: null, startLine: null, moved: false, outOfHunks: false })).toBeNull();
+        expect(placementSpan(null)).toBeNull();
+        expect(sameSpan({ start: 5, end: 8 }, anchorSpan({ to: 8, from: null, startTo: 5, startFrom: null })!)).toBe(true);
+        expect(sameSpan({ start: null, end: 8 }, { start: 5, end: 8 })).toBe(false);
+        expect(sameSpan({ start: 5, end: 9 }, { start: 5, end: 8 })).toBe(false);
     });
 
     it('new threads and replies since my review', () => {

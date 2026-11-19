@@ -18,7 +18,7 @@ function file(path: string): FileDiff {
     return {
         path, oldPath: null, status: 'modified', category: 'code', binary: false, tooLarge: false, added: 1, removed: 1, contentHash: 'h', conflict: false,
         hunks: [{ oldStart: 10, oldLines: 3, newStart: 10, newLines: 3, header: '', lines: [line(10), line(11, '-'), line(11, '+'), line(12)] }],
-        threads: [{ threadId: 120, line: 12, moved: false, outOfHunks: false }],
+        threads: [{ threadId: 120, line: 12, startLine: null, moved: false, outOfHunks: false }],
     };
 }
 
@@ -46,10 +46,19 @@ describe('optimistic updates of the PR detail', () => {
 
         expect(next.threads).toHaveLength(detail.threads.length + 1);
         expect(next.threads.at(-1)).toMatchObject({
-            id: -2, path: 'src/A.ts', anchor: { to: 12, from: null }, version: 10, resolved: false, resolvedBy: null,
+            id: -2, path: 'src/A.ts', anchor: { to: 12, from: null, startTo: null, startFrom: null }, version: 10, resolved: false, resolvedBy: null,
             comments: [{ id: -2, raw: 'Why?', pending: true, parentId: null }],
         });
         expect(next.pulse).toBe(detail.pulse);
+    });
+
+    it('a pending comment on a range of lines carries the range until the server\'s thread replaces it', () => {
+        const detail = prLong().data;
+        const next = withPendingComment(detail, { tempId: -3, raw: 'These lines', threadId: null, inline: { path: 'src/A.ts', to: 12, startTo: 9 } }, me);
+        expect(threadById(next, -3).anchor).toEqual({ to: 12, from: null, startTo: 9, startFrom: null });
+
+        const rooted = replaceComment(next, -3, serverComment(503, 'These lines'));
+        expect(threadById(rooted, 503).anchor).toEqual({ to: 12, from: null, startTo: 9, startFrom: null });
     });
 
     it('replaceComment swaps the pending comment and renames a new thread', () => {
@@ -92,11 +101,16 @@ describe('optimistic placement of a new inline thread', () => {
     it('withPlacement marks a line outside the hunks', () => {
         const cmp = comparison();
         const inside = withPlacement(cmp, 'src/A.ts', 501, 11);
-        expect(inside.files[0]?.threads).toContainEqual({ threadId: 501, line: 11, moved: false, outOfHunks: false });
+        expect(inside.files[0]?.threads).toContainEqual({ threadId: 501, line: 11, startLine: null, moved: false, outOfHunks: false });
 
         const outside = withPlacement(cmp, 'src/A.ts', 502, 40);
-        expect(outside.files[0]?.threads).toContainEqual({ threadId: 502, line: 40, moved: false, outOfHunks: true });
+        expect(outside.files[0]?.threads).toContainEqual({ threadId: 502, line: 40, startLine: null, moved: false, outOfHunks: true });
         expect(cmp.files[0]?.threads).toHaveLength(1);
+    });
+
+    it('withPlacement of a range: its start line too', () => {
+        const ranged = withPlacement(comparison(), 'src/A.ts', 503, 12, 10);
+        expect(ranged.files[0]?.threads).toContainEqual({ threadId: 503, line: 12, startLine: 10, moved: false, outOfHunks: false });
     });
 
     it('withPlacement leaves another file untouched', () => {

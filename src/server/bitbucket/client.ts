@@ -554,7 +554,7 @@ export class BitbucketClient {
             body.parent = { id: parentId };
         }
         if (inline) {
-            body.inline = { path: inline.path, to: inline.to };
+            body.inline = { path: inline.path, to: inline.to, ...(inline.startTo === undefined ? {} : { start_to: inline.startTo }) };
         }
         const created = await this.json<BbComment>('POST', `${this.prPath(ws, repo, id)}/comments`, { body });
         if (!created) {

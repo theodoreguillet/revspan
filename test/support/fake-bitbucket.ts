@@ -1,8 +1,8 @@
 // In-memory fake Bitbucket Cloud (API 2.0) for integration tests, the UI and development.
 // Repository acme/demo-repo, several PRs covering the page's cases (see FAKE_PRS). Writes are
 // recorded (GET /__calls), so are all requests (GET /__requests). GET /__delay?route=diffstat&ms=1500 slows down every
-// request whose path has that segment (ms=0 removes it). POST /__comment {"raw", "pr"?, "parent"?, "inline"?: {path, to}}
-// adds a comment by Yann Bernard (somebody else commenting meanwhile). Manual launch: node test/support/fake-bitbucket.ts [port]
+// request whose path has that segment (ms=0 removes it). POST /__comment {"raw", "pr"?, "parent"?, "inline"?: {path, to,
+// start_to?}} adds a comment by Yann Bernard (somebody else commenting meanwhile). Manual launch: node test/support/fake-bitbucket.ts [port]
 import { createHash } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -124,7 +124,18 @@ interface PlanStep {
 const openTasks = (tasks: readonly BbTask[]): number => tasks.filter((t) => t.state !== 'RESOLVED').length;
 const hex = (name: string): string => createHash('sha1').update(name).digest('hex');
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const lines = (list: readonly string[]): string => `${list.join('\n')}\n`;
+
+/** `inline` of a posted comment: a new-side line, or a range from `start_to` (Bitbucket's multi-line comment). */
+interface InlineBody {
+    path: string;
+    to: number;
+    start_to?: number;
+}
+
+/** As Bitbucket Cloud returns it: a range also has the start of each side (null when not set). */
+const inlineOf = ({ path, to, start_to: startTo }: InlineBody): NonNullable<BbComment['inline']> =>
+    (typeof startTo === 'number' ? { path, to, from: null, start_to: startTo, start_from: null } : { path, to, from: null });
+const lines =(list: readonly string[]): string => `${list.join('\n')}\n`;
 const DAY_MS = 86_400_000;
 const addDays = (iso: string, days: number): string => new Date(Date.parse(iso) + days * DAY_MS).toISOString().replace('.000', '');
 
@@ -635,12 +646,12 @@ export function startFakeBitbucket({ port = 0, bigPr = false } = {}): Promise<Fa
             }
             const now = new Date(Math.max(Date.now(), Date.parse(fake.pr.updated_on ?? '') + 1 || 0)).toISOString();
             const parent = typeof input.parent === 'number' ? input.parent : undefined;
-            const inline = input.inline as { path: string; to: number } | undefined;
+            const inline = input.inline as InlineBody | undefined;
             const created: BbComment = {
                 id: data.nextId(), created_on: now, updated_on: now, user: YAN, deleted: false,
                 content: { raw: String(input.raw ?? ''), html: `<p>${escapeHtml(String(input.raw ?? ''))}</p>` },
                 ...(parent ? { parent: { id: parent } } : {}),
-                ...(inline ? { inline: { path: inline.path, to: inline.to, from: null } } : {}),
+                ...(inline ? { inline: inlineOf(inline) } : {}),
             };
             fake.comments.push(created);
             fake.activity.push({ comment: created });
@@ -772,12 +783,12 @@ export function startFakeBitbucket({ port = 0, bigPr = false } = {}): Promise<Fa
         if (sub === '/comments' && req.method === 'POST') {
             const raw = String((body?.content as { raw?: string } | undefined)?.raw ?? '');
             const parent = body?.parent as { id: number } | undefined;
-            const inline = body?.inline as { path: string; to: number } | undefined;
+            const inline = body?.inline as InlineBody | undefined;
             const created: BbComment = {
                 id: data.nextId(), created_on: now, updated_on: now, user: ME, deleted: false,
                 content: { raw, html: `<p>${escapeHtml(raw)}</p>` },
                 ...(parent ? { parent: { id: parent.id } } : {}),
-                ...(inline ? { inline: { path: inline.path, to: inline.to, from: null } } : {}),
+                ...(inline ? { inline: inlineOf(inline) } : {}),
             };
             fake.comments.push(created);
             fake.activity.push({ comment: created });

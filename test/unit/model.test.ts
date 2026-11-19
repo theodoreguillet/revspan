@@ -196,6 +196,37 @@ describe('buildThreads', () => {
         const [anonymous] = buildThreads(raw, versionsFixture(), { meUuid: null, sinceDate: null });
         expect(anonymous!.comments[0]!.reactions.map((r) => r.myCommentIds)).toEqual([[], []]);
     });
+
+    it('multi-line comments: the range start of each side (start_to, start_from), null when absent or not before the end', () => {
+        const root = (id: number, inline: BbComment['inline']): BbComment => ({
+            id, created_on: `2026-11-05T12:0${id % 10}:00Z`, user: user(YAN, 'Yann'), content: { raw: 'Range', html: '<p>Range</p>' }, inline,
+        });
+        const raw: BbComment[] = [
+            // as Bitbucket Cloud returns a multi-line comment on the new side
+            root(30, { path: 'src/A.ts', from: null, to: 227, start_from: null, start_to: 220 }),
+            // written on removed lines (old side)
+            root(31, { path: 'src/A.ts', from: 12, to: null, start_from: 10, start_to: null }),
+            // single line: no start fields at all
+            root(32, { path: 'src/A.ts', to: 5 }),
+            // inconsistent starts are ignored: equal to the end, after it, zero, not a whole number, on a side without an end
+            root(33, { path: 'src/A.ts', from: null, to: 8, start_to: 8 }),
+            root(34, { path: 'src/A.ts', from: null, to: 8, start_to: 9 }),
+            root(35, { path: 'src/A.ts', from: null, to: 8, start_to: 0 }),
+            root(36, { path: 'src/A.ts', from: null, to: 8, start_to: 2.5 }),
+            root(37, { path: 'src/A.ts', from: null, to: 8, start_from: 3 }),
+        ];
+        const anchors = Object.fromEntries(buildThreads(raw, versionsFixture(), { meUuid: ME, sinceDate: null }).map((t) => [t.id, t.anchor]));
+        expect(anchors).toEqual({
+            30: { to: 227, from: null, startTo: 220, startFrom: null },
+            31: { to: null, from: 12, startTo: null, startFrom: 10 },
+            32: { to: 5, from: null, startTo: null, startFrom: null },
+            33: { to: 8, from: null, startTo: null, startFrom: null },
+            34: { to: 8, from: null, startTo: null, startFrom: null },
+            35: { to: 8, from: null, startTo: null, startFrom: null },
+            36: { to: 8, from: null, startTo: null, startFrom: null },
+            37: { to: 8, from: null, startTo: null, startFrom: null },
+        });
+    });
 });
 
 describe('tasks', () => {

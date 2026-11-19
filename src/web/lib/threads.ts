@@ -1,8 +1,42 @@
 // Discussion threads: groups, activity, new comments, reactions, avatars.
-import type { Comment, Thread, User } from '../../shared/api.ts';
+import type { Comment, Thread, ThreadPlacement, User } from '../../shared/api.ts';
 import { THUMBS } from '../../shared/reactions.ts';
 import type { Translator } from '../i18n/index.ts';
 import { firstName } from './format.ts';
+
+/** Lines of a thread: a range from `start` to `end`, or the line `end` alone (start null). */
+export interface LineSpan {
+    start: number | null;
+    end: number;
+}
+
+/**
+ * Lines a thread was written on: its new-side line (or range), otherwise its old-side one (`old`); null for a general
+ * comment. The start of the other side never makes a range; a detail cached before ranges has no start at all.
+ */
+export function anchorSpan(anchor: Thread['anchor']): (LineSpan & { old: boolean }) | null {
+    if (anchor?.to != null) {
+        return { start: anchor.startTo ?? null, end: anchor.to, old: false };
+    }
+    if (anchor?.from != null) {
+        return { start: anchor.startFrom ?? null, end: anchor.from, old: true };
+    }
+    return null;
+}
+
+/** Lines where a thread shows on the "to" side; null at file level. */
+export function placementSpan(placement: ThreadPlacement | null | undefined): LineSpan | null {
+    return placement?.line != null ? { start: placement.startLine ?? null, end: placement.line } : null;
+}
+
+export const sameSpan = (a: LineSpan, b: LineSpan): boolean => a.end === b.end && (a.start ?? null) === (b.start ?? null);
+
+/** « lignes 220–227 » / "lines 220–227", or « ligne 227 ». */
+export const spanLabel = (tr: Translator, span: LineSpan): string =>
+    (span.start != null ? tr.t('thread.lines', { from: span.start, to: span.end }) : tr.t('thread.line', { line: span.end }));
+
+/** "220–227" or "227" (after a path: `src/a.ts:220–227`). */
+export const spanText = (span: LineSpan): string => (span.start != null ? `${span.start}–${span.end}` : String(span.end));
 
 export function lastActivity(thread: Thread): string {
     return thread.comments.reduce((max, c) => (c.createdOn > max ? c.createdOn : max), '');

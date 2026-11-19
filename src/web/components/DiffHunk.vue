@@ -13,7 +13,7 @@ import { usePrPage } from '../composables/usePrPage.ts';
 import { locale, t } from '../i18n/index.ts';
 import {
     LINE_PX, currentMatchKey, hunkRange, lineSign, rowBlocks, sideBySideRows, unifiedRows, viewportDistance,
-    type ComposerTarget, type PlacedThread, type RowBlock,
+    type ComposerTarget, type LineView, type PlacedThread, type RowBlock, type SplitCellView,
 } from '../lib/diff.ts';
 import { familyOf } from '../lib/goto-definition.ts';
 import { languageOf, lineTokens } from '../lib/highlight.ts';
@@ -125,7 +125,17 @@ const blockStyle = (block: RowBlock): Record<string, string> => {
 const unifiedIn = (block: RowBlock) => rows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 const splitIn = (block: RowBlock) => splitRows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 
-const lineClass = (t: string): string => (t === '+' ? 'rv-l a' : t === '-' ? 'rv-l r' : 'rv-l');
+const lineClass = (row: LineView) =>
+    [row.line.t === '+' ? 'rv-l a' : row.line.t === '-' ? 'rv-l r' : 'rv-l', { 'in-range': row.inRange, composing: row.composing }];
+const cellClass = (cell: SplitCellView, line: DiffLine) => ['half', {
+    r: line.t !== ' ' && cell.side === 'old', a: line.t !== ' ' && cell.side === 'new', 'in-range': cell.inRange, composing: cell.composing,
+}];
+/** Shift+click on a "+" (a range of lines): no text selected between the two clicks, the focus stays in the composer. */
+const onPlusDown = (event: MouseEvent): void => {
+    if (event.shiftKey) {
+        event.preventDefault();
+    }
+};
 const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
     ? t('diff.commentDeletedLineTitle')
     : t('diff.commentLineTitle', { line: target.line }));
@@ -144,7 +154,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
         >
             <template v-if="rendered(block)">
                 <template v-for="{ row, k } in unifiedIn(block)" :key="k">
-                    <div :ref="lineRef(k === curLine, k === jump?.index)" :class="lineClass(row.line.t)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
+                    <div :ref="lineRef(k === curLine, k === jump?.index)" :class="lineClass(row)" :data-o="row.line.o ?? ''" :data-n="row.line.n ?? ''">
                         <span class="n">{{ row.line.o ?? '' }}</span>
                         <span class="n">{{ row.line.n ?? '' }}</span>
                         <span class="s">{{ lineSign(row.line.t) }}</span>
@@ -167,7 +177,8 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                             tabindex="-1"
                             data-action="add-comment"
                             :title="plusTitle(row.target)"
-                            @click="page.openComposer(row.target)"
+                            @mousedown="onPlusDown"
+                            @click="page.openComposer(row.target, $event.shiftKey)"
                         >
                             +
                         </button>
@@ -195,7 +206,7 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                             <div
                                 v-else
                                 :ref="lineRef(curLine >= 0 && indexOf(cell.line) === curLine, isJump(cell.line, cell.side))"
-                                :class="['half', { r: cell.line.t !== ' ' && cell.side === 'old', a: cell.line.t !== ' ' && cell.side === 'new' }]"
+                                :class="cellClass(cell, cell.line)"
                                 :data-o="cell.side === 'old' ? cell.line.o ?? '' : undefined"
                                 :data-n="cell.side === 'new' ? cell.line.n ?? '' : undefined"
                             >
@@ -220,7 +231,8 @@ const plusTitle = (target: ComposerTarget): string => (target.kind === 'old'
                                     tabindex="-1"
                                     data-action="add-comment"
                                     :title="plusTitle(cell.target)"
-                                    @click="page.openComposer(cell.target)"
+                                    @mousedown="onPlusDown"
+                                    @click="page.openComposer(cell.target, $event.shiftKey)"
                                 >
                                     +
                                 </button>

@@ -5,7 +5,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { Thread, ThreadPlacement } from '../../shared/api.ts';
 import { actionKey, replyDraftKey } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
-import { t } from '../i18n/index.ts';
+import { t, tr } from '../i18n/index.ts';
+import { anchorSpan, placementSpan, sameSpan, spanLabel } from '../lib/threads.ts';
 import CommentItem from './CommentItem.vue';
 import I18nText from './I18nText.vue';
 
@@ -27,8 +28,15 @@ const reply = computed({
     set: (value: string) => page.setDraft(draftKey.value, value),
 });
 const collapsedBar = computed(() => props.thread.resolved && props.context === 'diff' && !page.expandedThreads.has(props.thread.id));
-const origin = computed(() => props.thread.anchor?.to ?? props.thread.anchor?.from ?? null);
-const fromOnly = computed(() => props.thread.anchor?.to == null && props.thread.anchor?.from != null);
+/** Lines the comment was written on (« ligne 12 », « lignes 220–227 »), on the old side for a removed line. */
+const origin = computed(() => anchorSpan(props.thread.anchor));
+/** Lines where it shows in this diff, when they differ from those (relocated). */
+const here = computed(() => {
+    const span = placementSpan(props.placement);
+    return span && !(origin.value && sameSpan(span, origin.value)) ? span : null;
+});
+/** Folded bar: the lines shown, or those of the comment (new side only). */
+const barSpan = computed(() => (props.thread.anchor?.to ? placementSpan(props.placement) ?? origin.value : null));
 /** New thread being sent: no reply nor resolution until Bitbucket gives it an id. */
 const pending = computed(() => props.thread.comments[0]?.pending === true);
 
@@ -88,7 +96,7 @@ function autosize(): void {
         <button type="button" class="rv-th-bar" aria-expanded="false" @click="page.toggleThreadExpanded(thread.id)">
             <span class="ok">✓</span>
             {{ thread.resolvedBy ? t('thread.resolvedBarBy', { name: thread.resolvedBy.displayName }) : t('thread.resolvedBar') }}
-            · {{ t('common.comments', { count: thread.comments.length }) }}<template v-if="thread.anchor?.to"> · {{ t('thread.line', { line: placement?.line ?? thread.anchor.to }) }}</template>
+            · {{ t('common.comments', { count: thread.comments.length }) }}<template v-if="barSpan"> · {{ spanLabel(tr(), barSpan) }}</template>
         </button>
         <button
             v-if="!pending"
@@ -109,8 +117,8 @@ function autosize(): void {
             </span>
             <span v-else>
                 <I18nText k="thread.postedOn"><template #version><b>v{{ thread.version }}</b></template></I18nText>
-                <template v-if="origin != null"> · {{ t('thread.line', { line: origin }) }}<template v-if="fromOnly"> {{ t('thread.oldVersion') }}</template></template>
-                <template v-if="placement?.line != null && placement.line !== origin"> {{ t('thread.lineHere', { line: placement.line }) }}</template>
+                <template v-if="origin"> · {{ spanLabel(tr(), origin) }}<template v-if="origin.old"> {{ t('thread.oldVersion') }}</template></template>
+                <template v-if="here"> {{ here.start != null ? t('thread.linesHere', { from: here.start, to: here.end }) : t('thread.lineHere', { line: here.end }) }}</template>
                 <template v-if="placement?.moved"> · <span class="rv-moved" :title="t('thread.movedTitle')">{{ t('thread.moved') }}</span></template>
                 <template v-if="fileLevel && placement?.outOfHunks"> · {{ t('thread.outOfHunks') }}</template>
                 <template v-else-if="fileLevel && placement && placement.line == null"> · {{ t('thread.fileLevel') }}</template>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapLine } from '../../src/server/core/linemap.ts';
+import { mapLine, mapLines } from '../../src/server/core/linemap.ts';
 import { categoryOf, sameHash } from '../../src/server/core/classify.ts';
 
 describe('mapLine', () => {
@@ -20,6 +20,14 @@ describe('mapLine', () => {
     it('empty file or out-of-range line', () => {
         expect(mapLine(['a'], [], 1)).toEqual({ line: null, changed: true });
         expect(mapLine(['a'], ['a', 'b'], 9)).toEqual({ line: 2, changed: true });
+    });
+
+    it('several lines at once (a range\'s start and end): same answers as one by one', () => {
+        const oldLines = ['a', 'b', 'c', 'd', 'e'];
+        const newLines = ['x', 'a', 'c', 'D', 'e'];
+        const lines = [1, 2, 4, 5, 9];
+        expect(mapLines(oldLines, newLines, lines)).toEqual(lines.map((line) => mapLine(oldLines, newLines, line)));
+        expect(mapLines(['a'], [], [1, 2])).toEqual([{ line: null, changed: true }, { line: null, changed: true }]);
     });
 });
 

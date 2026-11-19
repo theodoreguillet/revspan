@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Comment composer: on a diff line (target) or general comment (Discussions tab).
+// Comment composer: on a diff line or a range of lines (target) or general comment (Discussions tab).
 import { computed, onMounted, ref } from 'vue';
 import { GENERAL_DRAFT } from '../composables/useDiscussion.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
@@ -24,8 +24,11 @@ const label = computed(() => {
     if (!target || !cmp) {
         return t('composer.general');
     }
-    return target.kind === 'old'
-        ? t('composer.deletedLine', { line: target.line, from: vname(cmp.from), to: vname(cmp.to) })
+    if (target.kind === 'old') {
+        return t('composer.deletedLine', { line: target.line, from: vname(cmp.from), to: vname(cmp.to) });
+    }
+    return target.startLine != null
+        ? t('composer.lines', { from: target.startLine, to: target.line, version: vname(cmp.to) })
         : t('composer.line', { line: target.line, version: vname(cmp.to) });
 });
 const placeholder = computed(() => {
@@ -71,7 +74,7 @@ onMounted(() => {
 
 <template>
     <div :class="['rv-comp', { old: target?.kind === 'old' }]" :data-composer="key">
-        <div class="q">{{ label }}</div>
+        <div class="q">{{ label }}<span v-if="target?.kind === 'new'" class="hint"> · {{ t('composer.rangeHint') }}</span></div>
         <textarea
             ref="textarea"
             v-model="text"

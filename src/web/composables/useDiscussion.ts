@@ -5,7 +5,7 @@ import { reactive, ref } from 'vue';
 import type { Comment, Comparison, NewComment, PrRef, Thread } from '../../shared/api.ts';
 import { THUMBS } from '../../shared/reactions.ts';
 import { tr } from '../i18n/index.ts';
-import { deletedLineComment, type ComposerTarget } from '../lib/diff.ts';
+import { deletedLineComment, rangeTarget, type ComposerTarget } from '../lib/diff.ts';
 import { afterOwnWrite } from '../lib/pulse.ts';
 import {
     removeComment, replaceComment, withEditedComment, withMyReaction, withMyReactionId, withoutMyReaction, withoutPlacement, withPendingComment, withPlacement,
@@ -48,12 +48,52 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         }
     }
 
-    function openComposer(target: ComposerTarget): void {
+    /** Line of the last plain click on a "+": a Shift+click makes the range from it to the line clicked. */
+    let rangeAnchor: ComposerTarget | null = null;
+
+    /**
+     * "+" on a line. `extend` (Shift+click) while a new-side composer is open in the same file, on a new-side line: the
+     * composer takes the range from the line first clicked to this one (it moves under the range's last line, and the
+     * text typed goes with it). Otherwise (no composer, another file, a removed line): this line alone.
+     */
+    function openComposer(target: ComposerTarget, extend = false): void {
+        const current = composer.value;
+        if (extend && current) {
+            const range = rangeTarget(anchorOf(current), target);
+            if (range) {
+                moveDraft(current.key, range.key);
+                composer.value = range;
+                return;
+            }
+        }
+        rangeAnchor = target;
         composer.value = target;
+    }
+
+    /** The line a range grows from: the last plain click when it is an end of the open composer, else its last line. */
+    function anchorOf(current: ComposerTarget): ComposerTarget {
+        const anchor = rangeAnchor;
+        const isEnd = anchor?.path === current.path && anchor.kind === current.kind && (anchor.line === current.line || anchor.line === current.startLine);
+        return anchor && isEnd ? anchor : current;
+    }
+
+    /**
+     * The draft of a composer follows it when its range changes (it is kept under the range's last line). A text already
+     * waiting there (typed earlier on that line) is kept after it.
+     */
+    function moveDraft(from: string, to: string): void {
+        const text = draft(from);
+        if (from === to || !text) {
+            return;
+        }
+        drafts.delete(from);
+        const waiting = draft(to);
+        setDraft(to, waiting ? `${text}\n\n${waiting}` : text);
     }
 
     function closeComposer(): void {
         composer.value = null;
+        rangeAnchor = null;
     }
 
     /** Puts back the text of a failed send, before anything typed in the same box since. */
@@ -82,7 +122,9 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         // an inline comment is only possible on the last version: its line is valid in every range that ends there
         const version = load.compare.value?.to;
         const place = (threadId: number) => (c: Comparison): Comparison =>
-            (inline && c.to === version ? withPlacement(withoutPlacement(c, tempId), inline.path, threadId, inline.to) : withoutPlacement(c, tempId));
+            (inline && c.to === version
+                ? withPlacement(withoutPlacement(c, tempId), inline.path, threadId, inline.to, inline.startTo ?? null)
+                : withoutPlacement(c, tempId));
         let created: Comment | null = null;
         return load.act(async () => {
             created = await api.comment(prRef, body);
@@ -123,14 +165,15 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
         });
     }
 
-    /** Inline comment (new side) or, on a deleted line, a general comment quoting it. */
+    /** Inline comment (new side, one line or a range) or, on a deleted line, a general comment quoting it. */
     function submitComposer(target: ComposerTarget, text: string): Promise<boolean> {
         const cmp = load.compare.value;
         const sending = { draftKey: target.key, text, key: actionKey.composer(target.key), target };
         if (target.kind === 'old' && cmp) {
             return send({ raw: deletedLineComment(tr(), target.path, cmp.from, cmp.to, target.code, text) }, sending);
         }
-        return send({ raw: text, inline: { path: target.path, to: target.line } }, sending);
+        const range = target.startLine != null && target.startLine < target.line ? { startTo: target.startLine } : {};
+        return send({ raw: text, inline: { path: target.path, to: target.line, ...range } }, sending);
     }
 
     const reply = (thread: Thread, text: string): Promise<boolean> =>

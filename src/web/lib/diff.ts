@@ -184,12 +184,15 @@ export function fileThreadCount(file: FileDiff, threadsById: Map<number, Thread>
 export type ComposerKind = 'new' | 'old';
 
 export interface ComposerTarget {
+    /** Draft and composer key: that of the (last) line, so a range keeps the text typed under its last line. */
     key: string;
     path: string;
     kind: ComposerKind;
-    /** Line number on the new (new) or old (old) side. */
+    /** Line number on the new (new) or old (old) side; a range's last line. */
     line: number;
     code: string;
+    /** New side only: first line of a range of lines (before `line`); absent for a single line. */
+    startLine?: number;
 }
 
 /**
@@ -206,7 +209,44 @@ export function composerTargetFor(path: string, line: DiffLine, side: 'old' | 'n
     return null;
 }
 
+/**
+ * Range from the line of `anchor` to that of `other` (Shift+click on a second "+"): both new-side lines of the same file.
+ * The target of the later line, starting at the earlier one; the line alone when both are the same; null otherwise. An
+ * anchor that is itself a range counts by its own line (its last one).
+ */
+export function rangeTarget(anchor: ComposerTarget, other: ComposerTarget): ComposerTarget | null {
+    if (anchor.kind !== 'new' || other.kind !== 'new' || anchor.path !== other.path) {
+        return null;
+    }
+    const later = other.line >= anchor.line ? other : anchor;
+    const last: ComposerTarget = { key: later.key, path: later.path, kind: later.kind, line: later.line, code: later.code };
+    const first = Math.min(anchor.line, other.line);
+    return first < last.line ? { ...last, startLine: first } : last;
+}
+
 const sameTarget = (a: ComposerTarget | null, b: ComposerTarget | null): boolean => !!a && !!b && a.key === b.key;
+
+/** Ranges of lines [first, last] on the new side: those of the shown range threads, and the composer's. */
+type LineRanges = readonly (readonly [number, number])[];
+
+function threadRanges(byLine: Map<number, PlacedThread[]>): LineRanges {
+    const ranges: [number, number][] = [];
+    for (const list of byLine.values()) {
+        for (const { placement } of list) {
+            if (placement.startLine != null && placement.line != null) {
+                ranges.push([placement.startLine, placement.line]);
+            }
+        }
+    }
+    return ranges;
+}
+
+const composerRange = (composer: ComposerTarget | null, path: string): LineRanges =>
+    (composer?.kind === 'new' && composer.path === path && composer.startLine != null ? [[composer.startLine, composer.line]] : []);
+
+/** The new-side line `line` is in one of the ranges (a removed line never is). */
+const inRanges = (ranges: LineRanges, line: DiffLine | null): boolean =>
+    ranges.length > 0 && !!line && line.t !== '-' && line.n != null && ranges.some(([first, last]) => line.n! >= first && line.n! <= last);
 
 export interface LineView {
     line: DiffLine;
@@ -215,12 +255,19 @@ export interface LineView {
     /** Composer open under this line. */
     composer: ComposerTarget | null;
     threads: PlacedThread[];
+    /** In the range of lines of a shown thread or of the open composer (new-side lines only). */
+    inRange: boolean;
+    /** In the range of lines of the open composer. */
+    composing: boolean;
 }
 
 export interface SplitCellView {
     side: 'old' | 'new';
     line: DiffLine | null;
     target: ComposerTarget | null;
+    /** New-side cell in a range of lines (see LineView). */
+    inRange: boolean;
+    composing: boolean;
 }
 
 export interface SplitRowView {
@@ -249,16 +296,25 @@ export function fileView(file: Pick<FileDiff, 'status'>, view: 'unified' | 'spli
 
 /** Lines of a hunk in unified view, with threads and composer to insert below. */
 export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkViewInput): LineView[] {
+    const composing = composerRange(composer, path);
+    const ranges = [...threadRanges(byLine), ...composing];
     return lines.map((line) => {
         const target = canComment ? composerTargetFor(path, line, 'both') : null;
-        return { line, target, composer: sameTarget(target, composer) ? composer : null, threads: threadsAt(byLine, line) };
+        return {
+            line, target, composer: sameTarget(target, composer) ? composer : null, threads: threadsAt(byLine, line),
+            inRange: inRanges(ranges, line), composing: inRanges(composing, line),
+        };
     });
 }
 
 /** Lines of a hunk in side-by-side view (old on the left, new on the right). */
 export function sideBySideRows({ path, lines, byLine, canComment, composer }: HunkViewInput): SplitRowView[] {
-    const cell = (side: 'old' | 'new', line: DiffLine | null): SplitCellView =>
-        ({ side, line, target: line && canComment ? composerTargetFor(path, line, side) : null });
+    const composing = composerRange(composer, path);
+    const ranges = [...threadRanges(byLine), ...composing];
+    const cell = (side: 'old' | 'new', line: DiffLine | null): SplitCellView => ({
+        side, line, target: line && canComment ? composerTargetFor(path, line, side) : null,
+        inRange: side === 'new' && inRanges(ranges, line), composing: side === 'new' && inRanges(composing, line),
+    });
     return splitRows(lines).map(({ left, right }) => {
         const cells: [SplitCellView, SplitCellView] = [cell('old', left), cell('new', right)];
         return {

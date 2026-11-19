@@ -247,6 +247,17 @@ function toComment(c: BbComment, parentId: number | null, versions: readonly Dat
     };
 }
 
+/** First line of a range on a side: a whole number from 1 to just before the side's end line, otherwise null (one line). */
+const rangeStart = (start: number | null | undefined, end: number | null): number | null =>
+    (end !== null && typeof start === 'number' && Number.isInteger(start) && start >= 1 && start < end ? start : null);
+
+/** Line(s) of an inline comment, with the start of a multi-line comment on each side (Bitbucket's start_to / start_from). */
+function anchorOf(inline: NonNullable<BbComment['inline']>): NonNullable<Thread['anchor']> {
+    const to = inline.to ?? null;
+    const from = inline.from ?? null;
+    return { to, from, startTo: rangeStart(inline.start_to, to), startFrom: rangeStart(inline.start_from, from) };
+}
+
 /** Reactions of one comment from its emoji replies: one per emoji in order of first reply, each user once. */
 function groupReactions(list: readonly { emoji: string; comment: BbComment }[], meUuid: string | null): Reaction[] {
     const grouped = new Map<string, Reaction>();
@@ -320,7 +331,7 @@ export function buildThreads(
             thread = {
                 id: root.id,
                 path: root.inline?.path ?? null,
-                anchor: root.inline ? { to: root.inline.to ?? null, from: root.inline.from ?? null } : null,
+                anchor: root.inline ? anchorOf(root.inline) : null,
                 version: versionAt(versions, root.created_on),
                 resolved: Boolean(root.resolution),
                 resolvedBy: userOf(root.resolution?.user),

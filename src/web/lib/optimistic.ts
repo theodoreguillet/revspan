@@ -7,7 +7,8 @@ export interface PendingComment {
     tempId: number;
     raw: string;
     threadId: number | null;
-    inline: { path: string; to: number } | null;
+    /** New-side line `to`, or the range `startTo` to `to`. */
+    inline: { path: string; to: number; startTo?: number } | null;
 }
 
 function mapThread(detail: PrDetail, threadId: number, change: (thread: Thread) => Thread): PrDetail {
@@ -47,7 +48,7 @@ export function withPendingComment(detail: PrDetail, pending: PendingComment, me
     const thread: Thread = {
         id: pending.tempId,
         path: pending.inline?.path ?? null,
-        anchor: pending.inline ? { to: pending.inline.to, from: null } : null,
+        anchor: pending.inline ? { to: pending.inline.to, from: null, startTo: pending.inline.startTo ?? null, startFrom: null } : null,
         version: detail.versions.at(-1)?.index ?? 0,
         resolved: false,
         resolvedBy: null,
@@ -171,17 +172,17 @@ export function withEditedComment(detail: PrDetail, comment: Comment): PrDetail 
 }
 
 /**
- * Places a new inline thread on a line of the "to" side of a file (replaces an earlier placement of the same thread).
- * No-op if the file is not in the comparison.
+ * Places a new inline thread on a line of the "to" side of a file, from `startLine` for a range (replaces an earlier
+ * placement of the same thread). No-op if the file is not in the comparison.
  */
-export function withPlacement(cmp: Comparison, path: string, threadId: number, line: number): Comparison {
+export function withPlacement(cmp: Comparison, path: string, threadId: number, line: number, startLine: number | null = null): Comparison {
     const index = cmp.files.findIndex((f) => f.path === path);
     const file = cmp.files[index];
     if (!file) {
         return cmp;
     }
     const outOfHunks = !file.hunks.some((h) => h.lines.some((l) => l.n === line && l.t !== '-'));
-    const threads = [...file.threads.filter((p) => p.threadId !== threadId), { threadId, line, moved: false, outOfHunks }];
+    const threads = [...file.threads.filter((p) => p.threadId !== threadId), { threadId, line, startLine, moved: false, outOfHunks }];
     const files = cmp.files.slice();
     files[index] = { ...file, threads };
     return { ...cmp, files };

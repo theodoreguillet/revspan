@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Thread } from '../../src/shared/api.ts';
 import {
     composerKey, composerTargetFor, currentMatchKey, deletedLineComment, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange,
-    hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, nextUnseenIndex, placeFileThreads, PROGRESSIVE_LINES, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
-    sideBySideRows, splitRows, unifiedRows, viewedStatus, viewportDistance,
+    hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, nextUnseenIndex, placeFileThreads, PROGRESSIVE_LINES, rangeTarget, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
+    sideBySideRows, splitRows, unifiedRows, viewedStatus, viewportDistance, type ComposerTarget,
 } from '../../src/web/lib/diff.ts';
 import { prLong } from './fixtures.ts';
 import { createTranslator } from '../../src/web/i18n/translator.ts';
@@ -97,7 +97,7 @@ describe('highlightParts / hunkRange / composerKey', () => {
 
 // A file with a hunk (line 5 modified) and threads: open inline, resolved inline, outside a hunk, file level, unknown.
 const thread = (id: number, resolved: boolean): Thread => ({
-    id, path: 'src/Action.ts', anchor: { to: 5, from: null }, version: 2, resolved, resolvedBy: null, comments: [],
+    id, path: 'src/Action.ts', anchor: { to: 5, from: null, startTo: null, startFrom: null }, version: 2, resolved, resolvedBy: null, comments: [],
 });
 const threads = new Map<number, Thread>([[1, thread(1, false)], [2, thread(2, true)], [3, thread(3, false)], [4, thread(4, false)]]);
 const file: FileDiff = {
@@ -108,11 +108,11 @@ const file: FileDiff = {
         lines: [line(' ', 4, 4, 'if (!id) {'), line('-', 5, null, '    return false;'), line('+', null, 5, '    return null;'), line(' ', 6, 6, '}'), line(' ', 7, 7, 'return this.save(id);')],
     }],
     threads: [
-        { threadId: 1, line: 5, moved: false, outOfHunks: false },
-        { threadId: 2, line: 7, moved: true, outOfHunks: false },
-        { threadId: 3, line: 40, moved: false, outOfHunks: true },
-        { threadId: 4, line: null, moved: false, outOfHunks: false },
-        { threadId: 99, line: 5, moved: false, outOfHunks: false },
+        { threadId: 1, line: 5, startLine: null, moved: false, outOfHunks: false },
+        { threadId: 2, line: 7, startLine: null, moved: true, outOfHunks: false },
+        { threadId: 3, line: 40, startLine: null, moved: false, outOfHunks: true },
+        { threadId: 4, line: null, startLine: null, moved: false, outOfHunks: false },
+        { threadId: 99, line: 5, startLine: null, moved: false, outOfHunks: false },
     ],
 };
 const ids = (list: { thread: Thread }[]): number[] => list.map((t) => t.thread.id);
@@ -160,6 +160,74 @@ describe('hunk lines (unified and side-by-side views)', () => {
         expect(changed?.leftComposer?.key).toBe('o5:src/Action.ts');
         expect(changed?.rightComposer).toBeNull();
         expect(ids(changed?.threads ?? [])).toEqual([1]);
+    });
+});
+
+describe('range of lines (Shift+click on a second "+")', () => {
+    const target = (path: string, n: number): ComposerTarget => composerTargetFor(path, line(' ', n, n, `line ${n}`), 'both')!;
+    const removed = composerTargetFor('src/Action.ts', line('-', 5, null, 'x'), 'both')!;
+
+    it('same file, two new-side lines: the target of the last line, starting at the first (either click order)', () => {
+        const range = rangeTarget(target('src/Action.ts', 4), target('src/Action.ts', 7));
+        expect(range).toEqual({ ...target('src/Action.ts', 7), startLine: 4 });
+        // the composer stays under the last line, whose key (and draft) it keeps
+        expect(range?.key).toBe('n7:src/Action.ts');
+        expect(rangeTarget(target('src/Action.ts', 7), target('src/Action.ts', 4))).toEqual(range);
+        // a range is extended from its anchor line: the ends of a range given as the first target are ignored
+        expect(rangeTarget({ ...target('src/Action.ts', 9), startLine: 7 }, target('src/Action.ts', 4))).toEqual({ ...target('src/Action.ts', 9), startLine: 4 });
+    });
+
+    it('the same line twice: that line alone', () => {
+        expect(rangeTarget(target('src/Action.ts', 4), target('src/Action.ts', 4))).toEqual(target('src/Action.ts', 4));
+        expect(rangeTarget({ ...target('src/Action.ts', 6), startLine: 4 }, target('src/Action.ts', 6))).toEqual(target('src/Action.ts', 6));
+    });
+
+    it('another file or a removed line: no range', () => {
+        expect(rangeTarget(target('src/Action.ts', 4), target('src/Other.ts', 7))).toBeNull();
+        expect(rangeTarget(target('src/Action.ts', 4), removed)).toBeNull();
+        expect(rangeTarget(removed, target('src/Action.ts', 7))).toBeNull();
+    });
+
+    // Two hunks of the same file (lines 4-7 and 40-42) and a thread on 6-7.
+    const hunkA = [line(' ', 4, 4), line('-', 5, null), line('+', null, 5), line(' ', 6, 6), line(' ', 7, 7)];
+    const hunkB = [line(' ', 39, 40), line('+', null, 41), line(' ', 40, 42)];
+    const rangeThread = { ...thread(7, false), anchor: { to: 7, from: null, startTo: 6, startFrom: null } };
+    const ranged: FileDiff = {
+        ...file,
+        hunks: [{ oldStart: 4, oldLines: 4, newStart: 4, newLines: 4, header: '', lines: hunkA }, { oldStart: 39, oldLines: 2, newStart: 40, newLines: 3, header: '', lines: hunkB }],
+        threads: [{ threadId: 7, line: 7, startLine: 6, moved: false, outOfHunks: false }, { threadId: 1, line: 5, startLine: null, moved: false, outOfHunks: false }],
+    };
+    const placed = placeFileThreads(ranged, new Map([[7, rangeThread], [1, thread(1, false)]]), false);
+
+    it('the lines of a shown thread\'s range are marked; a thread on one line marks nothing', () => {
+        const rows = unifiedRows({ path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer: null });
+        expect(rows.map((r) => [r.line.n, r.inRange, r.composing])).toEqual([[4, false, false], [null, false, false], [5, false, false], [6, true, false], [7, true, false]]);
+    });
+
+    it('composer on a range: its new-side lines are marked in every hunk of the file (not the removed ones, not another file)', () => {
+        const composer = rangeTarget(target(ranged.path, 5), target(ranged.path, 41));
+        const rowsA = unifiedRows({ path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer });
+        const rowsB = unifiedRows({ path: ranged.path, lines: hunkB, byLine: placed.byLine, canComment: true, composer });
+        expect(rowsA.map((r) => [r.line.n, r.composing])).toEqual([[4, false], [null, false], [5, true], [6, true], [7, true]]);
+        expect(rowsB.map((r) => [r.line.n, r.composing, r.composer?.startLine ?? null])).toEqual([[40, true, null], [41, true, 5], [42, false, null]]);
+        expect(rowsA.map((r) => r.inRange)).toEqual([false, false, true, true, true]);
+        const other = unifiedRows({ path: 'src/Other.ts', lines: hunkA, byLine: new Map(), canComment: true, composer });
+        expect(other.some((r) => r.inRange || r.composing)).toBe(false);
+        // a single-line composer marks nothing
+        const single = unifiedRows({ path: ranged.path, lines: hunkA, byLine: new Map(), canComment: true, composer: target(ranged.path, 5) });
+        expect(single.some((r) => r.inRange || r.composing)).toBe(false);
+    });
+
+    it('side by side: only the new-side cells are marked', () => {
+        const composer = rangeTarget(target(ranged.path, 4), target(ranged.path, 5));
+        const rows = sideBySideRows({ path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer });
+        expect(rows.map((r) => r.cells.map((c) => [c.line?.o ?? c.line?.n ?? null, c.inRange, c.composing]))).toEqual([
+            [[4, false, false], [4, true, true]],
+            [[5, false, false], [5, true, true]],
+            [[6, false, false], [6, true, false]],
+            [[7, false, false], [7, true, false]],
+        ]);
+        expect(rows[1]?.rightComposer?.startLine).toBe(4);
     });
 });
 

@@ -4,7 +4,7 @@ import type { Thread } from '../../shared/api.ts';
 import { usePrPage } from '../composables/usePrPage.ts';
 import { t, tr } from '../i18n/index.ts';
 import { relTime } from '../lib/format.ts';
-import { lastActivity } from '../lib/threads.ts';
+import { anchorSpan, lastActivity, spanText } from '../lib/threads.ts';
 import ThreadCard from './ThreadCard.vue';
 
 const props = defineProps<{ thread: Thread }>();
@@ -13,8 +13,8 @@ const page = usePrPage();
 const placement = computed(() => page.placementOf(props.thread.id));
 const last = computed(() => lastActivity(props.thread));
 const location = computed(() => {
-    const line = props.thread.anchor?.to ?? props.thread.anchor?.from;
-    return `${props.thread.path}${line != null ? `:${line}` : ''}`;
+    const span = anchorSpan(props.thread.anchor);
+    return `${props.thread.path}${span ? `:${spanText(span)}` : ''}`;
 });
 </script>
 
