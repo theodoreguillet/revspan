@@ -115,9 +115,9 @@ const IMPORT_LINE: Readonly<Record<CodeFamily, RegExp>> = {
 };
 
 /** String literals of a line ('', "", ``; escapes included). */
-const STRING_LITERAL = /(['"`])(?:\\.|(?!\1)[^\\])*\1/g;
+const STRING_LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g;
 /** A line with its strings emptied (the quotes stay): a quoted name is neither defined nor imported there. */
-const emptyStrings = (text: string): string => text.replace(STRING_LITERAL, '$1$1');
+const emptyStrings = (text: string): string => text.replace(STRING_LITERAL, (m) => m[0]! + m[0]!);
 
 /** Longer lines (minified code, data) are not matched: some patterns cost more than linear time on them. */
 export const MAX_PATTERN_LINE = 2000;

@@ -2,6 +2,7 @@
 // Usage: revspan [Bitbucket PR URL] [--port 7420] [--no-open]
 import { spawn } from 'node:child_process';
 import { parsePrUrl } from '../shared/pr-url.ts';
+import { browserCommand } from './browser-command.ts';
 import { startApp } from './app.ts';
 
 interface CliArgs {
@@ -33,9 +34,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
 }
 
 function openBrowser(url: string): void {
-    const [cmd, cmdArgs]: [string, string[]] = process.platform === 'darwin' ? ['open', [url]]
-        : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-            : ['xdg-open', [url]];
+    const [cmd, cmdArgs] = browserCommand(process.platform, url);
     const child = spawn(cmd, cmdArgs, { stdio: 'ignore', detached: true });
     child.on('error', () => console.log(`Open ${url} in your browser.`));
     child.unref();
@@ -63,7 +62,7 @@ async function main(): Promise<void> {
     if (args.url && !ref) {
         throw new Error(`Unrecognized Bitbucket PR URL: ${args.url}`);
     }
-    const hash = ref ? `#/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '';
+    const hash = ref ? `#/pr/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(ref.repo)}/${ref.id}` : '';
 
     if (args.port !== 0 && await alreadyRunning(args.port)) {
         const url = `http://127.0.0.1:${args.port}/${hash}`;

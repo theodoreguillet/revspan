@@ -10,6 +10,13 @@ describe('parsePrUrl', () => {
         expect(parsePrUrl(' bitbucket.org/ws/r/pull-requests/1 ')).toEqual({ workspace: 'ws', repo: 'r', id: 1 });
     });
 
+    it('rejects names outside the Bitbucket alphabet, raw or percent-encoded', () => {
+        expect(parsePrUrl('https://bitbucket.org/ws&calc/repo/pull-requests/1')).toBeNull();
+        expect(parsePrUrl('https://bitbucket.org/ws%26calc/repo/pull-requests/1')).toBeNull();
+        expect(parsePrUrl('https://bitbucket.org/ws/%2E%2E/pull-requests/1')).toBeNull();
+        expect(parsePrUrl('https://bitbucket.org/acme/records-api/pull-requests/12')).toEqual({ workspace: 'acme', repo: 'records-api', id: 12 });
+    });
+
     it('rejects the rest', () => {
         expect(parsePrUrl('https://github.com/a/b/pull/1')).toBeNull();
         expect(parsePrUrl('https://bitbucket.org/ws/r/pull-requests/abc')).toBeNull();

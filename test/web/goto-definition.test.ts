@@ -385,3 +385,12 @@ describe('findLine', () => {
         expect(findLine([f], 'src/z.ts', 'new', 1)).toBeNull();
     });
 });
+
+describe('string stripping cost', () => {
+    it('stays linear on an unterminated string full of escaped quotes', () => {
+        const line = 'x"' + '\\"'.repeat(1000);
+        const start = performance.now();
+        definesSymbol(line, 'x', 'a.ts');
+        expect(performance.now() - start).toBeLessThan(50);
+    });
+});

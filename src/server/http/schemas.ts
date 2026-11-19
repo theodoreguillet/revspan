@@ -1,10 +1,9 @@
 // Validation of HTTP inputs (zod). The produced types match the src/shared/api.ts contract.
 import { z } from 'zod';
 import type { EditComment, NewComment, NewTask, PrRef, SettingsUpdate, ViewedRequest } from '../../shared/api.ts';
+import { notDotSegment, SLUG as NAME } from '../../shared/pr-ref.ts';
 import { badRequest } from '../errors.ts';
 
-const NAME = /^[A-Za-z0-9._-]+$/;
-const notDotSegment = (s: string): boolean => s !== '.' && s !== '..';
 
 export const prRefSchema: z.ZodType<PrRef> = z.object({
     workspace: z.string().regex(NAME).refine(notDotSegment, 'Invalid workspace.'),
