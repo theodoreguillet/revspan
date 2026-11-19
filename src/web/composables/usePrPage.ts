@@ -192,9 +192,9 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     }
 
     /**
-     * Shortcuts: j/k file, n/p thread, v seen then next unseen file, Shift+V all seen, [ ] version, / search, Alt+← back from a definition,
-     * Escape closes the go-to-definition choice, the composer, then the go-to-definition notice. Returns true if the key
-     * is handled.
+     * Shortcuts: j/k file, n/p thread, v seen then next unseen file, Shift+V all seen, [ ] version, / search, Alt+←
+     * back from a definition, Escape closes the go-to-definition choice, the composer, then the go-to-definition
+     * notice. Returns true if the key is handled.
      */
     function handleKey(key: string, event?: Partial<Pick<KeyboardEvent, 'shiftKey' | 'altKey'>>): boolean {
         // under the skeleton, `files` is still the previous comparison: no file moves nor "seen" on it

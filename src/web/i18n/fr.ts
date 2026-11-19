@@ -471,7 +471,7 @@ export const fr: Catalog = {
     'shortcuts.keysHelp': '?',
     'shortcuts.file': 'Fichier suivant / précédent',
     'shortcuts.thread': 'Fil de discussion suivant / précédent',
-    'shortcuts.viewed': 'Marquer vu et passer au fichier suivant non vu (re-v : démarquer)',
+    'shortcuts.viewed': 'Marquer vu et passer au fichier suivant non vu (sur un fichier vu : le démarque)',
     'shortcuts.allViewed': 'Marquer tous les fichiers comme vus (ceux du filtre pendant une recherche)',
     'shortcuts.search': 'Rechercher dans les noms et le contenu des fichiers (Entrée / Maj+Entrée : résultat suivant / précédent)',
     'shortcuts.goto': 'Sur un nom dans la diff : aller à sa définition dans la diff affichée, sinon à son import',

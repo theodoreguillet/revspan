@@ -172,8 +172,8 @@ internal error.
   erased versions **never** notify.
 - **Build failed**: a build of one of your own PRs ("To rebase" or "My PRs") failed (off by default).
 
-Draft PRs never notify and are not counted in the badge (they stay under "Other open PRs"); once ready for review, a
-draft is treated like a new PR.
+Draft PRs never notify (yours stay with your PRs, the others' go to "Other open PRs" with a grey "Draft" badge); once
+ready for review, a draft is treated like a new PR.
 
 Guarantees: one notification per PR and head, even with several windows; none on first run and no backlog when an
 option is switched on (a silent baseline is recorded per repository); only tracked repositories. Windows tracking
@@ -314,9 +314,9 @@ one request per interval even once finished (see "Build status").
   runs at the refresh interval of the settings: news shows a banner with a Refresh button, the page never changes by
   itself. Reopening a PR within that interval shows it at once, with no read.
 
-Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen and next unseen file (again: unmark), `Shift+V` all files seen, `[`/`]` version, `/` search,
-`Shift+click` on a line's **+** comment a range of lines, `Ctrl+click` (`⌘+click`) go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[`
-and `]` typed with Option or AltGr work too.
+Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen and next unseen file (on a seen file: unmark), `Shift+V` all files
+seen, `[`/`]` version, `/` search, `Shift+click` on a line's **+** comment a range of lines, `Ctrl+click` (`⌘+click`)
+go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[` and `]` typed with Option or AltGr work too.
 
 ## Develop
 

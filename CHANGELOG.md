@@ -19,12 +19,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 ### Changed
 
 - After updating, reload every VS Code window: 3.4 and 3.5 windows do not share the home cache.
-- Drafts keep their behaviour on the home and in notifications: listed under "Other open PRs", out of the badge, never
-  notified, notified as a new PR once ready for review.
 
 ### Fixed
 
-- Vue and HTML hunks are coloured inside their script, style or template block.
+- Vue and HTML hunks are coloured inside their script or style block.
 - "My PRs" no longer waits up to a minute when another VS Code profile computes its own home (one lease per home).
 - `j`, `k` and `v` keep the file they reached current while the scroll settles.
 
