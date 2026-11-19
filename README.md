@@ -172,7 +172,8 @@ internal error.
   erased versions **never** notify.
 - **Build failed**: a build of one of your own PRs ("To rebase" or "My PRs") failed (off by default).
 
-Draft PRs never notify; once ready for review, a draft is treated like a new PR.
+Draft PRs never notify and are not counted in the badge (they stay under "Other open PRs"); once ready for review, a
+draft is treated like a new PR.
 
 Guarantees: one notification per PR and head, even with several windows; none on first run and no backlog when an
 option is switched on (a silent baseline is recorded per repository); only tracked repositories. Windows tracking
@@ -250,7 +251,8 @@ directory, up to 4 homes kept), `home-<identity>.lock` (one lease per home, so o
 window computing another profile's home is not waited for) and `home.drop` (a counter bumped on every write, so a
 result computed before a write is not reused), all in the config or storage directory. In VS Code, the "Revspan"
 output log (View › Output) has one line per "My PRs" load: duration, time waited for another window, the hashed home
-identity and error codes, no PR data. Trade-off: with several windows, a new push can show up after up to
+identity and error codes, no PR data. After updating, reload every VS Code window: 3.4 and 3.5 windows do not share
+the home cache. Trade-off: with several windows, a new push can show up after up to
 about **1.5 intervals** instead of 1. A home with a repository error is shared for 60 s only, so the error is tried
 again soon without every window recomputing on every poll. During the hour after a push, that PR's build checks cost
 one request per interval even once finished (see "Build status").

@@ -4,6 +4,40 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follo
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-19
+
+### Added
+
+- Description tab on the PR page: the PR description, rendered like a comment.
+- Draft chip in the PR header ("Draft" instead of "Open") for a Bitbucket draft PR.
+- Copy-link button in the PR header, next to the "Bitbucket ↗" link.
+- Comment a range of lines: click a line's **+**, then Shift+click the **+** of another line of the same file. Comments
+  on several lines show as a range of lines.
+- `v` marks the current file seen and moves to the next unseen one (pressed again on a seen file: unmark).
+- VS Code: a "Revspan" output channel (View › Output) logs each "My PRs" load (duration, wait, error codes, no PR data).
+
+### Changed
+
+- After updating, reload every VS Code window: 3.4 and 3.5 windows do not share the home cache.
+- Drafts keep their behaviour on the home and in notifications: listed under "Other open PRs", out of the badge, never
+  notified, notified as a new PR once ready for review.
+
+### Fixed
+
+- Vue and HTML hunks are coloured inside their script, style or template block.
+- "My PRs" no longer waits up to a minute when another VS Code profile computes its own home (one lease per home).
+- `j`, `k` and `v` keep the file they reached current while the scroll settles.
+
+### Security
+
+- VS Code messages never turn PR data into command links.
+- The CLI's local API requires a per-run secret (a cookie per port, the secret kept out of process arguments); the
+  limits are documented in the README and API.md.
+- PR URLs are validated, and the browser is opened without a shell on Windows.
+- Memory and disk caches are bounded.
+- A quadratic regular expression in go-to-definition was made cheaper.
+- CI actions are pinned by commit SHA.
+
 ## [3.4.0] - 2026-11-17
 
 ### Added
