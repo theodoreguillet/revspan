@@ -1320,6 +1320,9 @@ def run_checks(page):
         page.keyboard.press('v')
         expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(1)
         expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(first + 1))
+        # after the scroll has settled (files collapsed, page re-laid out) the current file is still the target
+        page.wait_for_timeout(800)
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(first + 1))
         page.keyboard.press('v')
         expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(2)
         # every file is seen now: v on the last one marks it and stays

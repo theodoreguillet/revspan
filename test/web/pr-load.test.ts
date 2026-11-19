@@ -798,6 +798,37 @@ describe('PR page while a slow diff loads', () => {
         expect(page.curFile).toBe(2);
     });
 
+    it('v: a late scroll update (page re-laid out, file stopped short of the top) does not put the current file back', async () => {
+        api.viewed.mockResolvedValue({ ok: true });
+        threeFiles({});
+        const page = await mountPage();
+        await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+        // no file element is registered here: the scroll position always reads "file 0", like a page too short to scroll to file 1
+        let y = 0;
+        vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => y);
+        vi.spyOn(performance, 'now').mockReturnValue(1000);
+        page.handleKey('v');
+        await vi.waitFor(() => expect(page.curFile).toBe(1));
+        page.updateCurrentFromScroll();
+        expect(page.curFile).toBe(1);
+        // the scroll has settled: still the same position, still the target
+        vi.spyOn(performance, 'now').mockReturnValue(5000);
+        page.updateCurrentFromScroll();
+        page.updateCurrentFromScroll();
+        expect(page.curFile).toBe(1);
+        // the next v marks file 1, not file 0 (which would unmark it)
+        page.handleKey('v');
+        await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledTimes(2));
+        expect(api.viewed.mock.calls[1]?.[1]).toMatchObject({ path: 'b', viewed: true });
+        // the user scrolls away once that move has settled too: the scroll drives the current file again
+        vi.spyOn(performance, 'now').mockReturnValue(9000);
+        page.updateCurrentFromScroll();
+        y = 300;
+        page.updateCurrentFromScroll();
+        expect(page.curFile).toBe(0);
+        vi.restoreAllMocks();
+    });
+
     it('v: a file seen in an older version but changed since counts as unseen', async () => {
         api.viewed.mockResolvedValue({ ok: true });
         threeFiles({ b: 'older-hash' });

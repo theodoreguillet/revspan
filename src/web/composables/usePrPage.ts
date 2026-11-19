@@ -82,6 +82,9 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
             options.collapsed.set(file.path, false);
         }
         nav.curFile.value = idx;
+        if (scroll) {
+            pin = { idx, until: performance.now() + PIN_SETTLE_MS, y: null };
+        }
         await nextTick();
         if (scroll) {
             nav.scrollToFile(file.path);
@@ -115,7 +118,25 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         search.focus();
     }
 
+    /**
+     * File reached by j/k/v: while its scroll settles (the page re-lays out as files collapse, and it may stop short of
+     * the place at the end of the page) the scroll position says another file, so the scroll does not move `curFile`
+     * back. It stays pinned until the user scrolls away from the settled position.
+     */
+    let pin: { idx: number; until: number; y: number | null } | null = null;
+    const PIN_SETTLE_MS = 400;
+
     function updateCurrentFromScroll(): void {
+        if (pin) {
+            if (performance.now() < pin.until) {
+                return;
+            }
+            pin.y ??= window.scrollY;
+            if (Math.abs(window.scrollY - pin.y) <= 1) {
+                return;
+            }
+            pin = null;
+        }
         if (options.tab.value === 'diff' && files.value.length) {
             nav.curFile.value = nav.fileUnderTimeline(files.value.map((f) => f.path));
         }
