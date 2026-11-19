@@ -96,7 +96,15 @@ button.busy::before { content: ''; display: inline-block; width: .85em; height: 
 .rv-pill.OPEN { background: var(--rv-add-bg); color: var(--rv-add); }
 .rv-pill.MERGED { background: rgba(130,80,223,.15); color: #8250df; }
 .rv-pill.DECLINED { background: var(--rv-del-bg); color: var(--rv-del); }
+.rv-pill.draft { background: var(--bg-tertiary); color: var(--text-secondary); }
 .rv-pill.SUPERSEDED { background: var(--bg-tertiary); color: var(--text-secondary); }
+.rv-link-copy { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.rv-copy { display: inline-flex; align-items: center; justify-content: center; padding: 2px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.rv-copy:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.rv-copy-status { font-size: 11.5px; color: var(--rv-add); }
+.rv-copy-status.failed { color: var(--rv-del); }
+/* the live region stays rendered (announced when text arrives); empty, it takes no room */
+.rv-copy-status:empty { margin-left: -3px; }
 .rv-appr { display: flex; gap: 14px; margin-top: 7px; font-size: 11.5px; color: var(--text-secondary); flex-wrap: wrap; }
 .rv-appr span b { color: var(--rv-add); font-weight: 600; }
 .rv-appr .rv-appr-count.ok { color: var(--rv-add); font-weight: 600; }

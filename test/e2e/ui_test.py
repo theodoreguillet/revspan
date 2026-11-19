@@ -11,7 +11,7 @@ run-against-fake.ts starts the fake Bitbucket and the server, then runs this scr
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
     REVSPAN_REQUESTS_URL  Log of every request received by the fake Bitbucket, reads included (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
-    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting.
+    REVSPAN_FAKE_PRS    JSON of the fake Bitbucket's PRs: main, long, rebaseOnly, mine, neverReviewed, others, purged, waiting, draft.
     REVSPAN_FAKE_EMAIL, REVSPAN_FAKE_TOKEN   Credentials of the fake Bitbucket (token put back after deletion).
 Options:
     REVSPAN_SHOTS_DIR   Screenshots folder (default: <tmp>/revspan-shots).
@@ -2018,6 +2018,40 @@ def run_checks(page):
             expect(page.locator('.rv-f.cur')).to_have_attribute('data-path', 'src/others.ts')
         rebase_conflict_chips(page)
 
+        @check('PR page: draft chip replaces "Ouverte", copy-link button puts the PR URL in the clipboard and holds its line')
+        def draft_and_copy(page):
+            page.context.grant_permissions(['clipboard-read', 'clipboard-write'])
+            open_pr(page, fake_ref('draft'))
+            pill = page.locator('.rv-head .rv-pill')
+            expect(pill).to_have_text('Brouillon')
+            expect(pill).to_have_class(re.compile(r'\bdraft\b'))
+            open_pr(page, fake_ref('mine'))
+            expect(pill).to_have_text('● Ouverte')
+            pr_url = api(pr_api(fake_ref('mine')))['pr']['url']
+            button = page.locator('.rv-head [data-copy-link]')
+            expect(button).to_have_attribute('aria-label', 'Copier le lien de la PR')
+            status = page.locator('.rv-head [data-copy-status]')
+            expect(status).to_have_attribute('aria-live', 'polite')
+            button.click()
+            expect(status).to_have_text('Lien copié')
+            assert page.evaluate('navigator.clipboard.readText()') == pr_url
+            expect(status).to_have_text('', timeout=4000)
+            # Wider fonts (Linux CI): the icon stays on the line of the Bitbucket link, never alone on the next one.
+            stress = page.add_style_tag(content='.rv-head { letter-spacing: 0.12em }')
+            link = page.locator('.rv-head .rv-link-copy a').bounding_box()
+            icon = button.bounding_box()
+            assert link and icon and abs((link['y'] + link['height'] / 2) - (icon['y'] + icon['height'] / 2)) < 6, (link, icon)
+            assert icon['x'] >= link['x'] + link['width'], (link, icon)
+            stress.evaluate('node => node.remove()')
+            os.makedirs(SHOTS, exist_ok=True)
+            for scheme in ('light', 'dark'):
+                page.emulate_media(color_scheme=scheme)
+                for name, key in (('draft', 'draft'), ('open', 'mine')):
+                    open_pr(page, fake_ref(key))
+                    page.locator('.rv-head').screenshot(path=os.path.join(SHOTS, f'pr-header-{name}-{scheme}.png'))
+            page.emulate_media(color_scheme=None)
+        draft_and_copy(page)
+
         @check('never reviewed: "First review" then "Mark vN as reviewed"')
         def never_reviewed(page):
             ref = fake_ref('neverReviewed')
@@ -2147,7 +2181,7 @@ def run_checks(page):
             # Home: Yann's PR that asks nothing of me is hidden, with a discreet count and a link to the setting.
             page.goto(url(''))
             note = page.locator('[data-testid="hidden"]')
-            expect(note).to_have_text('1 PR masquée (contributeur non suivi) · modifier dans les réglages', timeout=20000)
+            expect(note).to_have_text('2 PR masquées (contributeurs non suivis) · modifier dans les réglages', timeout=20000)  # Yann's #47 and the draft
             expect(page.locator(f'.rv-row[data-pr="{fake_ref("others")}"]')).to_have_count(0)
             expect(page.locator(f'.rv-row[data-pr="{fake_ref("neverReviewed")}"]')).to_be_visible()  # designated reviewer
             expect(page.locator(f'.rv-row[data-pr="{fake_ref("waiting")}"]')).to_be_visible()  # approved by me

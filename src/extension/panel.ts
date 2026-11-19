@@ -174,6 +174,8 @@ export class RevspanPanel {
                 case 'openRoute':
                     this.show(message.route);
                     return;
+                case 'copyText':
+                    return await vscode.env.clipboard.writeText(message.text);
                 case 'openFile':
                     return await openLocalFile(this.app.services.prs, message.ref, message.path, message.line);
                 case 'openDiff':

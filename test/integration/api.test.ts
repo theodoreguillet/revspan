@@ -798,6 +798,8 @@ describe('home', () => {
             [FAKE_PRS.purged]: 'to-do',
             // Approved on its latest version: nothing to do until the author pushes.
             [FAKE_PRS.waiting]: 'waiting',
+            // A draft asks no review.
+            [FAKE_PRS.draft]: 'others',
         });
         expect(cardOf(body, FAKE_PRS.main)).toMatchObject({
             versionsCount: 6, lastReviewed: 2, newVersions: 4, approvals: 1, requiredApprovals: 2, newComments: 2,
@@ -840,7 +842,7 @@ describe('home', () => {
         await setup();
         await detail(FAKE_PRS.others);
         const { body } = await api<Home>('GET', '/api/home');
-        expect(body.groups.find((g) => g.key === 'others')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.others]);
+        expect(body.groups.find((g) => g.key === 'others')?.prs.map((p) => p.id)).toEqual([FAKE_PRS.others, FAKE_PRS.draft]);
     });
 
     it('reviewed up to the latest version: "waiting", unless I am a designated reviewer who has not approved', async () => {

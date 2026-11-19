@@ -11,7 +11,9 @@ export type WebviewToHost =
     /** Open a file's comparison in VS Code's diff editor (from = 0: against the base). */
     | { type: 'openDiff'; ref: PrRef; from: number; to: number; path: string; oldPath: string | null }
     /** Show a route that belongs to another tab (a PR from the "Revspan" tab, the home page or settings from a PR tab). */
-    | { type: 'openRoute'; route: string };
+    | { type: 'openRoute'; route: string }
+    /** Copy a text (the PR link) to the system clipboard, when the page itself is not allowed to. */
+    | { type: 'copyText'; text: string };
 
 /** Extension -> page. */
 export type HostToWebview =

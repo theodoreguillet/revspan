@@ -82,6 +82,24 @@ export function hostRequest(method: string, path: string, body?: unknown): Promi
     });
 }
 
+/**
+ * Copies a text to the clipboard: the page's own API first (the only one outside VS Code), then the extension when a
+ * webview refuses it. False if nothing could copy.
+ */
+export async function copyText(text: string): Promise<boolean> {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // clipboard API missing or refused (permissions, focus): the extension may still write it
+    }
+    if (!vscode) {
+        return false;
+    }
+    postToHost({ type: 'copyText', text });
+    return true;
+}
+
 /** Saves the displayed route: VS Code gives it back to the extension to reopen the panel at the same place ("Reload Window"). */
 export function rememberRoute(route: string): void {
     vscode?.setState({ route });

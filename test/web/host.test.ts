@@ -7,6 +7,24 @@ const reply = (message: HostToWebview | Record<string, unknown>): void => {
     window.dispatchEvent(new MessageEvent('message', { data: message }));
 };
 
+describe('copyText in a browser', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('writes with the clipboard API; false when it refuses or is missing', async () => {
+        vi.resetModules();
+        const host = await import('../../src/web/services/host.ts');
+        const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+        await expect(host.copyText('abc')).resolves.toBe(true);
+        expect(writeText).toHaveBeenCalledWith('abc');
+        await expect(host.copyText('abc')).resolves.toBe(false);
+        vi.stubGlobal('navigator', {});
+        await expect(host.copyText('abc')).resolves.toBe(false);
+    });
+});
+
 describe('in a VS Code panel', () => {
     let posted: WebviewToHost[];
     let states: unknown[];
@@ -30,6 +48,23 @@ describe('in a VS Code panel', () => {
         await import('../../src/web/services/api.ts');
         expect(host.isVsCode).toBe(true);
         expect(acquire).toHaveBeenCalledTimes(1);
+    });
+
+    it('copyText: the page clipboard first, the host message when it refuses', async () => {
+        const host = await import('../../src/web/services/host.ts');
+        const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+        await expect(host.copyText('https://x.example/1')).resolves.toBe(true);
+        expect(posted).toEqual([]);
+        await expect(host.copyText('https://x.example/2')).resolves.toBe(true);
+        expect(posted).toEqual([{ type: 'copyText', text: 'https://x.example/2' }]);
+    });
+
+    it('copyText: no clipboard API at all falls back to the host', async () => {
+        const host = await import('../../src/web/services/host.ts');
+        vi.stubGlobal('navigator', {});
+        await expect(host.copyText('abc')).resolves.toBe(true);
+        expect(posted).toEqual([{ type: 'copyText', text: 'abc' }]);
     });
 
     it('read: "request" message posted, resolved by the response with the same id', async () => {

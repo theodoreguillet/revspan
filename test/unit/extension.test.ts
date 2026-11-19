@@ -214,7 +214,7 @@ describe('page messages', () => {
         const openFile = { type: 'openFile', ref, path: 'src/A.ts', line: 7 };
         const openDiff = { type: 'openDiff', ref, from: 0, to: 3, path: 'src/A.ts', oldPath: 'src/Old.ts' };
         const openRoute = { type: 'openRoute', route: '/pr/acme/records-api/212?from=2&to=6' };
-        for (const message of [read, write, openFile, { ...openFile, line: null }, openDiff, { ...openDiff, oldPath: null }, openRoute, { type: 'openRoute', route: '/settings' }]) {
+        for (const message of [read, write, openFile, { ...openFile, line: null }, openDiff, { ...openDiff, oldPath: null }, openRoute, { type: 'openRoute', route: '/settings' }, { type: 'copyText', text: 'https://bitbucket.org/acme/records-api/pull-requests/212' }, { type: 'copyText', text: 'x'.repeat(2048) }]) {
             expect(parseWebviewMessage(message)).toEqual(message);
         }
         expect(parseWebviewMessage({ ...openFile, ref: { ...ref, extra: 'x' } })).toEqual(openFile);
@@ -245,6 +245,9 @@ describe('page messages', () => {
             { ...openDiff, to: 3.5 },
             { ...openDiff, oldPath: 3 },
             { type: 'openRoute' },
+            { type: 'copyText' },
+            { type: 'copyText', text: 42 },
+            { type: 'copyText', text: 'x'.repeat(2049) },
             { type: 'openRoute', route: 42 },
             { type: 'openRoute', route: '' },
             { type: 'openRoute', route: 'settings' },

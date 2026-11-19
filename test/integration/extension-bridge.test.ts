@@ -511,7 +511,7 @@ describe('extension panel (simulated VS Code)', () => {
         await services.settings.update({ review: { followed: [{ uuid: '{cam}', displayName: 'Camille Durand' }] } });
         const tree = new HomeTreeProvider(services.home, () => 'repository');
         const roots = await tree.getChildren();
-        expect(roots[0]).toEqual({ kind: 'message', text: '1 PR hidden (a contributor you don’t follow)', icon: 'eye-closed', command: 'revspan.openSettings' });
+        expect(roots[0]).toEqual({ kind: 'message', text: '2 PRs hidden (contributors you don’t follow)', icon: 'eye-closed', command: 'revspan.openSettings' });
         await services.settings.update({ review: { hideUnfollowed: false } });
         expect((await tree.getChildren()).filter((node) => node.kind === 'message')).toEqual([]);
         tree.dispose();

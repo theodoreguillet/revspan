@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from 'vue';
+import { computed, onMounted, onScopeDispose, shallowRef } from 'vue';
 import type { PrState } from '../../shared/api.ts';
 import { summarizeBuild } from '../../shared/build.ts';
 import type { FollowedUser } from '../../shared/review-settings.ts';
@@ -11,6 +11,7 @@ import { approvalItems, approvalProgress, myActions } from '../lib/approvals.ts'
 import { displayName, openedSince } from '../lib/format.ts';
 import { conflictChip, firstConflictIndex, rebaseChip } from '../lib/merge-conflicts.ts';
 import { api } from '../services/api.ts';
+import { copyText } from '../services/host.ts';
 import { ACTION_KEYS } from '../composables/useReviewActions.ts';
 import type { PulseView } from '../composables/usePulse.ts';
 import { refreshText } from '../lib/pulse.ts';
@@ -27,6 +28,24 @@ const STATE_LABELS = {
 
 const page = usePrPage();
 const pr = computed(() => page.detail.pr);
+// An open draft shows "Draft" in place of "Open" (grey: it asks no review yet); the other states keep their own.
+const isDraft = computed(() => pr.value.state === 'OPEN' && pr.value.draft);
+const stateLabel = computed(() => (isDraft.value ? t('pr.state.draft') : t(STATE_LABELS[pr.value.state])));
+
+const COPY_FEEDBACK_MS = 1500;
+const copyResult = shallowRef<'copied' | 'failed' | null>(null);
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+const copyStatus = computed(() => (copyResult.value === 'copied' ? t('pr.linkCopied') : copyResult.value === 'failed' ? t('pr.copyFailed') : ''));
+
+/** Copies the PR link; the result is shown (and announced) for a moment. */
+async function copyLink(): Promise<void> {
+    copyResult.value = (await copyText(pr.value.url)) ? 'copied' : 'failed';
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+        copyResult.value = null;
+    }, COPY_FEEDBACK_MS);
+}
+onScopeDispose(() => clearTimeout(copyTimer));
 const n = computed(() => page.n);
 const approvals = computed(() => approvalItems(tr(), page.detail, page.sums, !!page.summary));
 const progress = computed(() => approvalProgress(page.detail));
@@ -74,7 +93,7 @@ onMounted(async () => {
         <div class="main">
             <div class="rv-title">{{ pr.title }} <span>#{{ pr.id }}</span></div>
             <div class="rv-meta">
-                <span :class="['rv-pill', pr.state]">{{ t(STATE_LABELS[pr.state]) }}</span>
+                <span :class="['rv-pill', isDraft ? 'draft' : pr.state]">{{ stateLabel }}</span>
                 <span>{{ displayName(pr.author) }}</span>
                 <button
                     v-if="author && followed"
@@ -90,7 +109,23 @@ onMounted(async () => {
                 </button> ·
                 <span class="rv-mono">{{ pr.sourceBranch }}</span> → <span class="rv-mono">{{ pr.destBranch }}</span> ·
                 <span>{{ openedSince(tr(), pr.createdOn) }}</span> ·
-                <a :href="pr.url" target="_blank" rel="noopener noreferrer">{{ t('pr.onBitbucket') }}</a>
+                <span class="rv-link-copy">
+                    <a :href="pr.url" target="_blank" rel="noopener noreferrer">{{ t('pr.onBitbucket') }}</a>
+                    <button
+                        type="button"
+                        class="rv-copy"
+                        data-copy-link
+                        :aria-label="t('pr.copyLink')"
+                        :title="copyStatus || t('pr.copyLink')"
+                        @click="copyLink"
+                    >
+                        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+                            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+                            <path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H3A1.5 1.5 0 0 0 1.5 3v6A1.5 1.5 0 0 0 3 10.5h.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+                        </svg>
+                    </button>
+                    <span :class="['rv-copy-status', copyResult]" data-copy-status aria-live="polite">{{ copyStatus }}</span>
+                </span>
                 <template v-if="rebase">
                     · <span class="rv-nb orange" data-chip="needs-rebase" :title="rebase.title">{{ rebase.label }}</span>
                 </template>

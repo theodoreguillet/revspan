@@ -19,6 +19,7 @@ const messageSchema = z.discriminatedUnion('type', [
         oldPath: filePath.nullable(),
     }),
     z.object({ type: z.literal('openRoute'), route: z.string().max(4096).refine(isPageRoute) }),
+    z.object({ type: z.literal('copyText'), text: z.string().max(2048) }),
 ]);
 
 /** Message from the page, or null if malformed (to be ignored). The method and the API path are checked by the bridge. */

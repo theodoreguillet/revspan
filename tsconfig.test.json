@@ -29,6 +29,8 @@
         "src/web/components/DescriptionTab.vue",
         "src/web/components/ConfirmButton.vue",
         "src/web/components/SafeHtml.vue",
+        "src/web/components/PrHeader.vue",
+        "src/web/components/BuildBadge.vue",
         "vite.config.ts",
         "vitest.config.ts",
         "src/extension/**/*.ts"

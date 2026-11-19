@@ -193,6 +193,9 @@ PR page has a **Builds** tab listing each check with its link.
 The PR page also has a **Description** tab (first in the tab bar; the diff stays the tab shown on open) with the PR
 description as Bitbucket renders it, sanitized like comments. It comes with the PR already read: no extra request.
 
+The PR header shows **Draft** instead of "Open" for a draft PR, and a copy icon right of the "Bitbucket ↗" link copies the
+PR URL in one click (in VS Code, through the editor's clipboard if the panel is not allowed to write it).
+
 For the first hour after a push, the checks are read again once per interval even when they all look finished: a
 second CI (tests after lint, for example) may not have posted yet. Past that hour, finished checks are kept for that
 commit and never read again by the home.

@@ -35,6 +35,8 @@ export const FAKE_PRS = {
     purged: 48,
     /** I approved its only version (author Yann, not a designated reviewer): "waiting" on the author. */
     waiting: 49,
+    /** Draft (author Yann, 1 version, nobody concerned): shows "Draft" in the header; asks no review. */
+    draft: 51,
 } as const;
 
 /**
@@ -157,7 +159,7 @@ class FakeBuilder {
         return { id: this.nextTaskId(), state: 'UNRESOLVED', creator, created_on: date, updated_on: date, content: { raw, html: `<p>${escapeHtml(raw)}</p>` }, ...extra };
     }
 
-    pr(id: number, { title, author, participants, plan, events = [], comments = [], tasks = [], description, descriptionHtml }: {
+    pr(id: number, { title, author, participants, plan, events = [], comments = [], tasks = [], description, descriptionHtml, draft }: {
         title: string;
         author: BbUser;
         participants: BbParticipant[];
@@ -168,6 +170,8 @@ class FakeBuilder {
         /** Raw description and the HTML Bitbucket renders from it (default: a one-word description, no summary). */
         description?: string;
         descriptionHtml?: string;
+        /** Draft PR (Bitbucket's `draft` flag). */
+        draft?: boolean;
     }): void {
         const first = plan[0];
         const last = plan[plan.length - 1];
@@ -184,6 +188,7 @@ class FakeBuilder {
                 description: description ?? 'Démo',
                 ...(descriptionHtml === undefined ? {} : { summary: { html: descriptionHtml } }),
                 state: 'OPEN',
+                ...(draft ? { draft: true } : {}),
                 author,
                 source: { branch: { name: `feature/DEMO-${id}-demo` }, commit: { hash: hex(last.commit).slice(0, 12) } },
                 destination: { branch: { name: 'master' }, commit: { hash: hex(last.base).slice(0, 12) } },
@@ -349,14 +354,14 @@ function purgedPr(b: FakeBuilder): void {
 }
 
 /** Simple PR with 1 or 2 code versions (mine, never reviewed, others, waiting). */
-function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number, events: BbActivity[] = []): void {
+function simplePr(b: FakeBuilder, id: number, key: string, title: string, author: BbUser, participants: BbParticipant[], versions: number, events: BbActivity[] = [], draft = false): void {
     b.commit(`${key}:m0`, { [`src/${key}.ts`]: lines(['x']) });
     const plan: PlanStep[] = [];
     for (let v = 1; v <= versions; v++) {
         b.derive(`${key}:v${v}`, v === 1 ? `${key}:m0` : `${key}:v${v - 1}`, { [`src/${key}.ts`]: lines(['x', ...Array.from({ length: v }, (_, i) => `y${i + 1}`)]) }, title);
         plan.push({ commit: `${key}:v${v}`, base: `${key}:m0`, date: addDays('2026-10-10T09:00:00Z', v) });
     }
-    b.pr(id, { title, author, participants, plan, events });
+    b.pr(id, { title, author, participants, plan, events, draft });
 }
 
 /** Line `i` of a generated TypeScript file (`salt` changes the values: modified lines). */
@@ -467,6 +472,7 @@ export function buildFakeData({ bigPr: withBigPr = false } = {}): FakeData {
     simplePr(b, FAKE_PRS.waiting, 'waiting', 'DEMO-49 - fix(waiting): approved, waiting on the author', YAN,
         [{ user: ME, role: 'PARTICIPANT', approved: true, state: 'approved' }, { user: YAN, role: 'PARTICIPANT', approved: false, state: null }], 1,
         [{ approval: { date: '2026-10-12T09:00:00Z', user: ME } }]);
+    simplePr(b, FAKE_PRS.draft, 'draft', 'DEMO-51 - feat(draft): work in progress', YAN, [{ user: CAM, role: 'PARTICIPANT', approved: false, state: null }], 1, [], true);
     if (withBigPr) {
         bigPr(b);
     }
