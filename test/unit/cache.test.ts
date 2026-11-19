@@ -214,3 +214,65 @@ describe('evictDisk', () => {
         expect(await new Cache(null).evictDisk({ now: NOW })).toEqual({ removed: 0 });
     });
 });
+
+describe('entries in use stay on disk', () => {
+    const DAY = 24 * 3600 * 1000;
+    const fileOf = (dir: string, key: string): string => {
+        const hash = createHash('sha1').update(key).digest('hex');
+        return path.join(dir, hash.slice(0, 2), `${hash}.json`);
+    };
+    const mtime = (file: string): number => fs.statSync(file).mtimeMs;
+    const age = (file: string, ms: number): void => {
+        const t = new Date(Date.now() - ms);
+        fs.utimesSync(file, t, t);
+    };
+
+    it('a read from disk moves an old file\'s date to now, so that the age eviction keeps it', async () => {
+        const dir = tempDir();
+        new Cache(dir).set('k', { a: 1 });
+        const file = fileOf(dir, 'k');
+        age(file, 25 * DAY);
+        expect(new Cache(dir).get('k')).toEqual({ a: 1 });
+        expect(Math.abs(mtime(file) - Date.now())).toBeLessThan(5000);
+        expect(await new Cache(dir).evictDisk({ now: Date.now() + 20 * DAY })).toEqual({ removed: 0 });
+        expect(fs.existsSync(file)).toBe(true);
+    });
+
+    it('at most once a day: a file dated less than a day ago is left as is', () => {
+        const dir = tempDir();
+        new Cache(dir).set('k', { a: 1 });
+        const file = fileOf(dir, 'k');
+        age(file, DAY - 3600_000);
+        const before = mtime(file);
+        new Cache(dir).get('k');
+        expect(mtime(file)).toBe(before);
+    });
+
+    it('a long-lived process reading from memory also moves the date, once a day', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const start = Date.now();
+        const dir = tempDir();
+        const cache = new Cache(dir);
+        cache.set('k', { a: 1 });
+        const file = fileOf(dir, 'k');
+        vi.setSystemTime(start + 2 * DAY);
+        expect(cache.get('k')).toEqual({ a: 1 });
+        expect(Math.abs(mtime(file) - (start + 2 * DAY))).toBeLessThan(5000);
+        // read again within the day: not touched
+        const t = new Date(start);
+        fs.utimesSync(file, t, t);
+        vi.setSystemTime(start + 2 * DAY + 3600_000);
+        cache.get('k');
+        expect(Math.abs(mtime(file) - start)).toBeLessThan(5000);
+    });
+
+    it('never throws when the date cannot be moved (file gone)', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const dir = tempDir();
+        const cache = new Cache(dir);
+        cache.set('k', { a: 1 });
+        fs.rmSync(fileOf(dir, 'k'));
+        vi.setSystemTime(Date.now() + 2 * DAY);
+        expect(cache.get('k')).toEqual({ a: 1 });
+    });
+});

@@ -420,7 +420,7 @@ describe('home shared between windows (Store)', () => {
         }
     });
 
-    it('taking a lease sweeps the stale leases of other homes; fresh ones, the 3.4 home.lock and other files stay', () => {
+    it('taking a lease sweeps the stale leases of other homes, and a stale home.lock of 3.4; fresh ones and other files stay', () => {
         const dir = tempDir();
         const old = new Date(Date.now() - 3600_000);
         fs.writeFileSync(lockOf(dir, ID_B), JSON.stringify({ token: 'b', at: Date.now() - 61_000, identity: ID_B }));
@@ -435,8 +435,24 @@ describe('home shared between windows (Store)', () => {
         fs.mkdirSync(path.join(dir, `home-${'e'.repeat(16)}.lock`, 'inside'), { recursive: true });
         fs.utimesSync(path.join(dir, `home-${'e'.repeat(16)}.lock`), old, old);
         const release = asRelease(new Store(dir).claimHomeLease(60_000, ID_A));
-        expect(lockFiles(dir)).toEqual([`home-${ID_A}.lock`, `home-${ID_C}.lock`, `home-${'e'.repeat(16)}.lock`, 'home-notes.lock', 'home.lock']);
+        expect(lockFiles(dir)).toEqual([`home-${ID_A}.lock`, `home-${ID_C}.lock`, `home-${'e'.repeat(16)}.lock`, 'home-notes.lock']);
         release();
+    });
+
+    it('a home.lock of 3.4 still fresh (a 3.4 window computing) stays, then goes with the first sweep once stale', () => {
+        vi.useFakeTimers();
+        try {
+            const dir = tempDir();
+            fs.writeFileSync(path.join(dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() }));
+            const store = new Store(dir);
+            asRelease(store.claimHomeLease(60_000, ID_A))();
+            expect(lockFiles(dir)).toEqual(['home.lock']);
+            vi.advanceTimersByTime(60_001);
+            asRelease(store.claimHomeLease(60_000, ID_A))();
+            expect(lockFiles(dir)).toEqual([]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('a home computed before a drop (a write in any window) is refused', () => {

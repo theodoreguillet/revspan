@@ -159,10 +159,10 @@ function homeFileOf(raw: unknown): HomeFile {
 /**
  * One lease per home identity (homeIdentity: 16 hex characters), home-<identity>.lock: a window waits only for a window
  * computing the same home, and two windows of one profile still coordinate while another profile computes its own. The
- * 3.4 lease, home.lock, is never read.
+ * 3.4 lease, home.lock, is never waited for; the sweep removes it once stale.
  */
 const HOME_IDENTITY = /^[0-9a-f]{16}$/;
-const HOME_LEASE_FILE = /^home-[0-9a-f]{16}\.lock$/;
+const HOME_LEASE_FILE = /^home-[0-9a-f]{16}\.lock$|^home\.lock$/;
 
 /** Content of a lease file ({ token, at, identity }: the identity is only informative, the file name carries it). */
 interface Lease {
@@ -415,7 +415,8 @@ export class Store {
 
     /**
      * Removes the stale leases of every home (windows closed mid-computation): an identity nobody computes any more
-     * (settings changed) would otherwise leave its file for good. Fresh leases and other files stay.
+     * (settings changed), or the single lease of 3.4, would otherwise leave its file for good. Fresh leases and other
+     * files stay.
      */
     private sweepStaleLeases(staleMs: number): void {
         try {

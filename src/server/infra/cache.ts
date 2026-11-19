@@ -21,9 +21,16 @@ function sizeOf(value: unknown): number {
     }
 }
 
+/** An entry kept in memory; `touched`: when its disk file was last dated (written, or its date moved by a read). */
+interface MemoryEntry {
+    value: unknown;
+    size: number;
+    touched: number;
+}
+
 export class Cache {
     private readonly dir: string | null;
-    private readonly memory = new Map<string, { value: unknown; size: number }>();
+    private readonly memory = new Map<string, MemoryEntry>();
     private readonly memoryBytes: number;
     private memoryUsed = 0;
     private readonly live = new Map<string, { at: number; value: unknown }>();
@@ -51,14 +58,14 @@ export class Cache {
         }
     }
 
-    private remember(key: string, value: unknown): void {
+    private remember(key: string, value: unknown, touched: number): void {
         this.forget(key);
         const size = sizeOf(value);
         // Bigger than the whole budget: not kept in memory (it stays on disk).
         if (size > this.memoryBytes) {
             return;
         }
-        this.memory.set(key, { value, size });
+        this.memory.set(key, { value, size, touched });
         this.memoryUsed += size;
         // Map keeps insertion order: the first key is the least recently used.
         for (const oldest of this.memory.keys()) {
@@ -70,27 +77,56 @@ export class Cache {
     }
 
     get<T>(key: string): T | undefined {
-        if (this.memory.has(key)) {
-            const entry = this.memory.get(key)!;
+        const now = Date.now();
+        const entry = this.memory.get(key);
+        if (entry) {
             // Refresh the recency without recomputing the size.
             this.memory.delete(key);
             this.memory.set(key, entry);
+            this.keepOnDisk(key, entry, now);
             return entry.value as T;
         }
         if (!this.dir) {
             return undefined;
         }
+        const file = this.fileFor(this.dir, key);
+        let value: T;
         try {
-            const value = (JSON.parse(fs.readFileSync(this.fileFor(this.dir, key), 'utf8')) as { v: T }).v;
-            this.remember(key, value);
-            return value;
+            value = (JSON.parse(fs.readFileSync(file, 'utf8')) as { v: T }).v;
         } catch {
             return undefined;
+        }
+        const read = { touched: now };
+        try {
+            read.touched = fs.statSync(file).mtimeMs;
+        } catch {
+            // Removed meanwhile: nothing to keep.
+        }
+        this.keepOnDisk(key, read, now);
+        this.remember(key, value, read.touched);
+        return value;
+    }
+
+    /**
+     * An entry read stays out of the age eviction (evictDisk): its file is dated now, at most once a day. The contents
+     * of commits erased from Bitbucket only live here, and must last as long as their PR is read. Best effort: a file
+     * that cannot be dated ages out as before.
+     */
+    private keepOnDisk(key: string, entry: { touched: number }, now: number): void {
+        if (!this.dir || now - entry.touched < DAY_MS) {
+            return;
+        }
+        entry.touched = now;
+        try {
+            const date = new Date(now);
+            fs.utimesSync(this.fileFor(this.dir, key), date, date);
+        } catch {
+            // Gone or read-only: left to the eviction.
         }
     }
 
     set(key: string, value: unknown): void {
-        this.remember(key, value);
+        this.remember(key, value, Date.now());
         if (!this.dir) {
             return;
         }
