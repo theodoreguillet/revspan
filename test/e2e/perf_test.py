@@ -4,6 +4,7 @@
 Launch: npm run test:perf (builds, starts the fake Bitbucket with its large PR and the server, then runs this script).
 Environment (set by run-against-fake.ts --perf):
     REVSPAN_BASE_URL    URL of the Revspan server (required).
+    REVSPAN_OPEN_URL    Its /open?k=<secret> address (as printed by the CLI): opened once by the browser context.
     REVSPAN_PR          Large PR, "workspace/repo/id".
 Options:
     REVSPAN_PERF_CPU    CPU slowdown factor of the browser (Chrome DevTools throttling, default 1).
@@ -22,6 +23,7 @@ import time
 from playwright.sync_api import expect, sync_playwright
 
 BASE = os.environ.get('REVSPAN_BASE_URL', '').rstrip('/')
+OPEN_URL = os.environ.get('REVSPAN_OPEN_URL')
 PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/50')
 CPU = float(os.environ.get('REVSPAN_PERF_CPU', '1'))
 OUT = os.environ.get('REVSPAN_PERF_OUT')
@@ -206,6 +208,10 @@ def main():
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=CHROMIUM_ARGS, headless=not os.environ.get('REVSPAN_HEADED'))
         context = browser.new_context(viewport={'width': 1440, 'height': 900}, locale='en-US', timezone_id='Europe/Paris')
+        if OPEN_URL:
+            # The server's secret cookie, before anything else (through the context's cookie jar, no page load).
+            response = context.request.get(OPEN_URL, max_redirects=0)
+            assert response.status == 302, f'{OPEN_URL} answered {response.status}'
         context.set_default_timeout(30000)
         page = context.new_page()
         errors = []

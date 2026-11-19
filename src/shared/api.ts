@@ -18,7 +18,9 @@ export type ErrorCode =
     | 'NOT_FOUND'
     | 'INTERNAL'
     /** VS Code does not know a Revspan setting yet (extension updated, window not reloaded): the write failed. */
-    | 'SETTING_UNREGISTERED';
+    | 'SETTING_UNREGISTERED'
+    /** CLI only (401): the browser lacks the per-run secret cookie; the page must be opened from the revspan command. */
+    | 'NEEDS_SECRET';
 
 /** Finer cause within an error code, so the page can show a specific translated message. */
 export type ErrorReason = 'invalid-email' | 'email-required' | 'profile-unreadable' | 'no-versions';

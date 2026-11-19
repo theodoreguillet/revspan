@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createAdaptorServer } from '@hono/node-server';
 import { DEFAULT_BASE_URL } from './bitbucket/client.ts';
 import { createHttpApp } from './http/app.ts';
+import { openUrlOf } from './http/cli-secret.ts';
 import { Cache } from './infra/cache.ts';
 import { configDir, Store } from './infra/config.ts';
 import { createSecretStore } from './infra/secrets.ts';
@@ -26,6 +27,8 @@ export interface StartOptions {
     maxPortTries?: number;
     webDir?: string;
     fetchImpl?: typeof fetch;
+    /** CLI's per-run secret (cli-secret.ts): every /api call then needs its cookie. null/absent: no check. */
+    secret?: string | null;
 }
 
 export interface RunningApp {
@@ -36,6 +39,8 @@ export interface RunningApp {
     settings: SettingsService;
     prs: PrService;
     home: HomeService;
+    /** Address to open for a page hash ('#/pr/…', '' = home): /open?k=… with a secret, the page itself otherwise. */
+    openUrl(hash?: string): string;
     close(): Promise<void>;
 }
 
@@ -56,7 +61,9 @@ function listen(server: Server, port: number): Promise<number> {
     });
 }
 
-export async function startApp({ env = process.env, port = 7420, maxPortTries = 10, webDir = DEFAULT_WEB_DIR, fetchImpl = fetch }: StartOptions = {}): Promise<RunningApp> {
+export async function startApp({
+    env = process.env, port = 7420, maxPortTries = 10, webDir = DEFAULT_WEB_DIR, fetchImpl = fetch, secret = null,
+}: StartOptions = {}): Promise<RunningApp> {
     const dir = configDir(env);
     const store = new Store(dir);
     const secrets = await createSecretStore({ dir, env });
@@ -64,7 +71,7 @@ export async function startApp({ env = process.env, port = 7420, maxPortTries = 
     const { settings, home, prs } = createServices({ store, secrets, cache, baseUrl: env.REVSPAN_BITBUCKET_API ?? DEFAULT_BASE_URL, fetchImpl });
 
     let bound = 0;
-    const http = createHttpApp({ version: APP_VERSION, settings, home, prs, webDir, allowedHosts: () => [`${HOST}:${bound}`, `localhost:${bound}`] });
+    const http = createHttpApp({ version: APP_VERSION, settings, home, prs, webDir, secret, allowedHosts: () => [`${HOST}:${bound}`, `localhost:${bound}`] });
     const server = createAdaptorServer({ fetch: http.fetch }) as Server;
 
     for (let attempt = 0; ; attempt++) {
@@ -78,14 +85,16 @@ export async function startApp({ env = process.env, port = 7420, maxPortTries = 
         }
     }
 
+    const url = `http://${HOST}:${bound}`;
     return {
-        url: `http://${HOST}:${bound}`,
+        url,
         port: bound,
         dir,
         store,
         settings,
         prs,
         home,
+        openUrl: (hash = '') => openUrlOf(url, secret, hash),
         close: () => new Promise((resolve) => {
             server.closeAllConnections();
             server.close(() => resolve());

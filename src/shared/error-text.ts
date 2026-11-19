@@ -19,7 +19,7 @@ export interface ErrorLike {
 
 /** A translatable error message and the values it shows (Bitbucket's own text, path, status, version). */
 export type ErrorMessage =
-    | { id: 'network' | 'networkExtension' | 'noToken' | 'unauthorized' | 'forbidden' | 'profileUnreadable' | 'noVersions' | 'invalidEmail' | 'emailRequired' | 'refused' | 'reloadWindow' }
+    | { id: 'network' | 'networkExtension' | 'noToken' | 'unauthorized' | 'forbidden' | 'profileUnreadable' | 'noVersions' | 'invalidEmail' | 'emailRequired' | 'refused' | 'reloadWindow' | 'needsSecret' }
     | { id: 'forbiddenDetail' | 'unreachable' | 'internal'; detail: string }
     | { id: 'notFound'; path: string }
     | { id: 'bitbucket'; status: number; path: string }
@@ -80,6 +80,8 @@ export function errorMessageOf(error: ErrorLike): ErrorMessage | null {
             return params.detail == null ? null : { id: 'internal', detail: params.detail };
         case 'SETTING_UNREGISTERED':
             return { id: 'reloadWindow' };
+        case 'NEEDS_SECRET':
+            return { id: 'needsSecret' };
         default: {
             const status = HTTP_CODE.exec(code)?.[1];
             return status ? { id: 'http', status } : null;

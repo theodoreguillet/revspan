@@ -18,6 +18,13 @@ node bin/revspan.js https://bitbucket.org/<workspace>/<repo>/pull-requests/<id> 
 Node 22.18 or later. The page opens on `http://127.0.0.1:7420` (`--port 7500` and `--no-open` are available).
 Handy: `alias revspan='node /path/to/revspan/bin/revspan.js'`.
 
+The command draws a new secret at each start and opens (and prints, `--no-open` included)
+`http://127.0.0.1:7420/open?k=<secret>`: the browser gets it as a cookie, and the local API answers nothing without
+it, so another user of the machine can neither read your PRs nor comment or approve as you. If the page says
+« Open Revspan from the `revspan` command », open that printed address again (or run `revspan` again: while one runs,
+a second `revspan [PR URL]` opens the running one in the browser instead of starting another). The secret also shows
+in the browser history and in the arguments of the command that opens the browser.
+
 ## Language
 
 The interface exists in French and English. The language is chosen automatically:
@@ -289,7 +296,7 @@ and `]` typed with Option or AltGr work too.
 |---|---|
 | `npm ci` | dependencies from the lockfile |
 | `npm run dev` | server in watch mode (port 7420) + Vite with hot reload (port 5173) |
-| `npm run dev:fake` | server wired to the fake Bitbucket (no real call); then `npm run dev:web` |
+| `npm run dev:fake` | server wired to the fake Bitbucket (no real call), prints its `?k=` addresses; then `npm run dev:web` |
 | `npm run check` | lint + types + unit and integration tests (Vitest) |
 | `npm run test:e2e` | build then Playwright UI tests on the real server wired to the fake Bitbucket |
 | `npm run test:perf` | build then measures the diff's long tasks on a large PR of the fake Bitbucket (file switch, j/k, big file, search, context); `REVSPAN_PERF_CPU=4` slows the CPU, not part of `check` |
@@ -357,7 +364,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 ## Local data
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
-`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
+`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `run.json` (port, secret and process id of the running `revspan` command, mode `0600`, removed when it stops), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
 and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text except a single emoji (a reaction); can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 

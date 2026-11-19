@@ -9,11 +9,16 @@ Common rules:
 - all routes are under `/api`, in JSON;
 - any request other than GET carries the `X-Revspan: 1` header (otherwise 403); a foreign origin is rejected;
 - the `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`;
+- command line only: every `/api` request except `GET /api/health`, reads included, carries the `revspan_k` cookie
+  holding the run's secret (otherwise 401 `NEEDS_SECRET`). The CLI draws a random secret at each start (32 bytes,
+  base64url) and opens `/open?k=<secret>`, which sets the cookie (`HttpOnly`, `SameSite=Strict`, `Path=/`, session).
+  The VS Code extension serves the API in memory and has no secret;
 - error: status other than 2xx and body `ApiErrorBody` = `{ error: { code, message, params? } }`:
   - `code` is stable (`ErrorCode`): `NO_TOKEN` (409), `BB_UNAUTHORIZED` (401), `BB_FORBIDDEN` (403), `BB_NOT_FOUND` (404),
     `BB_UNREACHABLE`, `BB_ERROR`, `BAD_REQUEST` (400), `VERSION_UNAVAILABLE` (410), `FORBIDDEN`, `NOT_FOUND`, `INTERNAL`,
     `SETTING_UNREGISTERED` (409, VS Code only: the extension was updated and the window must be reloaded before a new
-    setting can be saved);
+    setting can be saved), `NEEDS_SECRET` (401, command line only: the secret cookie is missing or wrong; the page asks
+    to open Revspan from the `revspan` command);
   - `message` is always in English (it is also what shows in the terminal and in logs);
   - `params` (`ErrorParams`) holds the values a client needs to translate the message itself, so the server never sends
     translated text: `reason` (`invalid-email`, `email-required`, `profile-unreadable`, `no-versions`), `path`
@@ -26,7 +31,7 @@ Common rules:
 
 | Method | Route | Body | Response |
 |---|---|---|---|
-| GET | `/api/health` | — | `Health` |
+| GET | `/api/health` | — | `Health` (no secret needed: it returns no data) |
 | GET | `/api/settings` | — | `Settings` |
 | GET | `/api/settings/followed` | — | `FollowedList` (local; the pages read it before a follow, since a read of `/api/settings` retitles the VS Code panel) |
 | GET | `/api/settings/contributors` | — | `ContributorList` (`Home.contributors` of the shared home; empty without a token or repository) |
@@ -102,7 +107,10 @@ Common rules:
   VS Code panel.
 
 Page: Vue SPA served from `dist/web`, hash routing (`#/`, `#/pr/:ws/:repo/:id?from=&to=`, `#/settings`).
-`GET /open?url=<Bitbucket PR URL>` redirects to `/#/pr/...`.
+`GET /open?url=<Bitbucket PR URL>` redirects to `/#/pr/...` (no secret needed: it returns no data, and the page's own
+same-site API calls then send the cookie). `GET /open?k=<secret>[&to=<hash>]` (command line) sets the secret cookie
+and redirects to `/<hash>`; `to` (URL-encoded) must be a hash of the page starting with `#/` (anything else redirects to
+`/`, never to another site), and `url=<Bitbucket PR URL>` may replace it. A wrong `k`: 403 `FORBIDDEN`, no cookie.
 
 In the VS Code extension the same routes are served in memory: the page posts `request` messages
 ([`src/shared/webview-protocol.ts`](../src/shared/webview-protocol.ts)) and the extension hands them to the same Hono

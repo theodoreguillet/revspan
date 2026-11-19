@@ -1,9 +1,12 @@
-// Entry point: starts Revspan and opens the browser.
+// Entry point: starts Revspan and opens the browser on its per-run secret address (/open?k=…).
 // Usage: revspan [Bitbucket PR URL] [--port 7420] [--no-open]
 import { spawn } from 'node:child_process';
 import { parsePrUrl } from '../shared/pr-url.ts';
 import { browserCommand } from './browser-command.ts';
 import { startApp } from './app.ts';
+import { newSecret, openUrlOf } from './http/cli-secret.ts';
+import { configDir } from './infra/config.ts';
+import { removeRunFile, runningInstance, writeRunFile } from './infra/run-file.ts';
 
 interface CliArgs {
     port: number;
@@ -40,15 +43,6 @@ function openBrowser(url: string): void {
     child.unref();
 }
 
-async function alreadyRunning(port: number): Promise<boolean> {
-    try {
-        const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
-        return ((await response.json()) as { app?: string }).app === 'revspan';
-    } catch {
-        return false;
-    }
-}
-
 async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) {
@@ -64,17 +58,23 @@ async function main(): Promise<void> {
     }
     const hash = ref ? `#/pr/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(ref.repo)}/${ref.id}` : '';
 
-    if (args.port !== 0 && await alreadyRunning(args.port)) {
-        const url = `http://127.0.0.1:${args.port}/${hash}`;
-        console.log(`Revspan is already running: ${url}`);
+    // An instance already running for this configuration (run.json, checked with its secret): open it instead.
+    const running = args.port === 0 ? null : await runningInstance(configDir());
+    if (running) {
+        const existing = openUrlOf(`http://127.0.0.1:${running.port}`, running.secret, hash);
+        console.log(`Revspan is already running: ${existing}`);
         if (args.open) {
-            openBrowser(url);
+            openBrowser(existing);
         }
         return;
     }
 
-    const app = await startApp({ port: args.port });
-    const url = `${app.url}/${hash}`;
+    const secret = newSecret();
+    const app = await startApp({ port: args.port, secret });
+    writeRunFile(app.dir, { port: app.port, secret, pid: process.pid });
+    process.on('exit', () => removeRunFile(app.dir));
+    // Printed with --no-open too: reopening it gives the cookie back (lost cookie, other browser).
+    const url = app.openUrl(hash);
     console.log(`Revspan: ${url}`);
     console.log(`Configuration: ${app.dir}  --  Ctrl+C to stop.`);
     if (args.open) {

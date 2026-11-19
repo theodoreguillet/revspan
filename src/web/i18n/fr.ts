@@ -567,4 +567,5 @@ export const fr: Catalog = {
     'error.refused': 'Requête refusée.',
     'error.internal': 'Erreur interne de Revspan : {detail}',
     'error.reloadWindow': 'Revspan vient d’être mis à jour : recharge la fenêtre VS Code (Developer: Reload Window) pour enregistrer les réglages.',
+    'error.needsSecret': 'Ouvre Revspan depuis la commande `revspan` (ou l\'adresse qu\'elle affiche).',
 };

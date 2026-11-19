@@ -6,6 +6,8 @@ Normal launch (after "npx --no-install vite build"):
 
 run-against-fake.ts starts the fake Bitbucket and the server, then runs this script with:
     REVSPAN_BASE_URL    URL of the Revspan server (required).
+    REVSPAN_OPEN_URL    Its /open?k=<secret> address (as printed by the CLI): opened once by each browser context.
+    REVSPAN_SECRET      Its per-run secret, sent as the revspan_k cookie by the direct API reads (api()).
     REVSPAN_CALLS_URL   Log of the writes received by the fake Bitbucket (GET -> JSON array).
     REVSPAN_REQUESTS_URL  Log of every request received by the fake Bitbucket, reads included (GET -> JSON array).
     REVSPAN_PR          Main PR, "workspace/repo/id" (acme/demo-repo/42).
@@ -27,11 +29,14 @@ import sys
 import tempfile
 import time
 import traceback
+import urllib.parse
 import urllib.request
 
 from playwright.sync_api import expect, sync_playwright
 
 BASE = os.environ.get('REVSPAN_BASE_URL', '').rstrip('/')
+OPEN_URL = os.environ.get('REVSPAN_OPEN_URL')
+SECRET = os.environ.get('REVSPAN_SECRET')
 CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
 REQUESTS_URL = os.environ.get('REVSPAN_REQUESTS_URL')
 MAIN_PR = os.environ.get('REVSPAN_PR', 'acme/demo-repo/42')
@@ -72,13 +77,23 @@ def check(name):
     return wrap
 
 
-def http_json(url):
-    with urllib.request.urlopen(url, timeout=60) as res:
+def http_json(url, headers=None):
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as res:
         return json.loads(res.read().decode() or 'null')
 
 
 def api(path):
-    return http_json(f'{BASE}/api{path}')
+    return http_json(f'{BASE}/api{path}', {'Cookie': f'revspan_k={SECRET}'} if SECRET else None)
+
+
+def new_context(browser, **options):
+    """Browser context holding the server's secret cookie: the ?k= address is opened once, before anything else
+    (through the context's own cookie jar, without a page, so no page load counts in the checks)."""
+    context = browser.new_context(**options)
+    if OPEN_URL:
+        response = context.request.get(OPEN_URL, max_redirects=0)
+        assert response.status == 302, f'{OPEN_URL} answered {response.status}'
+    return context
 
 
 def pr_api(ref):
@@ -259,7 +274,7 @@ def screenshots(browser, fixed_time):
     targets.append(('settings', 'settings'))
     for scheme in ('light', 'dark'):
         for width in (1440, 1024):
-            context = browser.new_context(viewport={'width': width, 'height': 900}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris')
+            context = new_context(browser, viewport={'width': width, 'height': 900}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris')
             page = context.new_page()
             if fixed_time:
                 page.clock.set_fixed_time(fixed_time)
@@ -302,7 +317,7 @@ def screenshots(browser, fixed_time):
                 page.locator('.rv-seg button[data-seg="unified"]').click()
             context.close()
     for scheme in ('light', 'dark'):  # zoomed symbols (x3) to check the letters' optical centering
-        context = browser.new_context(viewport={'width': 1440, 'height': 900}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=3)
+        context = new_context(browser, viewport={'width': 1440, 'height': 900}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=3)
         page = context.new_page()
         if fixed_time:
             page.clock.set_fixed_time(fixed_time)
@@ -340,7 +355,7 @@ VSCODE_DARK_PLUS = {
 def change_shots(browser, fixed_time):
     """Changed lines of the main PR (one band per changed range): light, dark, and VS Code Dark+ colors."""
     for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
-        context = browser.new_context(viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+        context = new_context(browser, viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
         page = context.new_page()
         if fixed_time:
             page.clock.set_fixed_time(fixed_time)
@@ -376,7 +391,7 @@ def goto_shots(browser, fixed_time):
     """Go to definition on the main PR: underline with the modifier held, the choice, the notices; light, dark, VS Code Dark+."""
     n = len(api(pr_api(MAIN_PR))['versions'])
     for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
-        context = browser.new_context(viewport={'width': 1024, 'height': 700}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+        context = new_context(browser, viewport={'width': 1024, 'height': 700}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
         page = context.new_page()
         if fixed_time:
             page.clock.set_fixed_time(fixed_time)
@@ -424,7 +439,7 @@ def like_shots(browser, fixed_time):
     item = f'.rv-ditem[data-thread="{thread["id"]}"]'
     try:
         for name, scheme, vscode in (('light', 'light', False), ('dark', 'dark', False), ('vscode-dark', 'dark', True)):
-            context = browser.new_context(viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
+            context = new_context(browser, viewport={'width': 1024, 'height': 800}, color_scheme=scheme, locale='fr-FR', timezone_id='Europe/Paris', device_scale_factor=2)
             page = context.new_page()
             if fixed_time:
                 page.clock.set_fixed_time(fixed_time)
@@ -2279,6 +2294,30 @@ def run_language_checks(page, fr_page):
     host_locale(page)
 
 
+def secret_checks(browser):
+    """CLI per-run secret, in a context WITHOUT the cookie: the page says how to open it, the ?k= address fixes it."""
+    if not OPEN_URL:
+        log('      (REVSPAN_OPEN_URL missing: secret not checked)')
+        return
+    context = browser.new_context(viewport={'width': 1024, 'height': 800}, locale='fr-FR', timezone_id='Europe/Paris')
+    context.set_default_timeout(10000)
+
+    @check('secret: without the cookie the page says to open it from revspan; the ?k= address sets it and lands on the hash')
+    def secret(page):
+        page.goto(url(''))
+        expect(page.locator('.rv-panel-msg')).to_contain_text('Ouvre Revspan depuis la commande `revspan`')
+        page.goto(f'{OPEN_URL}&to={urllib.parse.quote("#/settings", safe="")}')
+        expect(page).to_have_url(f'{BASE}/#/settings')
+        expect(page.locator('.rv-settings h1')).to_have_text('Réglages')
+        cookie = next(c for c in context.cookies() if c['name'] == 'revspan_k')
+        assert cookie['httpOnly'] and cookie['sameSite'] == 'Strict', cookie
+        assert page.evaluate('document.cookie') == '', 'the secret cookie must not be readable by the page'
+        page.goto(url(''))
+        expect(page.locator('.rv-home h1')).to_have_text('Mes PR')
+    secret(context.new_page())
+    context.close()
+
+
 def main():
     if not BASE:
         log('REVSPAN_BASE_URL missing: run "node test/e2e/run-against-fake.ts" (after "npx --no-install vite build").')
@@ -2292,7 +2331,7 @@ def main():
         except Exception as error:  # noqa: BLE001
             results.append(('captures', False))
             log(f'FAIL  captures\n      {error}')
-        context = browser.new_context(viewport={'width': 1440, 'height': 900}, locale='fr-FR', timezone_id='Europe/Paris')
+        context = new_context(browser, viewport={'width': 1440, 'height': 900}, locale='fr-FR', timezone_id='Europe/Paris')
         context.set_default_timeout(10000)
         page = context.new_page()
         if fixed_time:
@@ -2301,13 +2340,14 @@ def main():
         errors = []
         page.on('pageerror', lambda e: errors.append(str(e)))
         run_checks(page)
-        en_context = browser.new_context(viewport={'width': 1440, 'height': 900}, locale='en-US', timezone_id='Europe/Paris')
+        en_context = new_context(browser, viewport={'width': 1440, 'height': 900}, locale='en-US', timezone_id='Europe/Paris')
         en_context.set_default_timeout(10000)
         en_page = en_context.new_page()
         if fixed_time:
             en_page.clock.set_fixed_time(fixed_time)
         en_page.on('pageerror', lambda e: errors.append(str(e)))
         run_language_checks(en_page, page)
+        secret_checks(browser)
         results.append(('no JavaScript error', not errors))
         log('PASS  no JavaScript error' if not errors else f'FAIL  no JavaScript error\n      {errors}')
         browser.close()

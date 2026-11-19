@@ -11,7 +11,8 @@ export function errorText(t: Translate, error: ErrorLike): string {
         case 'network':
         case 'networkExtension':
         case 'http':
-            // Seen only by the page (no answer from the server or the extension): never raised in the extension.
+        case 'needsSecret':
+            // Seen only by the page (no answer from the server or the extension, CLI secret): never raised in the extension.
             return error.message;
         case 'noToken':
             return t('No Bitbucket token is configured. Open the settings to add one.');

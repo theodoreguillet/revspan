@@ -1,8 +1,9 @@
 // HTTP application (Hono): JSON API under /api + built page (dist/web).
 // Local security: Host header checked (anti DNS rebinding), writes require X-Revspan and a matching origin,
-// CSP headers. The token never leaves the server.
+// CSP headers, and for the CLI a per-run secret cookie on every /api call (cli-secret.ts). The token never leaves the server.
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { getCookie, setCookie } from 'hono/cookie';
 import { secureHeaders } from 'hono/secure-headers';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -10,6 +11,7 @@ import type { ApiErrorBody, ContributorList, ErrorCode, ErrorParams, Health, PrR
 import { MUTATION_HEADER } from '../../shared/api.ts';
 import { parsePrUrl } from '../../shared/pr-url.ts';
 import { AppError } from '../errors.ts';
+import { SECRET_COOKIE, redirectHash, secretMatches } from './cli-secret.ts';
 import type { HomeService } from '../services/home-service.ts';
 import type { PrService } from '../services/pr-service.ts';
 import type { SettingsService } from '../services/settings-service.ts';
@@ -31,6 +33,8 @@ export interface HttpDeps {
     webDir?: string;
     /** Accepted hosts (e.g. 127.0.0.1:7420), known once the port is open. */
     allowedHosts: () => readonly string[];
+    /** CLI's per-run secret, required as a cookie on /api (except /api/health); null/absent: no check (extension, tests). */
+    secret?: string | null;
 }
 
 const refOf = (c: Context): PrRef => parse(prRefSchema, { workspace: c.req.param('ws'), repo: c.req.param('repo'), id: c.req.param('id') });
@@ -51,7 +55,12 @@ function errorResponse(c: Context, status: ContentfulStatusCode, code: ErrorCode
     return c.json<ApiErrorBody>({ error: params ? { code, message, params } : { code, message } }, status);
 }
 
-export function createHttpApp({ version, settings, home, prs, webDir, allowedHosts }: HttpDeps): Hono {
+const prHash = (url: string | undefined): string => {
+    const ref = parsePrUrl(url);
+    return ref ? `#/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '';
+};
+
+export function createHttpApp({ version, settings, home, prs, webDir, allowedHosts, secret = null }: HttpDeps): Hono {
     const app = new Hono();
 
     app.use('*', async (c, next) => {
@@ -84,6 +93,14 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
         },
         referrerPolicy: 'no-referrer',
     }));
+
+    // Reads included: the diffs and comments are as private as the writes. /api/health stays open (no data).
+    app.use('/api/*', async (c, next) => {
+        if (secret && c.req.path !== '/api/health' && !secretMatches(secret, getCookie(c, SECRET_COOKIE))) {
+            return errorResponse(c, 401, 'NEEDS_SECRET', 'Open Revspan from the revspan command (or the address it prints).');
+        }
+        await next();
+    });
 
     app.use('/api/*', bodyLimit({
         maxSize: MAX_BODY_BYTES,
@@ -141,10 +158,18 @@ export function createHttpApp({ version, settings, home, prs, webDir, allowedHos
 
     // ---------- Page ----------
 
-    // Direct link from a Bitbucket URL: /open?url=https://bitbucket.org/<ws>/<repo>/pull-requests/<id>
+    // Direct link from a Bitbucket URL: /open?url=https://bitbucket.org/<ws>/<repo>/pull-requests/<id> (no secret, no data).
+    // CLI: /open?k=<secret>[&to=<#/hash>] sets the secret cookie, then redirects to that hash of the page only.
     app.get('/open', (c) => {
-        const ref = parsePrUrl(c.req.query('url'));
-        return c.redirect(ref ? `/#/pr/${ref.workspace}/${ref.repo}/${ref.id}` : '/', 302);
+        const key = c.req.query('k');
+        if (secret && key !== undefined) {
+            if (!secretMatches(secret, key)) {
+                return errorResponse(c, 403, 'FORBIDDEN', 'Invalid key: open the address printed by the revspan command.');
+            }
+            setCookie(c, SECRET_COOKIE, secret, { httpOnly: true, sameSite: 'Strict', path: '/' });
+            return c.redirect(`/${redirectHash(c.req.query('to')) || prHash(c.req.query('url'))}`, 302);
+        }
+        return c.redirect(`/${prHash(c.req.query('url'))}`, 302);
     });
 
     if (webDir) {

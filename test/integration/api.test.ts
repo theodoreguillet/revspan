@@ -9,6 +9,7 @@ import type { ApiErrorBody, Comment, Comparison, ContributorList, FollowedList, 
 import { DEFAULT_REVIEW_SETTINGS } from '../../src/shared/review-settings.ts';
 import { startApp, type RunningApp } from '../../src/server/app.ts';
 import { Cache } from '../../src/server/infra/cache.ts';
+import { runningInstance, writeRunFile } from '../../src/server/infra/run-file.ts';
 import {
     FAKE_EMAIL, FAKE_PRS, FAKE_TOKEN, REPO, WS, pushVersion, startFakeBitbucket, type FakeBitbucket, type RecordedCall, type RecordedRequest,
 } from '../support/fake-bitbucket.ts';
@@ -23,14 +24,14 @@ let env: Env | null = null;
 
 const PACKAGE_VERSION = (JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
-const startRevspan = (dir: string, fake: FakeBitbucket, fetchImpl: typeof fetch = fetch): Promise<RunningApp> =>
-    startApp({ port: 0, fetchImpl, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
+const startRevspan = (dir: string, fake: FakeBitbucket, fetchImpl: typeof fetch = fetch, secret: string | null = null): Promise<RunningApp> =>
+    startApp({ port: 0, fetchImpl, secret, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file', REVSPAN_BITBUCKET_API: fake.url } });
 
-/** Fresh environment; with a token configured by default. */
-async function setup({ withToken = true } = {}): Promise<Env> {
+/** Fresh environment; with a token configured by default; `secret`: the CLI's per-run secret (none: the extension's case). */
+async function setup({ withToken = true, secret = null }: { withToken?: boolean; secret?: string | null } = {}): Promise<Env> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revspan-it-'));
     const fake = await startFakeBitbucket();
-    const app = await startRevspan(dir, fake);
+    const app = await startRevspan(dir, fake, fetch, secret);
     if (withToken) {
         await app.settings.update({ email: FAKE_EMAIL, token: FAKE_TOKEN, repos: [`${WS}/${REPO}`] });
     }
@@ -188,6 +189,129 @@ describe('settings and security', () => {
         expect(open.headers.get('location')).toBe(`/#/pr/${WS}/${REPO}/42`);
         expect(await rawGet('/../package.json', `127.0.0.1:${app.port}`)).not.toBe(200);
         expect(await rawGet('/%2e%2e/package.json', `127.0.0.1:${app.port}`)).not.toBe(200);
+    });
+
+    describe('per-run secret (CLI)', () => {
+        const SECRET = 's3cr3t-Kq9_xZ-0123456789abcdefghijklmnop';
+        const cookie = { Cookie: `revspan_k=${SECRET}` };
+        const PR_URL = 'https://bitbucket.org/acme/records-api/pull-requests/12';
+
+        it('every /api route needs the cookie: 401 NEEDS_SECRET without it or with a wrong one, 200 with it', async () => {
+            const { app } = await setup({ secret: SECRET });
+            const bare = await fetch(`${app.url}/api/home`);
+            expect(bare.status).toBe(401);
+            expect(bare.headers.get('cache-control')).toBe('no-store');
+            expect(((await bare.json()) as ApiErrorBody).error).toEqual({ code: 'NEEDS_SECRET', message: expect.stringContaining('revspan') });
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: 'revspan_k=wrong' } })).status).toBe(401);
+            expect((await fetch(`${app.url}/api/settings`, { headers: { Cookie: `other=1; revspan_k=${SECRET.slice(0, -1)}` } })).status).toBe(401);
+            const write = await fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: '{}' });
+            expect(write.status).toBe(401);
+            expect((await fetch(`${app.url}/api/nope`)).status).toBe(401);
+
+            expect((await fetch(`${app.url}/api/home`, { headers: cookie })).status).toBe(200);
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: `theme=dark; revspan_k=${SECRET}; x=y` } })).status).toBe(200);
+            const saved = await fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { ...cookie, 'X-Revspan': '1', 'Content-Type': 'application/json' }, body: '{}' });
+            expect(saved.status).toBe(200);
+        });
+
+        it('/api/health, static files and /open?url= stay reachable without the cookie, and /open?url= gives none', async () => {
+            const { app } = await setup({ secret: SECRET });
+            const health = await fetch(`${app.url}/api/health`);
+            expect(health.status).toBe(200);
+            expect(await health.json()).toEqual({ app: 'revspan', version: PACKAGE_VERSION });
+            expect(await rawGet('/index.html', `127.0.0.1:${app.port}`)).not.toBe(401);
+
+            const open = await fetch(`${app.url}/open?url=${encodeURIComponent(PR_URL)}`, { redirect: 'manual' });
+            expect(open.status).toBe(302);
+            expect(open.headers.get('location')).toBe('/#/pr/acme/records-api/12');
+            expect(open.headers.get('set-cookie')).toBeNull();
+        });
+
+        it('/open?k= trades the secret for an HttpOnly SameSite=Strict cookie and redirects to the page', async () => {
+            const { app } = await setup({ secret: SECRET });
+            const open = await fetch(`${app.url}/open?k=${SECRET}&to=%23%2Fpr%2Facme%2Frecords-api%2F12`, { redirect: 'manual' });
+            expect(open.status).toBe(302);
+            expect(open.headers.get('location')).toBe('/#/pr/acme/records-api/12');
+            const setCookie = open.headers.get('set-cookie') ?? '';
+            expect(setCookie).toContain(`revspan_k=${SECRET}`);
+            expect(setCookie).toContain('HttpOnly');
+            expect(setCookie).toContain('SameSite=Strict');
+            expect(setCookie).toContain('Path=/');
+            const value = setCookie.split(';')[0] ?? '';
+            expect((await fetch(`${app.url}/api/home`, { headers: { Cookie: value } })).status).toBe(200);
+
+            const home = await fetch(`${app.url}/open?k=${SECRET}`, { redirect: 'manual' });
+            expect(home.headers.get('location')).toBe('/');
+            const withUrl = await fetch(`${app.url}/open?k=${SECRET}&url=${encodeURIComponent(PR_URL)}`, { redirect: 'manual' });
+            expect(withUrl.headers.get('location')).toBe('/#/pr/acme/records-api/12');
+        });
+
+        it('/open?k= with a wrong secret: 403 and no cookie', async () => {
+            const { app } = await setup({ secret: SECRET });
+            for (const k of ['wrong', '', SECRET.slice(0, -1), `${SECRET}x`]) {
+                const open = await fetch(`${app.url}/open?k=${encodeURIComponent(k)}&to=%23%2F`, { redirect: 'manual' });
+                expect(open.status, k).toBe(403);
+                expect(open.headers.get('set-cookie'), k).toBeNull();
+            }
+        });
+
+        it('/open?k= never redirects outside the page: anything but a #/ hash goes to /', async () => {
+            const { app } = await setup({ secret: SECRET });
+            for (const to of ['https://evil.example/', '//evil.example', '/\\evil.example', 'javascript:alert(1)', '#/pr/a\r\nSet-Cookie: x=1', '%23%2F', 'pr/acme/x/1']) {
+                const open = await fetch(`${app.url}/open?k=${SECRET}&to=${encodeURIComponent(to)}`, { redirect: 'manual' });
+                expect(open.status, to).toBe(302);
+                expect(open.headers.get('location'), to).toBe('/');
+            }
+        });
+
+        it('openUrl: the ?k= address with the page hash; without a secret, the page address', async () => {
+            const { app } = await setup({ secret: SECRET });
+            expect(app.openUrl()).toBe(`${app.url}/open?k=${SECRET}`);
+            expect(app.openUrl('#/pr/acme/records-api/12')).toBe(`${app.url}/open?k=${SECRET}&to=%23%2Fpr%2Facme%2Frecords-api%2F12`);
+            const plain = await startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: env?.dir, REVSPAN_TOKEN_STORE: 'file' } });
+            try {
+                expect(plain.openUrl()).toBe(`${plain.url}/`);
+                expect(plain.openUrl('#/pr/acme/records-api/12')).toBe(`${plain.url}/#/pr/acme/records-api/12`);
+            } finally {
+                await plain.close();
+            }
+        });
+
+        it('without a secret (VS Code extension, tests): no cookie needed', async () => {
+            const { app } = await setup();
+            expect((await fetch(`${app.url}/api/home`)).status).toBe(200);
+        });
+
+        it('a second CLI finds the running instance from run.json only if it answers with the stored secret', async () => {
+            const { app, dir } = await setup({ secret: SECRET });
+            writeRunFile(dir, { port: app.port, secret: SECRET, pid: process.pid });
+            expect(await runningInstance(dir)).toEqual({ port: app.port, secret: SECRET, pid: process.pid });
+
+            // Stale secret (another run), dead process, closed port, garbage file: start a new instance.
+            writeRunFile(dir, { port: app.port, secret: 'stale-secret', pid: process.pid });
+            expect(await runningInstance(dir)).toBeNull();
+            writeRunFile(dir, { port: app.port, secret: SECRET, pid: 2_147_483_646 });
+            expect(await runningInstance(dir)).toBeNull();
+            const closed = await startApp({ port: 0, env: { REVSPAN_CONFIG_DIR: dir, REVSPAN_TOKEN_STORE: 'file' } });
+            const closedPort = closed.port;
+            await closed.close();
+            writeRunFile(dir, { port: closedPort, secret: SECRET, pid: process.pid });
+            expect(await runningInstance(dir)).toBeNull();
+            fs.writeFileSync(path.join(dir, 'run.json'), 'not json');
+            expect(await runningInstance(dir)).toBeNull();
+        });
+
+        it('the check reads no Bitbucket data and finds an instance with no token yet', async () => {
+            const { app, dir, fake } = await setup({ secret: SECRET });
+            writeRunFile(dir, { port: app.port, secret: SECRET, pid: process.pid });
+            const before = fake.requests.length;
+            expect(await runningInstance(dir)).toMatchObject({ port: app.port });
+            expect(fake.requests.length).toBe(before);
+
+            await app.settings.update({ token: '' });
+            expect((await fetch(`${app.url}/api/home`, { headers: cookie })).status).toBe(409);
+            expect(await runningInstance(dir)).toMatchObject({ port: app.port });
+        });
     });
 
     it('error bodies: English message plus the parameters the page translates from', async () => {

@@ -34,6 +34,11 @@ describe('error messages translated from the code and its parameters', () => {
         expect(errorText(en, error)).toBe('Revspan was just updated: reload the VS Code window (Developer: Reload Window) to save settings.');
     });
 
+    it('CLI page opened without its per-run secret: open it from the revspan command', () => {
+        expect(errorText(fr, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Ouvre Revspan depuis la commande `revspan` (ou l\'adresse qu\'elle affiche).');
+        expect(errorText(en, { code: 'NEEDS_SECRET', message: 'x' })).toBe('Open Revspan from the `revspan` command (or the address it prints).');
+    });
+
     it('settings errors', () => {
         expect(errorText(fr, { code: 'BAD_REQUEST', message: 'Invalid email address.', params: { reason: 'invalid-email' } })).toBe('Adresse e-mail invalide.');
         expect(errorText(en, { code: 'BAD_REQUEST', message: 'x', params: { reason: 'email-required' } })).toBe('Enter the Atlassian account email first.');

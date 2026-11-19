@@ -46,6 +46,8 @@ function messageText(tr: Translator, message: ErrorMessage): string {
             return tr.t('error.internal', { detail: message.detail });
         case 'reloadWindow':
             return tr.t('error.reloadWindow');
+        case 'needsSecret':
+            return tr.t('error.needsSecret');
     }
 }
 
