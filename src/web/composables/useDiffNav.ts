@@ -10,6 +10,8 @@ export interface ThreadEntry {
 
 /** Frames during which a scroll is corrected (blocks rendered as they come into view settle in two or three). */
 const SETTLE_FRAMES = 8;
+/** Time during which the scroll of a file reached by j/k/v settles: scroll events then never move the current file. */
+const PIN_SETTLE_MS = 400;
 /** The latest scroll: a new one, or the user scrolling by hand, stops correcting the previous one. */
 let lastScroll = 0;
 let listening = false;
@@ -79,6 +81,41 @@ export function useDiffNav() {
     /** Line to reach by go to definition (or back), registered when its block renders it; null once revealed. */
     let jump: HTMLElement | null = null;
 
+    /**
+     * File reached by j/k/v: while its scroll settles (the page re-lays out as files collapse, and it may stop short of
+     * the place at the end of the page) the scroll position says another file, so the scroll does not move `curFile`
+     * back. Then it stays pinned until the scroll moves away from where it settled (`y`: the place after the scroll,
+     * refreshed while it settles). Any other scroll set by the page (thread, search match, definition, tabs) releases it.
+     */
+    let pin: { until: number; y: number } | null = null;
+
+    /** Pins `curFile` (just set to the file reached) before the scroll to it. */
+    function pinFile(): void {
+        pin = { until: performance.now() + PIN_SETTLE_MS, y: window.scrollY };
+    }
+
+    /** On a scroll event: whether `curFile` stays as is (a pinned file settling, or not scrolled away from). */
+    function pinHolds(): boolean {
+        if (!pin) {
+            return false;
+        }
+        if (performance.now() < pin.until) {
+            pin.y = window.scrollY;
+            return true;
+        }
+        if (Math.abs(window.scrollY - pin.y) <= 1) {
+            return true;
+        }
+        pin = null;
+        return false;
+    }
+
+    /** A scroll set by the page to something else than the pinned file: the scroll drives `curFile` again. */
+    function scrollAway(el: Element, offset: number): void {
+        pin = null;
+        scrollToElement(el, offset);
+    }
+
     function registerFile(path: string, el: HTMLElement | null): void {
         if (el) {
             files.set(path, el);
@@ -127,7 +164,7 @@ export function useDiffNav() {
         if (!el?.isConnected) {
             return null;
         }
-        scrollToElement(el, top === undefined ? stickyHeight.value + 60 : Math.max(top, stickyHeight.value));
+        scrollAway(el, top === undefined ? stickyHeight.value + 60 : Math.max(top, stickyHeight.value));
         flash(el);
         return el;
     }
@@ -135,14 +172,18 @@ export function useDiffNav() {
     /** Scrolls the line of the current search match under the sticky bars and the sticky file header. */
     function scrollToMatch(): void {
         if (match?.isConnected) {
-            scrollToElement(match, stickyHeight.value + 60);
+            scrollAway(match, stickyHeight.value + 60);
         }
     }
 
+    /** Scrolls a file under the sticky bars; a pin (pinFile) then holds from where this scroll left the page. */
     function scrollToFile(path: string): void {
         const el = files.get(path);
         if (el) {
             scrollToElement(el, stickyHeight.value + 6);
+        }
+        if (pin) {
+            pin.y = window.scrollY;
         }
     }
 
@@ -162,6 +203,7 @@ export function useDiffNav() {
         }
         const top = tabs.getBoundingClientRect().top + window.scrollY - tlHeight.value;
         if (window.scrollY > top) {
+            pin = null;
             window.scrollTo({ top });
         }
     }
@@ -188,7 +230,7 @@ export function useDiffNav() {
             .sort((a, b) => a.top - b.top);
         const target = dir > 0 ? ordered.find((t) => t.top > y + 2) : ordered.reverse().find((t) => t.top < y - 2);
         if (target) {
-            scrollToElement(target.el, y);
+            scrollAway(target.el, y);
             flash(target.el);
         }
     }
@@ -197,7 +239,7 @@ export function useDiffNav() {
     function revealThread(threadId: number): void {
         for (const [el, entry] of threads) {
             if (entry.inDiff && entry.threadId === threadId) {
-                scrollToElement(el, stickyHeight.value + 60);
+                scrollAway(el, stickyHeight.value + 60);
                 flash(el);
                 return;
             }
@@ -206,7 +248,7 @@ export function useDiffNav() {
 
     return {
         tlHeight, toolbarHeight, stickyHeight, curFile,
-        registerFile, registerTabs, registerThread, unregisterThread, registerMatch, registerJump, clearJump,
+        registerFile, registerTabs, registerThread, unregisterThread, registerMatch, registerJump, clearJump, pinFile, pinHolds,
         scrollToFile, scrollToMatch, revealJump, keepFileInView, scrollToTabsIfBelow, fileUnderTimeline, nextThread, revealThread,
     };
 }

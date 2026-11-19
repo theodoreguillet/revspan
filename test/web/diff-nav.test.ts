@@ -139,6 +139,89 @@ describe('diff navigation under the sticky timeline and diff toolbar', () => {
         line.remove();
     });
 
+    describe('the pin of a file reached by j, k or v', () => {
+        let y = 0;
+        let now = 1000;
+
+        /** A nav whose window scrolls where asked (y = 300) and a file pinned at 1000 ms, its scroll done. */
+        function pinned(): ReturnType<typeof nav> {
+            y = 0;
+            now = 1000;
+            vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => y);
+            vi.spyOn(performance, 'now').mockImplementation(() => now);
+            vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+                y = 300;
+            });
+            const n = nav(150, 40);
+            n.registerFile('a.ts', at(800));
+            n.pinFile();
+            n.scrollToFile('a.ts');
+            return n;
+        }
+
+        it('holds while the scroll settles, then until the scroll moves from where it settled', () => {
+            const n = pinned();
+            y = 320;
+            expect(n.pinHolds()).toBe(true);
+            now = 5000;
+            expect(n.pinHolds()).toBe(true);
+            y = 321;
+            expect(n.pinHolds()).toBe(true);
+            y = 400;
+            expect(n.pinHolds()).toBe(false);
+            // released for good
+            y = 320;
+            expect(n.pinHolds()).toBe(false);
+        });
+
+        it('is measured from where the scroll to the file left the page, not from where it started', () => {
+            const n = pinned();
+            now = 5000;
+            expect(n.pinHolds()).toBe(true);
+        });
+
+        it('is released by any other scroll set by the page: thread, search match, definition, tabs', () => {
+            const line = at(800);
+            document.body.append(line);
+            const releases: [string, (n: ReturnType<typeof nav>) => void][] = [
+                ['thread', (n) => {
+                    n.registerThread(line, { threadId: 7, inDiff: true });
+                    n.revealThread(7);
+                }],
+                ['search match', (n) => {
+                    n.registerMatch(line);
+                    n.scrollToMatch();
+                }],
+                ['definition', (n) => {
+                    n.registerJump(line);
+                    n.revealJump();
+                }],
+                ['tabs', (n) => {
+                    n.registerTabs(at(-500));
+                    y = 2000;
+                    n.scrollToTabsIfBelow();
+                }],
+            ];
+            for (const [what, release] of releases) {
+                const n = pinned();
+                release(n);
+                y += 1;
+                expect(n.pinHolds(), what).toBe(false);
+            }
+            line.remove();
+        });
+
+        it('stays when the page does not scroll: no thread to reach, tabs already in view, a file kept in view', () => {
+            const n = pinned();
+            n.nextThread(1);
+            n.registerTabs(at(500));
+            n.scrollToTabsIfBelow();
+            n.registerFile('b.ts', at(400));
+            n.keepFileInView('b.ts');
+            expect(n.pinHolds()).toBe(true);
+        });
+    });
+
     it('go to definition: Vue clearing the ref of the previous target line does not unregister the new one', () => {
         vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
         const n = nav(150, 40);

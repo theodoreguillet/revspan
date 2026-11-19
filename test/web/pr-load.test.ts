@@ -798,35 +798,99 @@ describe('PR page while a slow diff loads', () => {
         expect(page.curFile).toBe(2);
     });
 
-    it('v: a late scroll update (page re-laid out, file stopped short of the top) does not put the current file back', async () => {
-        api.viewed.mockResolvedValue({ ok: true });
-        threeFiles({});
-        const page = await mountPage();
-        await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+    describe('the file reached by j, k or v while its scroll settles', () => {
         // no file element is registered here: the scroll position always reads "file 0", like a page too short to scroll to file 1
         let y = 0;
-        vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => y);
-        vi.spyOn(performance, 'now').mockReturnValue(1000);
-        page.handleKey('v');
-        await vi.waitFor(() => expect(page.curFile).toBe(1));
-        page.updateCurrentFromScroll();
-        expect(page.curFile).toBe(1);
-        // the scroll has settled: still the same position, still the target
-        vi.spyOn(performance, 'now').mockReturnValue(5000);
-        page.updateCurrentFromScroll();
-        page.updateCurrentFromScroll();
-        expect(page.curFile).toBe(1);
-        // the next v marks file 1, not file 0 (which would unmark it)
-        page.handleKey('v');
-        await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledTimes(2));
-        expect(api.viewed.mock.calls[1]?.[1]).toMatchObject({ path: 'b', viewed: true });
-        // the user scrolls away once that move has settled too: the scroll drives the current file again
-        vi.spyOn(performance, 'now').mockReturnValue(9000);
-        page.updateCurrentFromScroll();
-        y = 300;
-        page.updateCurrentFromScroll();
-        expect(page.curFile).toBe(0);
-        vi.restoreAllMocks();
+        let now = 1000;
+
+        beforeEach(() => {
+            y = 0;
+            now = 1000;
+            vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => y);
+            vi.spyOn(performance, 'now').mockImplementation(() => now);
+        });
+
+        // the spies never leak into the next tests, even when an assertion fails
+        afterEach(() => vi.restoreAllMocks());
+
+        async function onFile1(key: 'j' | 'v'): Promise<PrPage> {
+            api.viewed.mockResolvedValue({ ok: true });
+            threeFiles({});
+            const page = await mountPage();
+            await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+            expect(page.handleKey(key)).toBe(true);
+            await vi.waitFor(() => expect(page.curFile).toBe(1));
+            return page;
+        }
+
+        it('v: a late scroll update (page re-laid out, file stopped short of the top) does not put the current file back', async () => {
+            const page = await onFile1('v');
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(1);
+            // the scroll has settled: still the same position, still the target
+            now = 5000;
+            page.updateCurrentFromScroll();
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(1);
+            // the next v marks file 1, not file 0 (which would unmark it)
+            page.handleKey('v');
+            await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledTimes(2));
+            expect(api.viewed.mock.calls[1]?.[1]).toMatchObject({ path: 'b', viewed: true });
+            // the user scrolls away once that move has settled too: the scroll drives the current file again
+            now = 9000;
+            page.updateCurrentFromScroll();
+            y = 300;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(0);
+        });
+
+        it('once settled, the first scroll that moves the page (a jump set by the page) makes the current file follow', async () => {
+            const page = await onFile1('j');
+            now = 5000;
+            y = 300;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(0);
+        });
+
+        it('the settled place is where the last scroll of the settle time left the page', async () => {
+            const page = await onFile1('j');
+            // the settling scroll moves the page: still pinned, and that place becomes the reference
+            y = 120;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(1);
+            now = 5000;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(1);
+            y = 400;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(0);
+        });
+
+        it.each([['settled', 5000], ['still settling', 1100]])('n after j (%s): the scroll to the thread drives the current file', async (_, at) => {
+            const page = await onFile1('j');
+            const thread = document.createElement('div');
+            // shown, far below the reading line
+            Object.defineProperty(thread, 'offsetParent', { get: () => document.body });
+            thread.getBoundingClientRect = () => ({ top: 900, bottom: 930, left: 0, right: 100, width: 100, height: 30, x: 0, y: 900, toJSON: () => ({}) });
+            vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+                y = 300;
+            });
+            page.registerThread(thread, { threadId: 1, inDiff: true });
+            now = at;
+            expect(page.handleKey('n')).toBe(true);
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(0);
+            page.unregisterThread(thread);
+        });
+
+        it('n with no thread to reach (no scroll) keeps the pin: a late settling scroll does not move the file back', async () => {
+            const page = await onFile1('j');
+            now = 1100;
+            expect(page.handleKey('n')).toBe(true);
+            y = 50;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(1);
+        });
     });
 
     it('v: a file seen in an older version but changed since counts as unseen', async () => {
