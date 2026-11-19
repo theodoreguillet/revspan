@@ -1,12 +1,13 @@
 // Drag on a line's "+" to comment a range of lines, like Bitbucket: press the "+" of a new-side line, move over other
 // lines of the file (the page scrolls while the pointer is near the top or bottom edge), release: the composer opens
-// for the lines in between, as a click on the first "+" then a Shift+click on the other would. Released on the line
-// pressed: that line alone, as a click. Escape, a release outside the window, a cancelled pointer or the window losing
-// the focus cancel it. The line under the pointer is read from the rows on screen (their `data-n`), once per frame:
+// for the lines in between, as a click on the first "+" then a Shift+click on the other would. Until the pointer has
+// moved a few pixels it is a click (nothing selected, no scroll, even near an edge); released on the line pressed: that
+// line alone, as a click. Escape, a release outside the window, a cancelled pointer, the window losing the focus or a
+// new comparison cancel it. The line under the pointer is read from the rows on screen (their `data-n`), once per frame:
 // nothing is measured nor rendered for each pointer move.
 import { onScopeDispose, shallowRef } from 'vue';
 import type { ComposerTarget } from '../lib/diff.ts';
-import { dragSpan, edgeScrollStep, edgeSpeed, hoveredLine, reachedLine, type Band, type LineSpan } from '../lib/range-drag.ts';
+import { armsDrag, dragSpan, edgeScrollStep, edgeSpeed, hoveredLine, reachedLine, type Band, type LineSpan } from '../lib/range-drag.ts';
 
 /** Lines being selected by a drag, in a file. */
 export interface DragRange extends LineSpan {
@@ -32,9 +33,12 @@ interface Drag {
     /** Horizontal extent of the line pressed: the line under the pointer is read there (side by side: the new column). */
     left: number;
     right: number;
-    /** Last pointer position (window coordinates). */
+    /** Where the pointer was pressed, and its last position (window coordinates). */
+    pressed: { x: number; y: number };
     x: number;
     y: number;
+    /** The pointer has moved away from where it was pressed (armsDrag): a drag, no longer a click. */
+    armed: boolean;
     /** Line reached, and whether the pointer has left the line pressed once (the range shows from then on). */
     line: number;
     moved: boolean;
@@ -83,7 +87,10 @@ export function useRangeDrag(host: RangeDragHost) {
         }
     }
 
-    /** Each frame: scrolls the page while the pointer is near an edge, then reads the line under it if needed. */
+    /**
+     * Each frame, once the press became a drag: scrolls the page while the pointer is near an edge, then reads the line
+     * under it if needed.
+     */
     function tick(time: number): void {
         const d = drag;
         if (!d) {
@@ -96,7 +103,7 @@ export function useRangeDrag(host: RangeDragHost) {
         const ms = d.time === null ? FRAME_MS : time - d.time;
         d.time = time;
         const view = viewOf(d);
-        const speed = edgeSpeed(d.y, view);
+        const speed = d.armed ? edgeSpeed(d.y, view) : 0;
         if (speed) {
             const box = d.file.getBoundingClientRect();
             const step = edgeScrollStep(speed, ms, view, { top: box.top + d.header, bottom: box.bottom });
@@ -106,7 +113,7 @@ export function useRangeDrag(host: RangeDragHost) {
                 d.stale = true;
             }
         }
-        if (d.stale) {
+        if (d.stale && d.armed) {
             sample(d);
         }
         d.frame = requestAnimationFrame(tick);
@@ -124,6 +131,7 @@ export function useRangeDrag(host: RangeDragHost) {
         }
         d.x = event.clientX;
         d.y = event.clientY;
+        d.armed ||= armsDrag(d.pressed, d);
         d.stale = true;
     };
 
@@ -136,7 +144,11 @@ export function useRangeDrag(host: RangeDragHost) {
         if (!outside) {
             d.x = event.clientX;
             d.y = event.clientY;
-            sample(d);
+            // released far from the press with no move seen in between (a fast flick): a drag too
+            d.armed ||= armsDrag(d.pressed, d);
+            if (d.armed) {
+                sample(d);
+            }
         }
         stop();
         if (outside) {
@@ -215,7 +227,8 @@ export function useRangeDrag(host: RangeDragHost) {
         const box = row.getBoundingClientRect();
         drag = {
             anchor: target, file, header: file.querySelector('.rv-fh')?.getBoundingClientRect().height ?? 0, left: box.left, right: box.right,
-            x: event.clientX, y: event.clientY, line: target.line, moved: false, stale: false, frame: 0, time: null,
+            pressed: { x: event.clientX, y: event.clientY }, x: event.clientX, y: event.clientY, armed: false, line: target.line, moved: false,
+            stale: false, frame: 0, time: null,
         };
         for (const [type, listener, options] of listeners) {
             window.addEventListener(type, listener, options);
@@ -233,5 +246,5 @@ export function useRangeDrag(host: RangeDragHost) {
 
     onScopeDispose(stop);
 
-    return { range, start, takeReleasedClick };
+    return { range, start, takeReleasedClick, cancel: stop };
 }

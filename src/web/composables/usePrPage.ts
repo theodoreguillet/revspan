@@ -72,8 +72,11 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
         nav.scrollToTabsIfBelow();
     });
     // A composer opened on the previous range's diff, still shown during the first 200 ms of a load, is not sent
-    // against the new one.
-    watch(() => (load.compare.value ? `${load.compare.value.from}-${load.compare.value.to}` : null), () => discussion.closeComposer());
+    // against the new one; a drag on a "+" of it stops (its file may still be shown with other lines).
+    watch(() => (load.compare.value ? `${load.compare.value.from}-${load.compare.value.to}` : null), () => {
+        rangeDrag.cancel();
+        discussion.closeComposer();
+    });
     /** The comparison being loaded for the current range and context (settled: its errors are Vue's, see below). */
     let shownLoad: Promise<void> = Promise.resolve();
     watch([range.from, range.to, options.fullContext], () => {

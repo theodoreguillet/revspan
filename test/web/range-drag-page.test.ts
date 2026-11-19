@@ -111,8 +111,11 @@ describe('drag on a line\'s "+" to comment a range of lines', () => {
         expect(page.composer?.startLine).toBeUndefined();
     };
 
-    const pointer = (type: string, init: PointerEventInit = {}): PointerEvent =>
-        new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: 120, clientY: 300, ...init });
+    /** Pressed and released at y = 300 by default; a move goes 20 px lower (a real move: the drag starts after 4 px). */
+    const pointer = (type: string, init: PointerEventInit = {}): PointerEvent => new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: 120,
+        clientY: type === 'pointermove' ? 320 : 300, ...init,
+    });
     const press = (el: Element, init: PointerEventInit = {}): void => {
         el.dispatchEvent(pointer('pointerdown', init));
     };
@@ -348,6 +351,90 @@ describe('drag on a line\'s "+" to comment a range of lines', () => {
         expect(marked()).toEqual([8, 40, 41]);
         await release(row(8), { clientY: 60 });
         expect(page.composer).toMatchObject({ line: 41, startLine: 8 });
+    });
+
+    /** The diff read under bars of 190 px; the file's box (its lines, top to bottom) as given; scrollBy recorded. */
+    function layout(top: number, bottom: number) {
+        page.tlHeight = 150;
+        page.toolbarHeight = 40;
+        fileEl().getBoundingClientRect = () => ({ top, bottom, left: 0, right: 800, width: 800, height: bottom - top, x: 0, y: top, toJSON: () => ({}) });
+        return vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    }
+
+    it('a click on a "+" near the bottom edge, without moving: that line alone, the page does not scroll, a j/k pin holds', async () => {
+        await mountPage();
+        const scrollBy = layout(-500, window.innerHeight + 500);
+        page.pinFile();
+        const y = window.innerHeight - 10;
+        over(row(6));
+        press(plus(6), { clientY: y });
+        // held still for a few frames (a slow click), the page under the pointer moving or not
+        for (let k = 0; k < 6; k++) {
+            over(row(7 + k));
+            await frame();
+        }
+        expect(marked()).toEqual([]);
+        await release(plus(6), { clientY: y });
+        onLine(6);
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(page.pinHolds()).toBe(true);
+    });
+
+    it('a click on a "+" near the top edge (a search match or a definition lands there): that line alone, no scroll', async () => {
+        await mountPage();
+        const scrollBy = layout(-400, window.innerHeight + 500);
+        page.pinFile();
+        const y = 190 + 30;
+        over(row(3));
+        press(plus(3), { clientY: y });
+        // a jitter of a few pixels is still a click
+        over(row(2));
+        window.dispatchEvent(pointer('pointermove', { clientX: 123, clientY: y - 2 }));
+        for (let k = 0; k < 6; k++) {
+            await frame();
+        }
+        expect(marked()).toEqual([]);
+        await release(row(2), { clientX: 123, clientY: y - 2 });
+        onLine(3);
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(page.pinHolds()).toBe(true);
+    });
+
+    it('pressed near an edge, the page scrolls once the pointer has moved more than 4 px', async () => {
+        await mountPage();
+        const scrollBy = layout(-500, window.innerHeight + 500);
+        const y = window.innerHeight - 30;
+        press(plus(6), { clientY: y });
+        await moveTo(row(6), { clientY: y + 4 });
+        await frame();
+        expect(scrollBy).not.toHaveBeenCalled();
+        await moveTo(row(7), { clientY: y + 6 });
+        expect(scrollBy).toHaveBeenCalled();
+        expect(marked()).toEqual([6, 7]);
+        await release(row(7), { clientY: y + 6 });
+        expect(page.composer).toMatchObject({ line: 7, startLine: 6 });
+    });
+
+    it('a release far from the press with no move seen in between (a fast flick) still selects the range', async () => {
+        await mountPage();
+        press(plus(2));
+        over(row(6));
+        await release(row(6), { clientY: 380 });
+        expect(page.composer).toMatchObject({ line: 6, startLine: 2 });
+    });
+
+    it('a new comparison (another range of versions) stops a live drag: nothing marked, the release does nothing', async () => {
+        await mountPage();
+        press(plus(2));
+        await moveTo(row(6));
+        expect(marked()).toEqual([2, 3, 4, 5, 6]);
+        page.select(8, 10);
+        await vi.waitFor(() => expect(page.compare?.from).toBe(8));
+        await nextTick();
+        expect(marked()).toEqual([]);
+        expect(document.documentElement.classList.contains('rv-range-drag')).toBe(false);
+        await release(row(6));
+        expect(page.composer).toBeNull();
     });
 
     it('side by side: the line is read in the new column, only its cells are marked', async () => {

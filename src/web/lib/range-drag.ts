@@ -15,6 +15,8 @@ export interface Band {
     bottom: number;
 }
 
+/** Distance (px) the pointer moves from where it was pressed before a press becomes a drag (below: a click). */
+export const ARM_PX = 4;
 /** Height (px) of the bands along the top and bottom edges where a drag scrolls the page. */
 export const EDGE_ZONE_PX = 48;
 /** Scroll speed (px per ms) as the pointer enters a band, and at (or beyond) the edge. */
@@ -22,6 +24,15 @@ export const EDGE_MIN_SPEED = 0.1;
 export const EDGE_MAX_SPEED = 1.5;
 /** Longest frame counted (ms): a stalled frame does not make the page jump. */
 export const MAX_FRAME_MS = 50;
+
+/**
+ * A press on a "+" becomes a drag once the pointer is more than ARM_PX from where it was pressed. Until then it is a
+ * click: a "+" pressed near an edge (a search match or a definition lands just under the bars) must not scroll the page
+ * nor select other lines.
+ */
+export function armsDrag(pressed: { x: number; y: number }, at: { x: number; y: number }): boolean {
+    return Math.hypot(at.x - pressed.x, at.y - pressed.y) > ARM_PX;
+}
 
 /**
  * New-side line of the row under the pointer, from its `data-n` (a unified line, or the new cell side by side). null

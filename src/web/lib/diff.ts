@@ -257,6 +257,8 @@ export interface LineView {
     threads: PlacedThread[];
     /** In the range of lines of a shown thread or of the open composer (new-side lines only). */
     inRange: boolean;
+    /** In the range of lines of a shown thread (the marker left while a drag hides the composer's range). */
+    threadRange: boolean;
     /** In the range of lines of the open composer. */
     composing: boolean;
 }
@@ -267,6 +269,7 @@ export interface SplitCellView {
     target: ComposerTarget | null;
     /** New-side cell in a range of lines (see LineView). */
     inRange: boolean;
+    threadRange: boolean;
     composing: boolean;
 }
 
@@ -284,8 +287,6 @@ export interface HunkViewInput {
     byLine: Map<number, PlacedThread[]>;
     canComment: boolean;
     composer: ComposerTarget | null;
-    /** Lines are being selected by a drag on a "+": the composer's own range is not marked meanwhile (the drag's is). */
-    hideComposerRange?: boolean;
 }
 
 const threadsAt = (byLine: Map<number, PlacedThread[]>, line: DiffLine | null): PlacedThread[] =>
@@ -297,25 +298,27 @@ export function fileView(file: Pick<FileDiff, 'status'>, view: 'unified' | 'spli
 }
 
 /** Lines of a hunk in unified view, with threads and composer to insert below. */
-export function unifiedRows({ path, lines, byLine, canComment, composer, hideComposerRange }: HunkViewInput): LineView[] {
-    const composing = hideComposerRange ? [] : composerRange(composer, path);
-    const ranges = [...threadRanges(byLine), ...composing];
+export function unifiedRows({ path, lines, byLine, canComment, composer }: HunkViewInput): LineView[] {
+    const composing = composerRange(composer, path);
+    const threaded = threadRanges(byLine);
+    const ranges = [...threaded, ...composing];
     return lines.map((line) => {
         const target = canComment ? composerTargetFor(path, line, 'both') : null;
         return {
             line, target, composer: sameTarget(target, composer) ? composer : null, threads: threadsAt(byLine, line),
-            inRange: inRanges(ranges, line), composing: inRanges(composing, line),
+            inRange: inRanges(ranges, line), threadRange: inRanges(threaded, line), composing: inRanges(composing, line),
         };
     });
 }
 
 /** Lines of a hunk in side-by-side view (old on the left, new on the right). */
-export function sideBySideRows({ path, lines, byLine, canComment, composer, hideComposerRange }: HunkViewInput): SplitRowView[] {
-    const composing = hideComposerRange ? [] : composerRange(composer, path);
-    const ranges = [...threadRanges(byLine), ...composing];
+export function sideBySideRows({ path, lines, byLine, canComment, composer }: HunkViewInput): SplitRowView[] {
+    const composing = composerRange(composer, path);
+    const threaded = threadRanges(byLine);
+    const ranges = [...threaded, ...composing];
     const cell = (side: 'old' | 'new', line: DiffLine | null): SplitCellView => ({
-        side, line, target: line && canComment ? composerTargetFor(path, line, side) : null,
-        inRange: side === 'new' && inRanges(ranges, line), composing: side === 'new' && inRanges(composing, line),
+        side, line, target: line && canComment ? composerTargetFor(path, line, side) : null, inRange: side === 'new' && inRanges(ranges, line),
+        threadRange: side === 'new' && inRanges(threaded, line), composing: side === 'new' && inRanges(composing, line),
     });
     return splitRows(lines).map(({ left, right }) => {
         const cells: [SplitCellView, SplitCellView] = [cell('old', left), cell('new', right)];

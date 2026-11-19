@@ -150,10 +150,20 @@ def scenario_expand(page, path, label):
 
 
 def scenario_range_drag(page, path):
-    """Drag on the "+" of a line of the big file (5 000 lines, one hunk): 20 lines by hand, then held near the bottom
-    edge while the page scrolls by itself (the range follows). Recorded apart: the drag, then the release (the composer
-    opens on the range, as after a Shift+click)."""
-    row = file_block(page, path).locator('.rv-l[data-n="200"]')
+    """Drag on the "+" of a line of the big file (5 000 lines, one hunk), a composer already open on lines 150-160 (its
+    range is hidden while the drag shows its own): 20 lines by hand, then held near the bottom edge while the page
+    scrolls by itself (the range follows). Recorded apart: the press (held still: a click so far; the open composer's
+    textarea loses the focus, as with any click), the drag, then the release (the composer opens on the range, as after
+    a Shift+click)."""
+    block = file_block(page, path)
+    for n, modifiers in ((150, None), (160, ['Shift'])):
+        line = block.locator(f'.rv-l[data-n="{n}"]')
+        line.evaluate('(e) => window.scrollBy(0, e.getBoundingClientRect().top - 400)')
+        line.hover()
+        line.locator('.rv-plus').click(modifiers=modifiers)
+    expect(page.locator('.rv-comp .q')).to_contain_text('Lines 150–160')
+    settle(page, now(page))
+    row = block.locator('.rv-l[data-n="200"]')
     row.evaluate('(e) => window.scrollBy(0, e.getBoundingClientRect().top - 300)')
     settle(page, now(page))
     row.hover()
@@ -161,9 +171,11 @@ def scenario_range_drag(page, path):
     x, y = plus['x'] + plus['width'] / 2, plus['y'] + plus['height'] / 2
     height = page.evaluate('innerHeight')
     top = page.evaluate('scrollY')
-    since = now(page)
     page.mouse.move(x, y)
+    pressed = now(page)
     page.mouse.down()
+    record('press on a + (a composer open)', settle(page, pressed))
+    since = now(page)
     page.mouse.move(x, y + 20 * 20, steps=20)
     page.mouse.move(x, height - 10, steps=5)
     page.wait_for_timeout(1500)

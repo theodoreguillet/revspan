@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff } from '../../src/shared/api.ts';
 import { composerTargetFor } from '../../src/web/lib/diff.ts';
 import {
-    clipSpan, dragSpan, EDGE_MAX_SPEED, EDGE_MIN_SPEED, EDGE_ZONE_PX, edgeScrollStep, edgeSpeed, hoveredLine, inSpan, MAX_FRAME_MS, newLinesSpan, newLineTarget,
+    armsDrag, clipSpan, dragSpan, EDGE_MAX_SPEED, EDGE_MIN_SPEED, EDGE_ZONE_PX, edgeScrollStep, edgeSpeed, hoveredLine, inSpan, MAX_FRAME_MS, newLinesSpan, newLineTarget,
     reachedLine, spanKey,
 } from '../../src/web/lib/range-drag.ts';
 
@@ -20,6 +20,17 @@ describe('drag on a "+": the line under the pointer and the range it makes', () 
         expect(hoveredLine('7', false)).toBeNull();
         expect(hoveredLine('x', true)).toBeNull();
         expect(hoveredLine('0', true)).toBeNull();
+    });
+
+    it('a press is a click until the pointer has moved more than 4 px from where it was pressed', () => {
+        const at = { x: 100, y: 300 };
+        expect(armsDrag(at, at)).toBe(false);
+        expect(armsDrag(at, { x: 104, y: 300 })).toBe(false);
+        expect(armsDrag(at, { x: 100, y: 296 })).toBe(false);
+        expect(armsDrag(at, { x: 103, y: 302 })).toBe(false);
+        expect(armsDrag(at, { x: 105, y: 300 })).toBe(true);
+        expect(armsDrag(at, { x: 103, y: 303 })).toBe(true);
+        expect(armsDrag(at, { x: 100, y: 280 })).toBe(true);
     });
 
     it('the range keeps the last new-side line reached while the pointer is elsewhere', () => {

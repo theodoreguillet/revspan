@@ -38,12 +38,7 @@ const page = usePrPage();
 /** The browser tells when it starts or stops skipping a block (content-visibility: auto). */
 const REPORTS_SKIPPED = typeof window !== 'undefined' && 'ContentVisibilityAutoStateChangeEvent' in window;
 
-/** A drag on a "+" selects lines of this file: the composer's own range here is not marked meanwhile (the drag's is). */
-const hideComposerRange = computed(() => !!page.dragRange && page.composer?.path === props.path && page.composer.startLine != null);
-const input = computed(() => ({
-    path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer,
-    hideComposerRange: hideComposerRange.value,
-}));
+const input = computed(() => ({ path: props.path, lines: props.hunk.lines, byLine: props.byLine, canComment: page.canInlineComment, composer: page.composer }));
 const rows = computed(() => (props.view === 'unified' ? unifiedRows(input.value) : []));
 const splitRows = computed(() => (props.view === 'split' ? sideBySideRows(input.value) : []));
 
@@ -131,28 +126,46 @@ const blockStyle = (block: RowBlock): Record<string, string> => {
 const unifiedIn = (block: RowBlock) => rows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 const splitIn = (block: RowBlock) => splitRows.value.slice(block.start, block.end).map((row, i) => ({ row, k: block.start + i }));
 
-// Lines being selected by a drag on a "+": marked like the composer's range. Only the hunks, then the blocks, whose part
-// of the range changed render again as it grows (a block's memo key is that part).
+// Lines being selected by a drag on a "+": marked like the composer's range, whose own range is not marked meanwhile.
+// Neither is in `rows`: only the hunks, then the blocks, whose part of the range changed (or that show the composer's
+// range) render again as the range grows (the block's memo key, dragIn).
 const hunkLines = computed(() => newLinesSpan(props.hunk.lines));
 const dragged = computed((previous?: LineSpan | null) => {
     const drag = page.dragRange;
     const span = clipSpan(drag?.path === props.path ? drag : null, hunkLines.value);
     return span && previous && span.first === previous.first && span.last === previous.last ? previous : span;
 });
-/** New-side lines of each block (by its first row). */
-const blockLines = computed(() => new Map(blocks.value.map((block) => [block.start, props.view === 'unified'
-    ? newLinesSpan(rows.value.slice(block.start, block.end).map((row) => row.line))
-    : newLinesSpan(splitRows.value.slice(block.start, block.end).map((row) => row.cells[1].line))])));
-const dragIn = (block: RowBlock): string => spanKey(clipSpan(dragged.value, blockLines.value.get(block.start) ?? null));
+/** A drag selects lines of this file while the composer has a range here: that range is not marked meanwhile. */
+const hideComposerRange = computed(() => !!page.dragRange && page.composer?.path === props.path && page.composer.startLine != null);
+/** Each block (by its first row): its new-side lines, and whether it shows the composer's range. */
+const blockInfo = computed(() => new Map(blocks.value.map((block) => {
+    const cells = props.view === 'unified'
+        ? rows.value.slice(block.start, block.end).map((row) => ({ line: row.line, composing: row.composing }))
+        : splitRows.value.slice(block.start, block.end).map((row) => ({ line: row.cells[1].line, composing: row.cells[1].composing }));
+    return [block.start, { lines: newLinesSpan(cells.map((cell) => cell.line)), composing: cells.some((cell) => cell.composing) }];
+})));
+const dragIn = (block: RowBlock): string => {
+    if (!dragged.value && !hideComposerRange.value) {
+        return '';
+    }
+    const info = blockInfo.value.get(block.start);
+    const part = spanKey(clipSpan(dragged.value, info?.lines ?? null));
+    return hideComposerRange.value && info?.composing ? `${part}|hidden` : part;
+};
 
 const lineClass = (row: LineView) => {
     const drag = inSpan(dragged.value, row.line);
-    return [row.line.t === '+' ? 'rv-l a' : row.line.t === '-' ? 'rv-l r' : 'rv-l', { 'in-range': row.inRange || drag, composing: row.composing || drag }];
+    const hide = hideComposerRange.value;
+    return [row.line.t === '+' ? 'rv-l a' : row.line.t === '-' ? 'rv-l r' : 'rv-l', {
+        'in-range': (hide ? row.threadRange : row.inRange) || drag, composing: (row.composing && !hide) || drag,
+    }];
 };
 const cellClass = (cell: SplitCellView, line: DiffLine) => {
     const drag = cell.side === 'new' && inSpan(dragged.value, line);
+    const hide = hideComposerRange.value;
     return ['half', {
-        r: line.t !== ' ' && cell.side === 'old', a: line.t !== ' ' && cell.side === 'new', 'in-range': cell.inRange || drag, composing: cell.composing || drag,
+        r: line.t !== ' ' && cell.side === 'old', a: line.t !== ' ' && cell.side === 'new',
+        'in-range': (hide ? cell.threadRange : cell.inRange) || drag, composing: (cell.composing && !hide) || drag,
     }];
 };
 /** Shift+click on a "+" (a range of lines): no text selected between the two clicks, the focus stays in the composer. */

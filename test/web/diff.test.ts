@@ -230,16 +230,16 @@ describe('range of lines (Shift+click on a second "+")', () => {
         expect(rows[1]?.rightComposer?.startLine).toBe(4);
     });
 
-    it('while a drag on a "+" selects lines, the composer\'s own range is not marked; its box stays under its last line', () => {
+    it('the shown threads\' ranges are told apart from the composer\'s (a drag on a "+" hides the latter meanwhile)', () => {
         const composer = rangeTarget(target(ranged.path, 5), target(ranged.path, 7));
-        const input = { path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer, hideComposerRange: true };
+        const input = { path: ranged.path, lines: hunkA, byLine: placed.byLine, canComment: true, composer };
         const rows = unifiedRows(input);
-        // the thread's range (6-7) stays marked
-        expect(rows.map((r) => [r.line.n, r.inRange, r.composing])).toEqual([[4, false, false], [null, false, false], [5, false, false], [6, true, false], [7, true, false]]);
-        expect(rows[4]?.composer).toEqual(composer);
+        // composer on 5-7, thread on 6-7
+        expect(rows.map((r) => [r.line.n, r.threadRange, r.inRange, r.composing])).toEqual([
+            [4, false, false, false], [null, false, false, false], [5, false, true, true], [6, true, true, true], [7, true, true, true],
+        ]);
         const split = sideBySideRows(input);
-        expect(split.some((r) => r.cells.some((c) => c.composing))).toBe(false);
-        expect(split[3]?.rightComposer).toEqual(composer);
+        expect(split.map((r) => r.cells.map((c) => c.threadRange))).toEqual([[false, false], [false, false], [false, true], [false, true]]);
     });
 });
 
