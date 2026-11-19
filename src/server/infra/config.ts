@@ -156,30 +156,34 @@ function homeFileOf(raw: unknown): HomeFile {
     return { homes: valid.slice(0, MAX_HOME_SNAPSHOTS) };
 }
 
+/**
+ * One lease per home identity (homeIdentity: 16 hex characters), home-<identity>.lock: a window waits only for a window
+ * computing the same home, and two windows of one profile still coordinate while another profile computes its own. The
+ * 3.4 lease, home.lock, is never read.
+ */
+const HOME_IDENTITY = /^[0-9a-f]{16}$/;
+const HOME_LEASE_FILE = /^home-[0-9a-f]{16}\.lock$/;
+
+/** Content of a lease file ({ token, at, identity }: the identity is only informative, the file name carries it). */
 interface Lease {
     token: string;
     at: number;
-    /** Identity of the home its holder computes; '' when none is recorded (a lease written by 3.4). */
-    identity: string;
-}
-
-/**
- * The home lease is held by another window: the identity of the home it computes ('' when it recorded none, an older
- * version), or null when its file cannot be read yet (being written).
- */
-export interface HomeLeaseHeld {
-    heldBy: string | null;
 }
 
 function readLease(file: string): Lease | null {
     try {
         const value = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Lease>;
-        return typeof value.token === 'string' && typeof value.at === 'number'
-            ? { token: value.token, at: value.at, identity: typeof value.identity === 'string' ? value.identity : '' }
-            : null;
+        return typeof value.token === 'string' && typeof value.at === 'number' ? { token: value.token, at: value.at } : null;
     } catch {
         return null;
     }
+}
+
+/** Whether a lease file is younger than staleMs: by its date, or by its modification time while it cannot be read. */
+function leaseHeld(file: string, staleMs: number): boolean {
+    const held = readLease(file);
+    const age = held ? Date.now() - held.at : fileAgeMs(file);
+    return age >= 0 && age < staleMs;
 }
 
 /**
@@ -233,7 +237,6 @@ export class Store {
     private readonly homeFile: JsonFile<HomeFile>;
     /** Count of drops of the shared home (home.drop), so a computation started before one is never shared. */
     private readonly dropFile: JsonFile<{ generation: number }>;
-    private readonly leaseFile: string;
     private localSig: { of: StateFile['prs']; value: string } | null = null;
 
     constructor(dir: string, { repoSource = null, reviewSource = null }: { repoSource?: RepoSource | null; reviewSource?: ReviewSource | null } = {}) {
@@ -251,7 +254,6 @@ export class Store {
             const generation = (raw as { generation?: unknown } | null)?.generation;
             return { generation: typeof generation === 'number' && Number.isInteger(generation) ? generation : 0 };
         });
-        this.leaseFile = path.join(dir, 'home.lock');
     }
 
     get config(): Readonly<AppConfig> {
@@ -369,19 +371,25 @@ export class Store {
     }
 
     /**
-     * Takes the right to compute the home of `identity` for every window (a file created exclusively, recording the
-     * identity). Returns its release, or who holds it while another window does; a lease older than staleMs (window
-     * closed mid-computation) is taken over. When no lease can be written at all, the caller computes anyway.
+     * Takes the right to compute the home of `identity` for every window (its own file, created exclusively). Returns its
+     * release, or null while another window holds it; a lease older than staleMs (window closed mid-computation) is taken
+     * over. When no lease can be written at all, the caller computes anyway.
      */
-    claimHomeLease(staleMs: number, identity: string): (() => void) | HomeLeaseHeld {
+    claimHomeLease(staleMs: number, identity: string): (() => void) | null {
+        // Checked before the identity names a file in the folder.
+        if (!HOME_IDENTITY.test(identity)) {
+            throw new Error(`invalid home identity: ${JSON.stringify(identity)}`);
+        }
+        const leaseFile = path.join(this.dir, `home-${identity}.lock`);
         const token = randomUUID();
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                fs.writeFileSync(this.leaseFile, JSON.stringify({ token, at: Date.now(), identity }), { flag: 'wx', mode: 0o600 });
+                fs.writeFileSync(leaseFile, JSON.stringify({ token, at: Date.now(), identity }), { flag: 'wx', mode: 0o600 });
+                this.sweepStaleLeases(staleMs);
                 return () => {
                     try {
-                        if (readLease(this.leaseFile)?.token === token) {
-                            fs.rmSync(this.leaseFile, { force: true });
+                        if (readLease(leaseFile)?.token === token) {
+                            fs.rmSync(leaseFile, { force: true });
                         }
                     } catch (error) {
                         console.warn(`revspan: cannot release the home lease (${(error as Error).message})`);
@@ -391,20 +399,38 @@ export class Store {
                 if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
                     return () => undefined;
                 }
-                const held = readLease(this.leaseFile);
-                const age = held ? Date.now() - held.at : fileAgeMs(this.leaseFile);
-                if (age >= 0 && age < staleMs) {
-                    return { heldBy: held ? held.identity : null };
+                if (leaseHeld(leaseFile, staleMs)) {
+                    return null;
                 }
                 try {
-                    fs.rmSync(this.leaseFile, { force: true });
+                    fs.rmSync(leaseFile, { force: true });
                 } catch {
                     // Stale but impossible to remove: compute without the lease rather than never.
                     return () => undefined;
                 }
             }
         }
-        // A stale lease again after removing one (another window re-created it in between): looked at again shortly.
-        return { heldBy: null };
+        return null;
+    }
+
+    /**
+     * Removes the stale leases of every home (windows closed mid-computation): an identity nobody computes any more
+     * (settings changed) would otherwise leave its file for good. Fresh leases and other files stay.
+     */
+    private sweepStaleLeases(staleMs: number): void {
+        try {
+            for (const name of fs.readdirSync(this.dir)) {
+                const file = path.join(this.dir, name);
+                if (HOME_LEASE_FILE.test(name) && !leaseHeld(file, staleMs)) {
+                    try {
+                        fs.rmSync(file, { force: true });
+                    } catch {
+                        // A lease that cannot be removed (a folder, permissions) is left, as by claimHomeLease.
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn(`revspan: cannot sweep the home leases (${(error as Error).message})`);
+        }
     }
 }

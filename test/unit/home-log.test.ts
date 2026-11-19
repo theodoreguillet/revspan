@@ -20,10 +20,9 @@ describe('"Revspan" log: one line per "My PRs" load', () => {
         });
     });
 
-    it('the identity the lease holder computes when the lease was taken; "unknown" when it recorded none (older version)', () => {
-        expect(homeLoadLine({ ...load, source: 'shared', leaseWaitMs: 5100, holderIdentity: '1a2b3c4d5e6f7a8b' }).text)
-            .toBe('home load: source=shared fresh=false durationMs=1234 leaseWaitMs=5100 identity=1a2b3c4d5e6f7a8b holder=1a2b3c4d5e6f7a8b startedAt=2026-11-19T09:00:00.000Z');
-        expect(homeLoadLine({ ...load, holderIdentity: '' }).text).toContain(' holder=unknown ');
+    it('a home another window computed: the time waited for it', () => {
+        expect(homeLoadLine({ ...load, source: 'shared', leaseWaitMs: 5100 }).text)
+            .toBe('home load: source=shared fresh=false durationMs=1234 leaseWaitMs=5100 identity=1a2b3c4d5e6f7a8b startedAt=2026-11-19T09:00:00.000Z');
     });
 
     it('a failed load at warn level, with its error code', () => {

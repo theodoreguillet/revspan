@@ -299,13 +299,22 @@ describe('notified state (Store)', () => {
     });
 });
 
-/** The release of a lease this window took (the test fails when the lease was held by another window). */
+/** The release of a lease this window took (the test fails when another window held it). */
 function asRelease(claim: ReturnType<Store['claimHomeLease']>): () => void {
-    if (typeof claim !== 'function') {
-        throw new Error(`lease held by ${claim.heldBy}`);
+    if (!claim) {
+        throw new Error('lease held by another window');
     }
     return claim;
 }
+
+/** Home identities (homeIdentity: 16 hex characters). */
+const ID_A = 'aaaaaaaaaaaaaaaa';
+const ID_B = 'bbbbbbbbbbbbbbbb';
+const ID_C = 'cccccccccccccccc';
+const ID_D = 'dddddddddddddddd';
+const lockOf = (dir: string, identity: string): string => path.join(dir, `home-${identity}.lock`);
+/** Lease files of the folder, sorted. */
+const lockFiles = (dir: string): string[] => fs.readdirSync(dir).filter((name) => name.endsWith('.lock')).sort();
 
 describe('home shared between windows (Store)', () => {
     const home: Home = { me: null, repos: ['acme/records-api'], groups: [], errors: [], truncated: [], hideUnfollowed: false, contributors: [] };
@@ -359,24 +368,75 @@ describe('home shared between windows (Store)', () => {
             const dir = tempDir();
             const a = new Store(dir);
             const b = new Store(dir);
-            const releaseA = a.claimHomeLease(60_000, 'id-a');
+            const releaseA = a.claimHomeLease(60_000, ID_A);
             expect(releaseA).toBeTypeOf('function');
-            expect(b.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: 'id-a' });
+            expect(b.claimHomeLease(60_000, ID_A)).toBeNull();
             asRelease(releaseA)();
-            const releaseB = b.claimHomeLease(60_000, 'id-a');
+            const releaseB = b.claimHomeLease(60_000, ID_A);
             expect(releaseB).toBeTypeOf('function');
             // A holder that never released (window closed mid-computation) is taken over once stale.
             vi.advanceTimersByTime(60_001);
-            const releaseA2 = a.claimHomeLease(60_000, 'id-a');
+            const releaseA2 = a.claimHomeLease(60_000, ID_A);
             expect(releaseA2).toBeTypeOf('function');
             // The late release of the old holder does not free the new holder's lease.
             asRelease(releaseB)();
-            expect(b.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: 'id-a' });
+            expect(b.claimHomeLease(60_000, ID_A)).toBeNull();
             asRelease(releaseA2)();
-            expect(b.claimHomeLease(60_000, 'id-a')).toBeTypeOf('function');
+            expect(b.claimHomeLease(60_000, ID_A)).toBeTypeOf('function');
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('one lease per home identity: a window computing another home (another profile) does not hold this one', () => {
+        const dir = tempDir();
+        const a = new Store(dir);
+        const b = new Store(dir);
+        const releaseA = asRelease(a.claimHomeLease(60_000, ID_A));
+        const releaseB = asRelease(b.claimHomeLease(60_000, ID_B));
+        expect(a.claimHomeLease(60_000, ID_B)).toBeNull();
+        expect(b.claimHomeLease(60_000, ID_A)).toBeNull();
+        expect(lockFiles(dir)).toEqual([`home-${ID_A}.lock`, `home-${ID_B}.lock`]);
+        expect(JSON.parse(fs.readFileSync(lockOf(dir, ID_A), 'utf8'))).toEqual({ token: expect.any(String), at: expect.any(Number), identity: ID_A });
+        releaseA();
+        releaseB();
+        expect(lockFiles(dir)).toEqual([]);
+    });
+
+    it('the lease of 3.4 (home.lock) is ignored and left alone; a lease being written (empty file) counts as held', () => {
+        const dir = tempDir();
+        const store = new Store(dir);
+        fs.writeFileSync(path.join(dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() }));
+        asRelease(store.claimHomeLease(60_000, ID_A))();
+        expect(lockFiles(dir)).toEqual(['home.lock']);
+        fs.writeFileSync(lockOf(dir, ID_B), '');
+        expect(store.claimHomeLease(60_000, ID_B)).toBeNull();
+    });
+
+    it('the identity is checked before it names a file', () => {
+        const store = new Store(tempDir());
+        for (const identity of ['../config', '', 'AAAAAAAAAAAAAAAA', 'aaaaaaaaaaaaaaa', 'aaaaaaaaaaaaaaaa.lock']) {
+            expect(() => store.claimHomeLease(60_000, identity)).toThrow('invalid home identity');
+        }
+    });
+
+    it('taking a lease sweeps the stale leases of other homes; fresh ones, the 3.4 home.lock and other files stay', () => {
+        const dir = tempDir();
+        const old = new Date(Date.now() - 3600_000);
+        fs.writeFileSync(lockOf(dir, ID_B), JSON.stringify({ token: 'b', at: Date.now() - 61_000, identity: ID_B }));
+        fs.writeFileSync(lockOf(dir, ID_C), JSON.stringify({ token: 'c', at: Date.now() - 1000, identity: ID_C }));
+        // Unreadable (a window closed while writing it): aged by its modification time.
+        fs.writeFileSync(lockOf(dir, ID_D), '');
+        fs.utimesSync(lockOf(dir, ID_D), old, old);
+        fs.writeFileSync(path.join(dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() - 3600_000 }));
+        fs.writeFileSync(path.join(dir, 'home-notes.lock'), '');
+        fs.utimesSync(path.join(dir, 'home-notes.lock'), old, old);
+        // A stale lease that cannot be removed (a folder): skipped, nothing thrown.
+        fs.mkdirSync(path.join(dir, `home-${'e'.repeat(16)}.lock`, 'inside'), { recursive: true });
+        fs.utimesSync(path.join(dir, `home-${'e'.repeat(16)}.lock`), old, old);
+        const release = asRelease(new Store(dir).claimHomeLease(60_000, ID_A));
+        expect(lockFiles(dir)).toEqual([`home-${ID_A}.lock`, `home-${ID_C}.lock`, `home-${'e'.repeat(16)}.lock`, 'home-notes.lock', 'home.lock']);
+        release();
     });
 
     it('a home computed before a drop (a write in any window) is refused', () => {
@@ -391,27 +451,13 @@ describe('home shared between windows (Store)', () => {
         expect(a.writeHomeSnapshot('id-a', { at: 2000, key: 'k', home }, a.homeGeneration())).toBe(true);
     });
 
-    it('lease: records the identity of the home being computed; none recorded (older version) or not readable yet (being written)', () => {
-        const dir = tempDir();
-        const lock = path.join(dir, 'home.lock');
-        const store = new Store(dir);
-        const release = asRelease(store.claimHomeLease(60_000, 'id-a'));
-        expect(JSON.parse(fs.readFileSync(lock, 'utf8'))).toEqual({ token: expect.any(String), at: expect.any(Number), identity: 'id-a' });
-        expect(new Store(dir).claimHomeLease(60_000, 'id-b')).toEqual({ heldBy: 'id-a' });
-        release();
-        fs.writeFileSync(lock, JSON.stringify({ token: 'old', at: Date.now() }));
-        expect(store.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: '' });
-        fs.writeFileSync(lock, '');
-        expect(store.claimHomeLease(60_000, 'id-a')).toEqual({ heldBy: null });
-    });
-
     it('a stale lease that cannot be removed: the caller computes anyway, nothing thrown', () => {
         const dir = tempDir();
-        const lock = path.join(dir, 'home.lock');
+        const lock = lockOf(dir, ID_A);
         fs.mkdirSync(path.join(lock, 'inside'), { recursive: true });
         const past = new Date(Date.now() - 3600_000);
         fs.utimesSync(lock, past, past);
-        const release = new Store(dir).claimHomeLease(60_000, 'id-a');
+        const release = new Store(dir).claimHomeLease(60_000, ID_A);
         expect(release).toBeTypeOf('function');
         expect(() => asRelease(release)()).not.toThrow();
     });
@@ -470,7 +516,6 @@ describe('home computed by one window per home identity (HomeService, VS Code pr
         return settled;
     }
 
-    const leaseIdentity = (dir: string): unknown => (JSON.parse(fs.readFileSync(path.join(dir, 'home.lock'), 'utf8')) as { identity?: unknown }).identity;
 
     it('identity: 16 hex characters of the home key\'s sha256', () => {
         expect(homeIdentity('key')).toMatch(/^[0-9a-f]{16}$/);
@@ -478,24 +523,24 @@ describe('home computed by one window per home identity (HomeService, VS Code pr
         expect(homeIdentity('other key')).not.toBe(homeIdentity('key'));
     });
 
-    it('another profile\'s window holds the lease for its own home: this window computes at once, without waiting or taking it', async () => {
+    it('another profile\'s window holds the lease of its own home: this window computes at once, without waiting', async () => {
         vi.useFakeTimers();
         const dir = tempDir();
         const meB = deferred<User | null>();
         const b = profileWindow(dir, [CAMILLE], () => meB.promise);
         const bLoad = b.service.get();
         await vi.advanceTimersByTimeAsync(0);
-        const holder = leaseIdentity(dir);
-        expect(holder).toMatch(/^[0-9a-f]{16}$/);
+        const held = lockFiles(dir);
+        expect(held).toEqual([expect.stringMatching(/^home-[0-9a-f]{16}\.lock$/)]);
 
         const a = profileWindow(dir, [YANN]);
         const aLoad = a.service.get();
         expect(await settledAfter(aLoad)).toBe(true);
         expect(a.session.me).toHaveBeenCalledTimes(1);
-        expect(a.loads).toEqual([expect.objectContaining({ fresh: false, source: 'computed', leaseWaitMs: 0, holderIdentity: holder })]);
-        expect(a.loads[0]?.identity).toMatch(/^[0-9a-f]{16}$/);
-        expect(a.loads[0]?.identity).not.toBe(holder);
-        expect(leaseIdentity(dir)).toBe(holder);
+        expect(a.loads).toEqual([expect.objectContaining({ fresh: false, source: 'computed', leaseWaitMs: 0 })]);
+        expect(held).not.toContain(`home-${a.loads[0]?.identity}.lock`);
+        // A took and released its own lease; B's is still B's.
+        expect(lockFiles(dir)).toEqual(held);
 
         meB.resolve(ME);
         await bLoad;
@@ -507,6 +552,27 @@ describe('home computed by one window per home identity (HomeService, VS Code pr
         expect(a2.session.me).not.toHaveBeenCalled();
         expect(b2.session.me).not.toHaveBeenCalled();
         expect([a2.loads[0]?.source, b2.loads[0]?.source]).toEqual(['shared', 'shared']);
+    });
+
+    it('two profiles with two windows each, polling together: one computation per profile, the other window waits for it', async () => {
+        vi.useFakeTimers();
+        const dir = tempDir();
+        const [meA, meB] = [deferred<User | null>(), deferred<User | null>()];
+        const a1 = profileWindow(dir, [YANN], () => meA.promise);
+        const a2 = profileWindow(dir, [YANN]);
+        const b1 = profileWindow(dir, [CAMILLE], () => meB.promise);
+        const b2 = profileWindow(dir, [CAMILLE]);
+        const loads = [a1, a2, b1, b2].map((w) => w.service.get());
+        await vi.advanceTimersByTimeAsync(1_000);
+        meA.resolve(ME);
+        meB.resolve(ME);
+        await vi.advanceTimersByTimeAsync(100);
+        const [homeA1, homeA2, homeB1, homeB2] = await Promise.all(loads);
+        expect([a1, a2, b1, b2].map((w) => w.session.me.mock.calls.length)).toEqual([1, 0, 1, 0]);
+        expect(homeA2).toEqual(homeA1);
+        expect(homeB2).toEqual(homeB1);
+        expect([a2.loads[0]?.source, b2.loads[0]?.source]).toEqual(['shared', 'shared']);
+        expect(a2.loads[0]?.leaseWaitMs).toBe(1_100);
     });
 
     it('a window of the same profile holds the lease: this window waits for its home, no second computation', async () => {
@@ -525,17 +591,18 @@ describe('home computed by one window per home identity (HomeService, VS Code pr
         expect(await settledAfter(a2Load, 100)).toBe(true);
         expect(await a2Load).toEqual(computed);
         expect(a2.session.me).not.toHaveBeenCalled();
-        expect(a2.loads).toEqual([expect.objectContaining({ source: 'shared', leaseWaitMs: 5_100, holderIdentity: a2.loads[0]?.identity })]);
+        expect(a2.loads).toEqual([expect.objectContaining({ source: 'shared', leaseWaitMs: 5_100 })]);
         expect(a2.loads[0]?.identity).toBe(a1.loads[0]?.identity);
     });
 
-    it('a lease left by an older version (no identity recorded) is not waited for', async () => {
+    it('a lease left by 3.4 (home.lock) is not waited for', async () => {
         vi.useFakeTimers();
         const dir = tempDir();
         fs.writeFileSync(path.join(dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() }));
         const a = profileWindow(dir, [YANN]);
         expect(await settledAfter(a.service.get())).toBe(true);
-        expect(a.loads).toEqual([expect.objectContaining({ source: 'computed', leaseWaitMs: 0, holderIdentity: '' })]);
+        expect(a.loads).toEqual([expect.objectContaining({ source: 'computed', leaseWaitMs: 0 })]);
+        expect(lockFiles(dir)).toEqual(['home.lock']);
     });
 
     it('load events: duration, fresh, and the error code of a failed load (no PR data)', async () => {

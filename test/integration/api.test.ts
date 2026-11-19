@@ -1320,12 +1320,27 @@ describe('request budget', () => {
         return createServices({ store, secrets, cache: new Cache(path.join(current.dir, 'cache')), baseUrl: current.fake.url }).home;
     }
 
-    it('(d) a window of another profile holds the lease for its own home: this window computes at once, no wait', async () => {
+    it('(d) the lease of another profile\'s home, or a 3.4 window\'s lease: this window computes at once, no wait', async () => {
         fakeTime();
         const current = await setup();
-        fs.writeFileSync(path.join(current.dir, 'home.lock'), JSON.stringify({ token: 'other-profile', at: Date.now(), identity: '0123456789abcdef' }));
+        fs.writeFileSync(path.join(current.dir, 'home-0123456789abcdef.lock'), JSON.stringify({ token: 'other-profile', at: Date.now(), identity: '0123456789abcdef' }));
+        fs.writeFileSync(path.join(current.dir, 'home.lock'), JSON.stringify({ token: 'older-version', at: Date.now() }));
         const spent = await requestsOf(home);
         expect(labels(spent).filter((l) => l.startsWith('list '))).toEqual(['list p1']);
+    });
+
+    it('(d) two profiles with two windows each, polling together: one computation per profile', async () => {
+        fakeTime();
+        const current = await setup();
+        await restart(current);
+        const secondA = await startRevspan(current.dir, current.fake);
+        const [firstB, secondB] = [await otherProfileHome(current), await otherProfileHome(current)];
+        try {
+            const spent = await requestsOf(() => Promise.all([home(), fetch(`${secondA.url}/api/home`).then((r) => r.json()), firstB.get(), secondB.get()]));
+            expect(labels(spent).filter((l) => l.startsWith('list '))).toEqual(['list p1', 'list p1']);
+        } finally {
+            await secondA.close();
+        }
     });
 
     it('(d) two profiles following different contributors: each home is shared with its own profile\'s windows, neither evicts the other', async () => {

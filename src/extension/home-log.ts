@@ -9,8 +9,6 @@ export function homeLoadLine(load: HomeLoad): { level: 'info' | 'warn'; text: st
         `durationMs=${load.durationMs}`,
         `leaseWaitMs=${load.leaseWaitMs}`,
         `identity=${load.identity}`,
-        // The holder of the lease when this load found it taken; one written by an older version records no identity.
-        ...(load.holderIdentity === undefined ? [] : [`holder=${load.holderIdentity || 'unknown'}`]),
         `startedAt=${new Date(load.startedAt).toISOString()}`,
     ].join(' ');
     return load.error

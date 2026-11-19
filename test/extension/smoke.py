@@ -1,7 +1,7 @@
 """Smoke test of the Revspan extension in an isolated VS Code (launched by run-smoke.ts).
 
 Drives VS Code through its debugging port (Playwright connect_over_cdp): "My PRs" view (not held back by the home
-lease of another profile's window, left in the storage by run-smoke.ts), PR panel,
+leases of other windows, another profile's or a 3.4 one, left in the storage by run-smoke.ts), PR panel,
 "VS Code diff" (native diff editor), "Open file" (local repository), one tab per PR (the "Revspan" tab for the home
 page and settings, reopened when closed) and every tab reopened after "Reload Window", without duplicates.
 
@@ -20,8 +20,9 @@ from playwright.sync_api import Frame, Page, sync_playwright
 CDP_URL = os.environ['CDP_URL']
 PR_TITLE = os.environ['PR_TITLE']
 CALLS_URL = os.environ.get('REVSPAN_CALLS_URL')
-# Date (ms) of the lease run-smoke.ts left in the storage, as if another profile's window computed its own home.
-HOME_LOCK_AT = os.environ.get('HOME_LOCK_AT')
+# Leases of other windows run-smoke.ts left in the storage (file -> lease without its date): another profile's window
+# computing its own home, and a 3.4 window.
+FOREIGN_LEASES = json.loads(os.environ.get('FOREIGN_LEASES') or '{}')
 SHOTS = os.environ.get('SHOTS_DIR', '/tmp/revspan-vscode-shots')
 os.makedirs(SHOTS, exist_ok=True)
 
@@ -139,6 +140,10 @@ def run() -> None:
         # "My PRs" view in the activity bar.
         icon = page.locator('.activitybar .action-item a[aria-label^="Revspan"], .activitybar .action-item [aria-label^="Revspan"]').first
         icon.wait_for(timeout=60000)
+        # Written again just before opening the view: fresh (the lease lasts 60 s) whatever the startup time.
+        for file, lease in FOREIGN_LEASES.items():
+            with open(file, 'w', encoding='utf8') as out:
+                json.dump({**lease, 'at': int(time.time() * 1000)}, out)
         icon.click()
         opened_at = time.time()
         row = page.locator('.monaco-list-row', has_text=PR_TITLE).first
@@ -148,12 +153,9 @@ def run() -> None:
             pass
         filled_in = time.time() - opened_at
         page.screenshot(path=f'{SHOTS}/02-mes-pr.png')
-        if HOME_LOCK_AT:
-            # The lease goes stale 60 s after it was written: PRs shown before that did not wait for it.
-            lease_age = time.time() - int(HOME_LOCK_AT) / 1000
-            check('"My PRs" fills within 10 s while another profile\'s window holds the home lease',
-                  row.count() > 0 and filled_in <= 10 and lease_age < 60,
-                  f'{filled_in:.1f} s after opening the view, lease {lease_age:.0f} s old')
+        if FOREIGN_LEASES:
+            check('"My PRs" fills within 10 s while other windows hold leases (another profile\'s home, a 3.4 window)',
+                  row.count() > 0 and filled_in <= 10, f'{filled_in:.1f} s after opening the view')
         tree_text = ' | '.join(page.locator('.pane-body .monaco-list-row').all_inner_texts())
         check('"My PRs" tree: main PR listed', row.count() > 0, tree_text[:400])
         check('"My PRs" tree: "To review" and "To rebase" groups', 'To review (' in tree_text and 'To rebase (' in tree_text, tree_text[:400])

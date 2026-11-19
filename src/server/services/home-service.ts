@@ -2,7 +2,7 @@
 //
 // Request budget (the background poll runs every review.refreshMinutes in every VS Code window):
 // - a home computed by any window is shared on disk, per home identity (VS Code profiles share the storage), and reused
-//   for half an interval; a window waits only for another window computing the same home;
+//   for half an interval; each home has its own lease, so a window waits only for another window computing the same home;
 // - only the PR lists are always read; a PR's activity is kept on disk while its head, last update, comment count and
 //   approvals are unchanged; settled build checks are kept per head once it is an hour old; other checks and branch heads
 //   are read at most once per interval; merge bases are immutable.
@@ -62,12 +62,13 @@ export interface HomeLoad {
     /** Date.now() when the load started. */
     startedAt: number;
     durationMs: number;
-    /** Time spent waiting for another window computing the same home. */
+    /**
+     * Time spent waiting for another window computing the same home. A load that joins a computation already in progress
+     * in this window (the tree and the poll) reports that computation's wait.
+     */
     leaseWaitMs: number;
     /** Identity of the home loaded (homeIdentity). */
     identity: string;
-    /** Identity of the home computed by the window found holding the lease ('' when it recorded none: older version). */
-    holderIdentity?: string;
     /** Absent when the load failed. */
     source?: HomeSource;
     /** Code of the error that failed the load. */
@@ -75,7 +76,7 @@ export interface HomeLoad {
 }
 
 /** Lease part of a load, filled while it waits (the loads joining the same computation share it). */
-type LeaseWait = Pick<HomeLoad, 'leaseWaitMs' | 'holderIdentity'>;
+type LeaseWait = Pick<HomeLoad, 'leaseWaitMs'>;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -240,6 +241,7 @@ export class HomeService {
         try {
             return await pending.loaded;
         } finally {
+            // A load joining the computation in progress reports its wait (HomeLoad.leaseWaitMs).
             Object.assign(lease, pending.wait);
         }
     }
@@ -281,10 +283,10 @@ export class HomeService {
     }
 
     /**
-     * The shared home when recent enough; otherwise this window takes the lease and computes it for every window. While
-     * another window holds the lease for the same home, waits for its home (or takes over once the lease is stale). A
-     * lease held for another home (another profile, or an older version recording none) is not waited for: this window
-     * computes its own at once, without taking the lease. `wait` records the time waited and the holder's identity.
+     * The shared home when recent enough; otherwise this window takes the lease of this home and computes it for every
+     * window. While another window holds it, waits for its home (or takes over once the lease is stale). Other homes
+     * (other profiles) have their own lease: a window computing one never holds this one back. `wait` records the time
+     * waited.
      */
     private async sharedOrComputed(key: string, identity: string, reuseMs: number, compute: () => Promise<Home>, wait: LeaseWait): Promise<{ home: Home; source: HomeSource }> {
         const startedAt = Date.now();
@@ -294,21 +296,17 @@ export class HomeService {
             if (shared) {
                 return { home: shared, source: 'shared' };
             }
-            const claim = this.store.claimHomeLease(LEASE_MS, identity);
-            if (typeof claim === 'function') {
+            const release = this.store.claimHomeLease(LEASE_MS, identity);
+            if (release) {
                 try {
                     // Another window may have finished between the look above and the claim.
                     const sharedMeanwhile = this.shared(key, identity, reuseMs);
                     return sharedMeanwhile ? { home: sharedMeanwhile, source: 'shared' } : { home: await compute(), source: 'computed' };
                 } finally {
-                    claim();
+                    release();
                 }
             }
-            if (claim.heldBy !== null) {
-                wait.holderIdentity = claim.heldBy;
-            }
-            // heldBy null: the lease is being written, its identity is read at the next look.
-            if ((claim.heldBy !== null && claim.heldBy !== identity) || waited >= LEASE_MS) {
+            if (waited >= LEASE_MS) {
                 return { home: await compute(), source: 'computed' };
             }
             await sleep(WAIT_STEP_MS);

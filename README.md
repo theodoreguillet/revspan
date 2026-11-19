@@ -237,11 +237,11 @@ HTTP requests; the PR page rows count reads (a read of several pages, like the a
 | Tasks tab | **0** until it is opened (the open count comes from the PR already read); opening it: **1** paginated read (100 tasks per page), again on ↻ while it is open |
 
 Windows share the computed home through `home.json` (the last home of each profile: VS Code profiles share the storage
-directory, up to 4 homes kept), `home.lock` (a lease so only one window computes a home, recording which; a window
-computing another profile's home is not waited for) and `home.drop` (a counter bumped on every write, so a result
-computed before a write is not reused), all in the config or storage directory. In VS Code, the "Revspan" output log
-(View › Output) has one line per "My PRs" load: duration, time waited for another window, hashed home identities and
-error codes, no PR data. Trade-off: with several windows, a new push can show up after up to
+directory, up to 4 homes kept), `home-<identity>.lock` (one lease per home, so only one window computes it, while a
+window computing another profile's home is not waited for) and `home.drop` (a counter bumped on every write, so a
+result computed before a write is not reused), all in the config or storage directory. In VS Code, the "Revspan"
+output log (View › Output) has one line per "My PRs" load: duration, time waited for another window, the hashed home
+identity and error codes, no PR data. Trade-off: with several windows, a new push can show up after up to
 about **1.5 intervals** instead of 1. A home with a repository error is shared for 60 s only, so the error is tried
 again soon without every window recomputing on every poll. During the hour after a push, that PR's build checks cost
 one request per interval even once finished (see "Build status").
@@ -378,7 +378,7 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
 ## Local data
 
 `~/.config/revspan/` (`%APPDATA%\revspan` on Windows; `REVSPAN_CONFIG_DIR` to change it):
-`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `run.json` (port, secret and process id of the running `revspan` command, mode `0600`, removed when it stops), `home.json` / `home.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
+`config.json` (e-mail, repositories, review settings), `state.json` (reviewed versions, seen files, notifications already shown), `run.json` (port, secret and process id of the running `revspan` command, mode `0600`, removed when it stops), `home.json` / `home-<identity>.lock` / `home.drop` (shared home snapshot: PR titles and authors, mode `0600`), `cache/` (immutable contents per commit, paths in merge conflict per pair of PR heads,
 and each PR's activity as the home reads it: pushes with their source and destination branch names, repositories and commit hashes, approvals and change requests with user id and date, comments with id, date, author id and reply link, never any comment text except a single emoji (a reaction); can be deleted safely). Several windows (browser tabs, VS Code windows) can share the same folder: the files are
 re-read when they change and written atomically, so marks made in one window are not lost in another.
 

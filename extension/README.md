@@ -129,10 +129,10 @@ the panel uses the same language.
   and destination: branch names, repositories and commit hashes; approvals and change requests: user id and date;
   comments: id, date, author id and reply link; never any comment text), and `home.json`, the last computed home of
   each profile (up to 4), shared by your windows. `home.json` holds PR titles and author names and is written with
-  file mode 0600. Next to it, `home.lock` (which window computes which home, as a hash) and `home.drop` (a counter
-  bumped after each of your writes) hold no PR data.
+  file mode 0600. Next to it, `home-<identity>.lock` (which window computes that home, named by a hash) and
+  `home.drop` (a counter bumped after each of your writes) hold no PR data.
 - The "Revspan" output log (View › Output › Revspan) records each "My PRs" load: duration, time waited for another
-  window, hashed home identities and error codes. No PR titles, names or tokens.
+  window, the hashed home identity and error codes. No PR titles, names or tokens.
 
 ## Limits
 

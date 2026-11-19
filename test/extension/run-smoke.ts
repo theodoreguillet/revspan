@@ -52,12 +52,18 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'chat.disableAIFeatures': true,
 }));
 
-// A window of another profile computing its own home when this one starts (VS Code shares the extension's storage across
-// profiles): its lease must not hold "My PRs" back.
-const homeLockAt = Date.now();
+// Leases of other windows when this one starts (VS Code shares the extension's storage across profiles): another
+// profile's window computing its own home, and a 3.4 window. Neither must hold "My PRs" back; smoke.py writes them again,
+// fresh, just before opening the view, so a slow start cannot age them past the 60 s lease.
 const storage = path.join(userData, 'User', 'globalStorage', 'theodoreguillet.revspan');
+const foreignLeases = {
+    [path.join(storage, 'home-0123456789abcdef.lock')]: { token: 'other-profile', identity: '0123456789abcdef' },
+    [path.join(storage, 'home.lock')]: { token: 'older-version' },
+};
 fs.mkdirSync(storage, { recursive: true });
-fs.writeFileSync(path.join(storage, 'home.lock'), JSON.stringify({ token: 'other-profile', at: homeLockAt, identity: 'other' }));
+for (const [file, lease] of Object.entries(foreignLeases)) {
+    fs.writeFileSync(file, JSON.stringify({ ...lease, at: Date.now() }));
+}
 
 // Variables of the current VS Code session removed: otherwise the new process would attach to it.
 const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VSCODE_') && key !== 'ELECTRON_RUN_AS_NODE'));
@@ -115,7 +121,7 @@ try {
                 ...process.env,
                 CDP_URL: `http://127.0.0.1:${port}`,
                 PR_TITLE: main.pr.title ?? '',
-                HOME_LOCK_AT: String(homeLockAt),
+                FOREIGN_LEASES: JSON.stringify(foreignLeases),
                 REVSPAN_CALLS_URL: `http://127.0.0.1:${fake.port}/__calls`,
                 SHOTS_DIR: process.env.REVSPAN_SHOTS_DIR ?? path.join(tmp, 'shots'),
             },
@@ -135,7 +141,8 @@ try {
         .filter((file) => file.includes('theodoreguillet.revspan') && file.endsWith('.log'))
         .map((file) => fs.readFileSync(path.join(logsDir, file), 'utf8'))
         .join('');
-    const logged = /home load: source=(computed|shared) /.test(log) && ![main.pr.title || '-', FAKE_TOKEN, 'Thomas Girard'].some((secret) => log.includes(secret));
+    const secrets = [main.pr.title, FAKE_TOKEN, 'Thomas Girard'].filter((value): value is string => Boolean(value));
+    const logged = /home load: source=(computed|shared) /.test(log) && !secrets.some((secret) => log.includes(secret));
     console.log(`${logged ? 'PASS' : 'FAIL'}  "Revspan" log: one line per home load, no PR title, name or token${logged ? '' : ` — ${log.slice(0, 400)}`}`);
     if (!logged) {
         status = 1;
