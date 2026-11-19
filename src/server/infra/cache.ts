@@ -2,19 +2,37 @@
 // version summaries) + in-memory cache: LRU for immutable data, short lifetime for live data.
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-const MEMORY_LIMIT = 400;
+const DEFAULT_MEMORY_BYTES = 256 * 1024 * 1024;
+const DAY_MS = 24 * 3600 * 1000;
+const EVICT_STAMP = 'last-evict';
+
+/** Approximate size in memory, computed once at insertion. */
+function sizeOf(value: unknown): number {
+    if (typeof value === 'string') {
+        return value.length * 2;
+    }
+    try {
+        return (JSON.stringify(value) ?? '').length * 2;
+    } catch {
+        return 0;
+    }
+}
 
 export class Cache {
     private readonly dir: string | null;
-    private readonly memory = new Map<string, unknown>();
+    private readonly memory = new Map<string, { value: unknown; size: number }>();
+    private readonly memoryBytes: number;
+    private memoryUsed = 0;
     private readonly live = new Map<string, { at: number; value: unknown }>();
     private readonly pending = new Map<string, Promise<unknown>>();
     private readonly livePending = new Map<string, Promise<unknown>>();
 
-    constructor(dir: string | null) {
+    constructor(dir: string | null, { memoryBytes = DEFAULT_MEMORY_BYTES }: { memoryBytes?: number } = {}) {
         this.dir = dir;
+        this.memoryBytes = memoryBytes;
         if (dir) {
             fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
         }
@@ -25,21 +43,39 @@ export class Cache {
         return path.join(dir, hash.slice(0, 2), `${hash}.json`);
     }
 
+    private forget(key: string): void {
+        const entry = this.memory.get(key);
+        if (entry) {
+            this.memoryUsed -= entry.size;
+            this.memory.delete(key);
+        }
+    }
+
     private remember(key: string, value: unknown): void {
-        this.memory.delete(key);
-        this.memory.set(key, value);
+        this.forget(key);
+        const size = sizeOf(value);
+        // Bigger than the whole budget: not kept in memory (it stays on disk).
+        if (size > this.memoryBytes) {
+            return;
+        }
+        this.memory.set(key, { value, size });
+        this.memoryUsed += size;
         // Map keeps insertion order: the first key is the least recently used.
-        const oldest = this.memory.keys().next();
-        if (this.memory.size > MEMORY_LIMIT && !oldest.done) {
-            this.memory.delete(oldest.value);
+        for (const oldest of this.memory.keys()) {
+            if (this.memoryUsed <= this.memoryBytes) {
+                break;
+            }
+            this.forget(oldest);
         }
     }
 
     get<T>(key: string): T | undefined {
         if (this.memory.has(key)) {
-            const value = this.memory.get(key) as T;
-            this.remember(key, value);
-            return value;
+            const entry = this.memory.get(key)!;
+            // Refresh the recency without recomputing the size.
+            this.memory.delete(key);
+            this.memory.set(key, entry);
+            return entry.value as T;
         }
         if (!this.dir) {
             return undefined;
@@ -71,7 +107,7 @@ export class Cache {
 
     /** Forgets an entry (memory and disk): "immutable" data that disappeared from Bitbucket. */
     delete(key: string): void {
-        this.memory.delete(key);
+        this.forget(key);
         if (!this.dir) {
             return;
         }
@@ -80,6 +116,61 @@ export class Cache {
         } catch (error) {
             console.warn(`revspan: cannot delete from the cache (${(error as Error).message})`);
         }
+    }
+
+    /**
+     * Trims the disk cache: files older than maxAgeDays, then the oldest until under maxBytes.
+     * Runs at most once per day (stamp file in the cache directory).
+     */
+    async evictDisk({ maxAgeDays = 30, maxBytes = 1024 ** 3, now = Date.now() }: { maxAgeDays?: number; maxBytes?: number; now?: number } = {}): Promise<{ removed: number }> {
+        const dir = this.dir;
+        if (!dir) {
+            return { removed: 0 };
+        }
+        const stamp = path.join(dir, EVICT_STAMP);
+        try {
+            if (now - (await fsp.stat(stamp)).mtimeMs < DAY_MS) {
+                return { removed: 0 };
+            }
+        } catch {
+            // No stamp yet.
+        }
+        const files: { file: string; size: number; mtime: number }[] = [];
+        for (const sub of await fsp.readdir(dir, { withFileTypes: true })) {
+            if (!sub.isDirectory()) {
+                continue;
+            }
+            const subDir = path.join(dir, sub.name);
+            for (const name of await fsp.readdir(subDir)) {
+                try {
+                    const file = path.join(subDir, name);
+                    const info = await fsp.stat(file);
+                    if (info.isFile()) {
+                        files.push({ file, size: info.size, mtime: info.mtimeMs });
+                    }
+                } catch {
+                    // Vanished meanwhile.
+                }
+            }
+        }
+        files.sort((a, b) => a.mtime - b.mtime);
+        let total = files.reduce((sum, f) => sum + f.size, 0);
+        let removed = 0;
+        for (const f of files) {
+            if (now - f.mtime <= maxAgeDays * DAY_MS && total <= maxBytes) {
+                break;
+            }
+            try {
+                await fsp.rm(f.file, { force: true });
+                total -= f.size;
+                removed++;
+            } catch {
+                // Kept: retried at the next run.
+            }
+        }
+        await fsp.writeFile(stamp, String(now), { mode: 0o600 });
+        await fsp.utimes(stamp, new Date(now), new Date(now));
+        return { removed };
     }
 
     /**

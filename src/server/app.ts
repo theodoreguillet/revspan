@@ -68,6 +68,8 @@ export async function startApp({
     const store = new Store(dir);
     const secrets = await createSecretStore({ dir, env });
     const cache = new Cache(path.join(dir, 'cache'));
+    // Fire-and-forget: trimming the disk cache never delays or breaks the startup.
+    cache.evictDisk().catch((error: unknown) => console.warn(`revspan: cannot trim the cache (${(error as Error).message})`));
     const { settings, home, prs } = createServices({ store, secrets, cache, baseUrl: env.REVSPAN_BITBUCKET_API ?? DEFAULT_BASE_URL, fetchImpl });
 
     let bound = 0;

@@ -177,6 +177,23 @@ describe('compareVersions', () => {
     });
 });
 
+describe('per-comparison content cap', () => {
+    const many = (names: string[], size: number): CompareSource => ({
+        diffstat: async () => names.map((n) => ({ status: 'added' as const, oldPath: null, newPath: n, added: 1, removed: 0 })),
+        content: async (hash, path) => (hash === 'new' ? { text: `${path}${'x'.repeat(size)}` } : { missing: true }),
+    });
+
+    it('marks the files beyond the byte cap as too large, like a huge file', async () => {
+        const { files } = await compareVersions(many(['a.ts', 'b.ts', 'c.ts'], 100), oneVersion, 0, 1, { maxBytes: 250 });
+        expect(files.map((f) => [f.path, f.tooLarge])).toEqual([['a.ts', false], ['b.ts', false], ['c.ts', true]]);
+    });
+
+    it('keeps everything under the cap', async () => {
+        const { files } = await compareVersions(many(['a.ts', 'b.ts'], 100), oneVersion, 0, 1, { maxBytes: 1000 });
+        expect(files.every((f) => !f.tooLarge)).toBe(true);
+    });
+});
+
 describe('summarizeVersion', () => {
     it('types: creation, code, rebase only, deps, code, message only', async () => {
         const { repo, versions } = scenario();

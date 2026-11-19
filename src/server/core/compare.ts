@@ -65,6 +65,31 @@ interface FileOptions {
     withHunks: boolean;
 }
 
+/** Total text bytes (approximate, characters) one comparison may load before the remaining files are shown as too large. */
+export const MAX_COMPARISON_BYTES = 64 * 1024 * 1024;
+
+/** Source that turns the contents beyond the byte cap into the "too large" status (same path as a huge file). */
+function budgeted(src: CompareSource, maxBytes: number): CompareSource {
+    const seen = new Set<string>();
+    let total = 0;
+    return {
+        diffstat: (newHash, oldHash) => src.diffstat(newHash, oldHash),
+        content: async (hash, path) => {
+            const content = await src.content(hash, path);
+            if (!('text' in content)) {
+                return content;
+            }
+            // The same content requested twice (rebase: several roles) is held once.
+            const key = `${hash}\0${path}`;
+            if (!seen.has(key)) {
+                total += content.text.length;
+                seen.add(key);
+            }
+            return total > maxBytes ? { tooLarge: true } : content;
+        },
+    };
+}
+
 const sha1 = (text: string): string => createHash('sha1').update(text).digest('hex');
 
 function sideOf(content: FileContent): Side {
@@ -212,12 +237,13 @@ function sortFiles(files: FileDiff[]): FileDiff[] {
 
 /** from = 0: full `to` version against its base; otherwise the author's changes between from and to. */
 export async function compareVersions(
-    src: CompareSource,
+    source: CompareSource,
     versions: readonly CompareVersion[],
     from: number,
     to: number,
-    { context = 3, withHunks = true }: Partial<FileOptions> = {},
+    { context = 3, withHunks = true, maxBytes = MAX_COMPARISON_BYTES }: Partial<FileOptions> & { maxBytes?: number } = {},
 ): Promise<Comparison> {
+    const src = budgeted(source, maxBytes);
     const vb = versions[to - 1];
     if (!vb || from < 0 || from >= to) {
         throw new InvalidComparisonError(`Comparaison invalide : ${from} → ${to}`);

@@ -159,6 +159,8 @@ export async function createExtensionApp(context: vscode.ExtensionContext, { onH
     const dir = context.globalStorageUri.fsPath;
     const store = new Store(dir, { repoSource: vscodeRepoSource(), reviewSource: vscodeReviewSource() });
     const cache = new Cache(path.join(dir, 'cache'));
+    // Fire-and-forget: trimming the disk cache never delays or breaks the startup.
+    cache.evictDisk().catch((error: unknown) => console.warn(`revspan: cannot trim the cache (${(error as Error).message})`));
     const overrides = testOverrides(context.extensionMode);
     const services = createServices({ store, secrets: vscodeSecretStore(context.secrets), cache, baseUrl: overrides.baseUrl ?? DEFAULT_BASE_URL, onHomeLoad });
     if (overrides.email && overrides.token) {

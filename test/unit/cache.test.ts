@@ -123,3 +123,84 @@ describe('Cache.getLive', () => {
         expect(compute).toHaveBeenCalledTimes(3);
     });
 });
+
+describe('Memory budget', () => {
+    it('evicts the least recently used entries beyond the byte budget', () => {
+        const cache = new Cache(null, { memoryBytes: 1000 });
+        cache.set('a', 'x'.repeat(200));
+        cache.set('b', 'y'.repeat(200));
+        cache.set('c', 'z'.repeat(200));
+        expect([cache.get('a'), cache.get('b') === undefined, cache.get('c') === undefined]).toEqual([undefined, false, false]);
+    });
+
+    it('a recent hit protects an entry', () => {
+        const cache = new Cache(null, { memoryBytes: 1000 });
+        cache.set('a', 'x'.repeat(200));
+        cache.set('b', 'y'.repeat(200));
+        cache.get('a');
+        cache.set('c', 'z'.repeat(200));
+        expect([cache.get('a') === undefined, cache.get('b'), cache.get('c') === undefined]).toEqual([false, undefined, false]);
+    });
+
+    it('does not keep in memory a value bigger than the budget, but still writes it to disk', () => {
+        const dir = tempDir();
+        const cache = new Cache(dir, { memoryBytes: 100 });
+        cache.set('big', 'x'.repeat(500));
+        const files = fs.readdirSync(dir).flatMap((d) => fs.readdirSync(path.join(dir, d)));
+        expect(files).toHaveLength(1);
+        expect(cache.get('big')).toBe('x'.repeat(500));
+    });
+
+    it('estimates objects through their JSON size', () => {
+        const cache = new Cache(null, { memoryBytes: 1000 });
+        const obj = (c: string) => ({ t: c.repeat(300) });
+        cache.set('a', obj('a'));
+        cache.set('b', obj('b'));
+        expect([cache.get('a'), cache.get('b') === undefined]).toEqual([undefined, false]);
+    });
+});
+
+describe('evictDisk', () => {
+    const DAY = 24 * 3600 * 1000;
+    const NOW = Date.parse('2026-06-01T00:00:00Z');
+    const put = (dir: string, name: string, size: number, ageDays: number): string => {
+        const sub = path.join(dir, name.slice(0, 2));
+        fs.mkdirSync(sub, { recursive: true });
+        const file = path.join(sub, `${name}.json`);
+        fs.writeFileSync(file, 'x'.repeat(size));
+        const t = new Date(NOW - ageDays * DAY);
+        fs.utimesSync(file, t, t);
+        return file;
+    };
+
+    it('removes files older than maxAgeDays', async () => {
+        const dir = tempDir();
+        const old = put(dir, 'aa01', 10, 40);
+        const fresh = put(dir, 'bb02', 10, 1);
+        expect(await new Cache(dir).evictDisk({ now: NOW })).toEqual({ removed: 1 });
+        expect([fs.existsSync(old), fs.existsSync(fresh)]).toEqual([false, true]);
+    });
+
+    it('then removes the oldest until under maxBytes', async () => {
+        const dir = tempDir();
+        const a = put(dir, 'aa01', 100, 10);
+        const b = put(dir, 'bb02', 100, 5);
+        const c = put(dir, 'cc03', 100, 1);
+        expect(await new Cache(dir).evictDisk({ now: NOW, maxBytes: 250 })).toEqual({ removed: 1 });
+        expect([a, b, c].map((f) => fs.existsSync(f))).toEqual([false, true, true]);
+    });
+
+    it('skips when stamped less than 24 h ago, runs again after', async () => {
+        const dir = tempDir();
+        const cache = new Cache(dir);
+        await cache.evictDisk({ now: NOW });
+        const old = put(dir, 'aa01', 10, 40);
+        expect(await cache.evictDisk({ now: NOW + DAY / 2 })).toEqual({ removed: 0 });
+        expect(fs.existsSync(old)).toBe(true);
+        expect(await cache.evictDisk({ now: NOW + DAY + 1 })).toEqual({ removed: 1 });
+    });
+
+    it('is a no-op without a disk directory', async () => {
+        expect(await new Cache(null).evictDisk({ now: NOW })).toEqual({ removed: 0 });
+    });
+});
