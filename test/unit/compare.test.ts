@@ -336,6 +336,12 @@ describe('placeThreads', () => {
                 .toEqual([{ threadId: 1, line: 4, startLine: null, moved: true, outOfHunks: false }]);
         });
 
+        it('a range shown as a single line still counts as moved when its first line changed', async () => {
+            // c (removed)..e (unchanged): the start lands on e, the range collapses onto its end line
+            expect(await placed([{ id: 1, path: 'r.ts', anchor: rangeAnchor(3, 5), version: 1 }]))
+                .toEqual([{ threadId: 1, line: 4, startLine: null, moved: true, outOfHunks: false }]);
+        });
+
         it('an anchor without range fields (detail cached by an older version): a single line', async () => {
             const legacy = { to: 5, from: null } as unknown as Thread['anchor'];
             expect(await placed([{ id: 1, path: 'r.ts', anchor: legacy, version: 2 }]))

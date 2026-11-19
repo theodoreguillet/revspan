@@ -73,9 +73,10 @@ Common rules:
   multi-line comment on each side (`start_to` / `start_from`); `startTo` / `startFrom` are null for a single line, and
   when Bitbucket's value is not a whole number before the end line of its side.
 - `ThreadPlacement.startLine`: the first line of the range on the "to" side, mapped from the thread's version like
-  `line` (a changed first line also sets `moved`); null for a single line, for a range on the old side (shown at file
-  level, as every comment on removed lines), or when the mapped start does not come before `line` (the thread then
-  shows on `line` as a single line).
+  `line`; null for a single line, for a range on the old side (shown at file level, as every comment on removed lines),
+  or when the mapped start does not come before `line` (the thread then shows on `line` as a single line).
+  `ThreadPlacement.moved` is set when the range's first or last line changed since the comment, also when it then
+  shows as a single line.
 
 ## Review queue contract
 

@@ -402,11 +402,11 @@ export async function placeThreads(
                     if (oldSide.text !== null && newSide.text !== null) {
                         const [end, start] = mapLines(oldSide.lines, newSide.lines, anchorStart === null ? [anchorLine] : [anchorLine, anchorStart]);
                         line = end?.line ?? null;
-                        moved = end?.changed ?? false;
+                        // the first or last line of the range changed since the comment (even if the range then shows
+                        // as a single line)
+                        moved = (end?.changed ?? false) || (start?.changed ?? false);
                         if (start?.line != null && line !== null && start.line < line) {
                             startLine = start.line;
-                            // a line of the range changed since the comment
-                            moved ||= start.changed;
                         }
                     }
                 }
