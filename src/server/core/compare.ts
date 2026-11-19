@@ -69,10 +69,13 @@ interface FileOptions {
 /** Total text bytes (approximate, characters) one comparison may load before the remaining files are shown as too large. */
 export const MAX_COMPARISON_BYTES = 64 * 1024 * 1024;
 
+const sha1 = (text: string): string => createHash('sha1').update(text).digest('hex');
+
 /**
- * Source that turns the contents beyond the byte cap into the "too large" status (same path as a huge file).
- * Decisions are taken in request order (the file order, requests are issued synchronously per file), whatever
- * the order the fetches resolve in, and a (hash, path) keeps its answer for the whole comparison.
+ * Source that turns the contents beyond the byte cap into the "too large" status (same path as a huge file), with the
+ * fingerprint of their text: the same content still compares equal past the cap. Decisions are taken in request order
+ * (the file order, requests are issued synchronously per file), whatever the order the fetches resolve in, and a
+ * (hash, path) keeps its answer for the whole comparison.
  */
 export function budgetedSource(src: CompareSource, maxBytes: number): CompareSource {
     const decisions = new Map<string, Promise<FileContent>>();
@@ -94,7 +97,7 @@ export function budgetedSource(src: CompareSource, maxBytes: number): CompareSou
                     return content;
                 }
                 total += content.text.length;
-                return total > maxBytes ? { tooLarge: true } : content;
+                return total > maxBytes ? { tooLarge: true, fingerprint: sha1(content.text) } : content;
             });
             previous = decision.catch(() => undefined);
             decisions.set(key, decision);
@@ -102,8 +105,6 @@ export function budgetedSource(src: CompareSource, maxBytes: number): CompareSou
         },
     };
 }
-
-const sha1 = (text: string): string => createHash('sha1').update(text).digest('hex');
 
 function sideOf(content: FileContent): Side {
     if ('missing' in content) {
@@ -124,9 +125,14 @@ function sameSide(a: Side, b: Side): boolean {
     if (!a.exists) {
         return true;
     }
-    if (a.flag || b.flag) {
+    if (a.flag && b.flag) {
         // Binary or too large: equal only if both fingerprints are known and identical.
         return a.flag === b.flag && a.fingerprint !== null && a.fingerprint === b.fingerprint;
+    }
+    if (a.flag || b.flag) {
+        // A text against a too large side: one past the comparison's cap, equal to it only with the same content.
+        const [large, other] = a.flag ? [a, b] : [b, a];
+        return large.flag === 'tooLarge' && large.fingerprint !== null && other.text !== null && sha1(other.text) === large.fingerprint;
     }
     return a.text === b.text;
 }
@@ -462,7 +468,9 @@ export async function summarizeVersion(src: CompareSource, versions: readonly Co
             conflicts: 0,
         };
     }
-    const result = await compareVersions(src, versions, since, index, { withHunks: false });
+    // Not capped: the type of a version is cached for good, and only the full texts tell a rebase from an author change
+    // (3-way merge); no hunks are built.
+    const result = await compareVersions(src, versions, since, index, { withHunks: false, maxBytes: Infinity });
     const files = result.files.map(({ path, added, removed, category }): SummaryFile => ({ path, added, removed, category }));
     return {
         index,

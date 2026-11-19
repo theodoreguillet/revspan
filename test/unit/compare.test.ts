@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { FileDiff, Thread, ThreadPlacement } from '../../src/shared/api.ts';
 import {
-    budgetedSource, compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource, type CompareVersion, type FileContent,
+    budgetedSource, compareVersions, fileSides, MAX_COMPARISON_BYTES, placeThreads, summarizeVersion, type CompareSource, type CompareVersion,
+    type FileContent,
 } from '../../src/server/core/compare.ts';
 import { scenario } from '../support/fake-repo.ts';
 
@@ -225,7 +227,39 @@ describe('per-comparison content cap', () => {
         await src.content('h3', 'p');
         expect(await src.content('h1', 'p')).toBe(first);
         expect('text' in first).toBe(true);
-        expect(await src.content('h3', 'p')).toEqual({ tooLarge: true });
+        // the content's fingerprint: the same text compares equal past the cap, as a huge file does
+        expect(await src.content('h3', 'p')).toEqual({ tooLarge: true, fingerprint: createHash('sha1').update(`${'x'.repeat(100)}h3`).digest('hex') });
+    });
+
+    const rebased: CompareVersion[] = [
+        { index: 1, hash: 'v1', base: 'b1', message: '', isRebase: false, messageChanged: false },
+        { index: 2, hash: 'v2', base: 'b2', message: '', isRebase: true, messageChanged: false },
+    ];
+
+    it('a file the rebase left as the author wrote it stays in "master only" past the cap', async () => {
+        const text = (label: string): FileContent => ({ text: `${label}\n${'x'.repeat(100)}\n` });
+        const src = singleFile('big.ts', { b1: text('master-1'), v1: text('author'), b2: text('master-2'), v2: text('author') });
+        const result = await compareVersions(src, rebased, 1, 2, { maxBytes: 50 });
+        expect(result.files).toEqual([]);
+        expect(result.masterOnly).toEqual(['big.ts']);
+    });
+
+    it('the same content on both sides of the cap compares equal', async () => {
+        // a mode change: listed by the diffstat, same content; the old side fits under the cap, the new one does not
+        const same = { text: `${'x'.repeat(100)}\n` };
+        const src = singleFile('run.sh', { v1: same, v2: same });
+        const sameBase: CompareVersion[] = rebased.map((v) => ({ ...v, base: 'b', isRebase: false }));
+        const result = await compareVersions(src, sameBase, 1, 2, { maxBytes: 150 });
+        expect(result.files).toEqual([]);
+        expect(result.masterOnly).toEqual(['run.sh']);
+    });
+
+    it('version summaries are not capped: a rebase-only version with contents past the cap is still "rebase only"', async () => {
+        // master and the author changed different lines of the file: only the 3-way merge (text) shows no author change
+        const big = 'x'.repeat(Math.ceil(MAX_COMPARISON_BYTES / 3));
+        const file = (first: string, last: string): FileContent => ({ text: `${first}\n${big}\n${last}\n` });
+        const src = singleFile('data.ts', { b1: file('a', 'c'), v1: file('a2', 'c'), b2: file('a', 'c2'), v2: file('a2', 'c2') });
+        expect((await summarizeVersion(src, rebased, 2)).kind).toBe('rebase-only');
     });
 
     it('keeps everything under the cap', async () => {
