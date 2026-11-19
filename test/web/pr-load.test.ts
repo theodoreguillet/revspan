@@ -865,6 +865,35 @@ describe('PR page while a slow diff loads', () => {
             expect(page.curFile).toBe(0);
         });
 
+        it('v that stays (nothing left, or unmark): the page re-laid out by the fold does not move the current file', async () => {
+            const page = await onFile1('v');
+            now = 5000;
+            page.handleKey('v');
+            await vi.waitFor(() => expect(page.curFile).toBe(2));
+            // the last unseen file: marked, it folds, the page gets shorter and the browser scrolls back
+            now = 9000;
+            page.handleKey('v');
+            await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledTimes(3));
+            y = 300;
+            page.updateCurrentFromScroll();
+            now = 20000;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(2);
+            // v on it again: unmarked, it unfolds and stays current too
+            page.handleKey('v');
+            await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledTimes(4));
+            expect(api.viewed.mock.calls[3]?.[1]).toMatchObject({ path: 'c', viewed: false });
+            y = 120;
+            page.updateCurrentFromScroll();
+            now = 30000;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(2);
+            // the user scrolls: the scroll drives the current file again
+            y = 600;
+            page.updateCurrentFromScroll();
+            expect(page.curFile).toBe(0);
+        });
+
         it('once settled, the first scroll that moves the page (a jump set by the page) makes the current file follow', async () => {
             const page = await onFile1('j');
             now = 5000;

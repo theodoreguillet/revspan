@@ -180,10 +180,16 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     function markViewedAndNext(file: FileDiff): void {
         const seen = load.detail.value.review.viewed;
         if (viewedStatus(file, seen) === 'seen') {
+            // it unfolds and the page re-lays out: the scroll must not make another file current
+            nav.pinFile();
             void review.setViewed(file, false);
             return;
         }
         const target = nextUnseenIndex(files.value.map((f) => ({ seen: viewedStatus(f, seen) === 'seen' })), nav.curFile.value);
+        if (target === null) {
+            // nothing left to see: it folds, and the browser scrolls back up if the page got too short
+            nav.pinFile();
+        }
         // the mark would scroll back to this file: the move to the next one replaces it
         void review.setViewed(file, true, { keepInView: target === null });
         if (target !== null) {

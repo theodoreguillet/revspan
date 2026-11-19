@@ -82,14 +82,15 @@ export function useDiffNav() {
     let jump: HTMLElement | null = null;
 
     /**
-     * File reached by j/k/v: while its scroll settles (the page re-lays out as files collapse, and it may stop short of
-     * the place at the end of the page) the scroll position says another file, so the scroll does not move `curFile`
-     * back. Then it stays pinned until the scroll moves away from where it settled (`y`: the place after the scroll,
-     * refreshed while it settles). Any other scroll set by the page (thread, search match, definition, tabs) releases it.
+     * File reached by j/k/v (or kept by a v that stays on it): while its scroll settles (the page re-lays out as files
+     * fold, and it may stop short of the place at the end of the page) the scroll position says another file, so the
+     * scroll does not move `curFile` back. Then it stays pinned until the scroll moves away from where it settled (`y`:
+     * the place after the scroll, refreshed while it settles). Any other scroll set by the page (thread, search match,
+     * definition, tabs) releases it.
      */
     let pin: { until: number; y: number } | null = null;
 
-    /** Pins `curFile` (just set to the file reached) before the scroll to it. */
+    /** Pins `curFile` (the file just reached, or kept) before the page scrolls or re-lays out. */
     function pinFile(): void {
         pin = { until: performance.now() + PIN_SETTLE_MS, y: window.scrollY };
     }
