@@ -677,6 +677,53 @@ describe('PR page while a slow diff loads', () => {
         await vi.waitFor(() => expect(page.diffMode).toBe('diff'));
     });
 
+    /** A comparison of three files a, b, c (hash "h"), the `viewed` map of the PR already set. */
+    function threeFiles(viewed: Record<string, string>): void {
+        const base = comparison(7, 10);
+        const file = (path: string) => ({ ...base.files[0]!, path });
+        api.compare.mockImplementation((_ref: unknown, from: number, to: number) => Promise.resolve({ ...comparison(from, to), files: ['a', 'b', 'c'].map(file) }));
+        detail.review.viewed = viewed;
+    }
+
+    it('v marks the current file seen and moves to the next unseen one', async () => {
+        api.viewed.mockResolvedValue({ ok: true });
+        threeFiles({ b: 'h' });
+        const page = await mountPage();
+        await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+        expect(page.curFile).toBe(0);
+        expect(page.handleKey('v')).toBe(true);
+        expect(page.detail.review.viewed.a).toBe('h');
+        await vi.waitFor(() => expect(page.curFile).toBe(2));
+        await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledOnce());
+        expect(api.viewed.mock.calls[0]?.[1]).toMatchObject({ path: 'a', viewed: true });
+        // c is the last: the only unseen file left is before it (none after), then nothing is left: stay on it
+        expect(page.handleKey('v')).toBe(true);
+        await settle();
+        expect(page.curFile).toBe(2);
+    });
+
+    it('v: a file seen in an older version but changed since counts as unseen', async () => {
+        api.viewed.mockResolvedValue({ ok: true });
+        threeFiles({ b: 'older-hash' });
+        const page = await mountPage();
+        await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+        page.handleKey('v');
+        await vi.waitFor(() => expect(page.curFile).toBe(1));
+    });
+
+    it('v on a seen file unmarks it and stays', async () => {
+        api.viewed.mockResolvedValue({ ok: true });
+        threeFiles({ a: 'h' });
+        const page = await mountPage();
+        await vi.waitFor(() => expect(page.compare?.files).toHaveLength(3));
+        expect(page.handleKey('v')).toBe(true);
+        expect(page.detail.review.viewed.a).toBeUndefined();
+        await settle();
+        expect(page.curFile).toBe(0);
+        await vi.waitFor(() => expect(api.viewed).toHaveBeenCalledOnce());
+        expect(api.viewed.mock.calls[0]?.[1]).toMatchObject({ path: 'a', viewed: false });
+    });
+
     it('Shift+V marks every file, a bare "V" (Caps Lock) does not', async () => {
         api.viewed.mockResolvedValue({ ok: true });
         const page = await mountPage();

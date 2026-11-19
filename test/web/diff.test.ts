@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiffLine, FileDiff, Thread } from '../../src/shared/api.ts';
 import {
     composerKey, composerTargetFor, currentMatchKey, deletedLineComment, estimatedLinesHeight, fileThreadCount, fileView, firstChangedLine, highlightParts, hunkRange,
-    hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, placeFileThreads, PROGRESSIVE_LINES, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
+    hunkRowLimits, initialRowBudget, lastTouched, nextRowBudget, nextUnseenIndex, placeFileThreads, PROGRESSIVE_LINES, ROW_BLOCK, rowBlocks, ROWS_PER_FRAME,
     sideBySideRows, splitRows, unifiedRows, viewedStatus, viewportDistance,
 } from '../../src/web/lib/diff.ts';
 import { prLong } from './fixtures.ts';
@@ -12,6 +12,26 @@ import { createTranslator } from '../../src/web/i18n/translator.ts';
 const fr = createTranslator('fr');
 
 const line = (t: DiffLine['t'], o: number | null, n: number | null, text = ''): DiffLine => ({ t, o, n, text, hl: [] });
+
+describe('nextUnseenIndex', () => {
+    const seen = (flags: string): { seen: boolean }[] => [...flags].map((c) => ({ seen: c === 's' }));
+
+    it('first unseen file after the current one', () => {
+        expect(nextUnseenIndex(seen('susu'), 1)).toBe(3);
+        expect(nextUnseenIndex(seen('uuu'), 0)).toBe(1);
+    });
+
+    it('none after: the first unseen one before it', () => {
+        expect(nextUnseenIndex(seen('uss'), 2)).toBe(0);
+        expect(nextUnseenIndex(seen('usu'), 2)).toBe(0);
+    });
+
+    it('nothing unseen left (the current file counts as seen): null', () => {
+        expect(nextUnseenIndex(seen('ss'), 0)).toBeNull();
+        expect(nextUnseenIndex(seen('u'), 0)).toBeNull();
+        expect(nextUnseenIndex([], 0)).toBeNull();
+    });
+});
 
 describe('viewedStatus', () => {
     const file = { path: 'a.ts', contentHash: 'h2' };

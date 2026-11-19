@@ -467,7 +467,7 @@ export const en = {
     'shortcuts.keysHelp': '?',
     'shortcuts.file': 'Next / previous file',
     'shortcuts.thread': 'Next / previous thread',
-    'shortcuts.viewed': 'Mark the current file as viewed',
+    'shortcuts.viewed': 'Mark as viewed and go to the next unviewed file (v again: unmark)',
     'shortcuts.allViewed': 'Mark all files as viewed (the filtered ones while searching)',
     'shortcuts.search': 'Search file names and contents (Enter / Shift+Enter: next / previous match)',
     'shortcuts.goto': 'On a name in the diff: go to its definition in the displayed diff, else to its import',

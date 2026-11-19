@@ -309,7 +309,7 @@ one request per interval even once finished (see "Build status").
   runs at the refresh interval of the settings: news shows a banner with a Refresh button, the page never changes by
   itself. Reopening a PR within that interval shows it at once, with no read.
 
-Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen, `Shift+V` all files seen, `[`/`]` version, `/` search,
+Shortcuts: `j`/`k` file, `n`/`p` thread, `v` seen and next unseen file (again: unmark), `Shift+V` all files seen, `[`/`]` version, `/` search,
 `Ctrl+click` (`⌘+click`) go to definition, `Alt+←` back, `?` help. On AZERTY keyboards, `[`
 and `]` typed with Option or AltGr work too.
 

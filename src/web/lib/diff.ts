@@ -15,6 +15,19 @@ export function viewedStatus(file: Pick<FileDiff, 'path' | 'contentHash'>, viewe
     return stored === file.contentHash ? 'seen' : 'changed';
 }
 
+/**
+ * Index of the file "v" moves to after marking `current` seen: the first unseen one after it, else the first unseen
+ * before it, else null. The current file counts as seen (it was just marked).
+ */
+export function nextUnseenIndex(files: readonly { seen: boolean }[], current: number): number | null {
+    const after = files.findIndex((file, idx) => idx > current && !file.seen);
+    if (after !== -1) {
+        return after;
+    }
+    const before = files.findIndex((file, idx) => idx < current && !file.seen);
+    return before === -1 ? null : before;
+}
+
 /** Latest version of the range (from, to] that modified this file, according to the summary. */
 export function lastTouched(sums: SummaryMap, from: number, to: number, path: string): number | null {
     for (let i = to; i >= from + 1; i--) {

@@ -62,14 +62,17 @@ export function useReviewActions(prRef: PrRef, load: PrLoad, options: DiffOption
 
     /**
      * Ticks "Seen": immediate update (the file collapses), rolled back if the server refuses. Only this file is
-     * rolled back: ticks set meanwhile on other files stay.
+     * rolled back: ticks set meanwhile on other files stay. `keepInView: false` when the caller scrolls elsewhere itself
+     * ("v" moving to the next unseen file).
      */
-    async function setViewed(file: FileDiff, viewed: boolean): Promise<void> {
+    async function setViewed(file: FileDiff, viewed: boolean, { keepInView = true } = {}): Promise<void> {
         const previous = load.detail.value.review.viewed[file.path];
         patchViewed(file.path, viewed ? file.contentHash : undefined);
         options.collapsed.delete(file.path);
         await nextTick();
-        keepFileInView(file.path);
+        if (keepInView) {
+            keepFileInView(file.path);
+        }
         try {
             await api.viewed(prRef, { path: file.path, contentHash: file.contentHash, viewed });
         } catch (error) {

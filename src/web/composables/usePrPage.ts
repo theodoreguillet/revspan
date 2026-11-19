@@ -1,8 +1,8 @@
 // PR page state, shared through provide/inject: assembles the specialized composables
 // (data, range, display options, navigation, comments, review) and wires them together.
 import { computed, inject, nextTick, onScopeDispose, provide, reactive, watch, type InjectionKey } from 'vue';
-import type { PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
-import { viewedStatus } from '../lib/diff.ts';
+import type { FileDiff, PrDetail, PrRef, ThreadPlacement } from '../../shared/api.ts';
+import { nextUnseenIndex, viewedStatus } from '../lib/diff.ts';
 import { PREFETCH_CONTEXT } from '../lib/prefetch.ts';
 import { commentThreadId } from '../lib/tasks.ts';
 import { useDiffNav } from './useDiffNav.ts';
@@ -167,7 +167,25 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
     }
 
     /**
-     * Shortcuts: j/k file, n/p thread, v seen, Shift+V all seen, [ ] version, / search, Alt+← back from a definition,
+     * "v": a seen file is unmarked (and we stay); an unseen one is marked, then the page moves to the next unseen file.
+     * The move happens right after the optimistic mark; if the write fails and rolls back, we do not move back.
+     */
+    function markViewedAndNext(file: FileDiff): void {
+        const seen = load.detail.value.review.viewed;
+        if (viewedStatus(file, seen) === 'seen') {
+            void review.setViewed(file, false);
+            return;
+        }
+        const target = nextUnseenIndex(files.value.map((f) => ({ seen: viewedStatus(f, seen) === 'seen' })), nav.curFile.value);
+        // the mark would scroll back to this file: the move to the next one replaces it
+        void review.setViewed(file, true, { keepInView: target === null });
+        if (target !== null) {
+            void gotoFile(target);
+        }
+    }
+
+    /**
+     * Shortcuts: j/k file, n/p thread, v seen then next unseen file, Shift+V all seen, [ ] version, / search, Alt+← back from a definition,
      * Escape closes the go-to-definition choice, the composer, then the go-to-definition notice. Returns true if the key
      * is handled.
      */
@@ -191,7 +209,7 @@ function createPrPage(prRef: PrRef, initial: PrDetail) {
                 if (!inDiff || !current) {
                     return false;
                 }
-                void review.setViewed(current, viewedStatus(current, load.detail.value.review.viewed) !== 'seen');
+                void markViewedAndNext(current);
                 return true;
             case 'V':
                 // the real Shift modifier: with Caps Lock, "v" also yields "V" and must stay "this file only"

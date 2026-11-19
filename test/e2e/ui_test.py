@@ -1247,6 +1247,32 @@ def run_checks(page):
         wait_api(lambda: list(api(pr_api(MAIN_PR))['review']['viewed']) == [code_file['path']], 'review.viewed restored')
     mark_all_viewed(page)
 
+    @check('v marks the current file seen and moves to the next unseen one (then stays when nothing is left)')
+    def v_walks_unseen(page):
+        open_pr(page, MAIN_PR, f'?from={exp_from}&to={exp_to}')
+        total = page.locator('.rv-diff .rv-file').count()
+        assert total == 2, f'the fixture range has 2 files, got {total}'
+        page.locator('[data-action="mark-all-viewed"]').click()
+        page.locator('[data-action="unmark-all-viewed"]').click()
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(0)
+        first = int(page.locator('.rv-f.cur').get_attribute('data-idx'))
+        assert first == 0, f'starts on the first file, got {first}'
+        page.locator('body').click(position={'x': 5, 'y': 5})
+        page.keyboard.press('v')
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(1)
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(first + 1))
+        page.keyboard.press('v')
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(2)
+        # every file is seen now: v on the last one marks it and stays
+        expect(page.locator('.rv-f.cur')).to_have_attribute('data-idx', str(first + 1))
+        # back to the state the next checks expect: only the code file seen
+        page.locator('[data-action="unmark-all-viewed"]').click()
+        expect(page.locator('.rv-files .rv-f .ck.seen')).to_have_count(0)
+        page.locator(f'.rv-file[data-path="{code_file["path"]}"] input[data-action="viewed"]').check()
+        expect(page.locator('.rv-files .rv-prog .cnt')).to_contain_text(f'1 / {total}')
+        wait_api(lambda: list(api(pr_api(MAIN_PR))['review']['viewed']) == [code_file['path']], 'review.viewed restored')
+    v_walks_unseen(page)
+
     @check('file list: width dragged from its edge, remembered after a reload, reset by double-click')
     def file_list_resize(page):
         panel = page.locator('.rv-files')
