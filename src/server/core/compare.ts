@@ -68,24 +68,36 @@ interface FileOptions {
 /** Total text bytes (approximate, characters) one comparison may load before the remaining files are shown as too large. */
 export const MAX_COMPARISON_BYTES = 64 * 1024 * 1024;
 
-/** Source that turns the contents beyond the byte cap into the "too large" status (same path as a huge file). */
-function budgeted(src: CompareSource, maxBytes: number): CompareSource {
-    const seen = new Set<string>();
+/**
+ * Source that turns the contents beyond the byte cap into the "too large" status (same path as a huge file).
+ * Decisions are taken in request order (the file order, requests are issued synchronously per file), whatever
+ * the order the fetches resolve in, and a (hash, path) keeps its answer for the whole comparison.
+ */
+export function budgetedSource(src: CompareSource, maxBytes: number): CompareSource {
+    const decisions = new Map<string, Promise<FileContent>>();
     let total = 0;
+    let previous: Promise<unknown> = Promise.resolve();
     return {
         diffstat: (newHash, oldHash) => src.diffstat(newHash, oldHash),
-        content: async (hash, path) => {
-            const content = await src.content(hash, path);
-            if (!('text' in content)) {
-                return content;
-            }
-            // The same content requested twice (rebase: several roles) is held once.
+        content: (hash, path) => {
             const key = `${hash}\0${path}`;
-            if (!seen.has(key)) {
-                total += content.text.length;
-                seen.add(key);
+            const known = decisions.get(key);
+            if (known) {
+                return known;
             }
-            return total > maxBytes ? { tooLarge: true } : content;
+            const fetched = src.content(hash, path);
+            fetched.catch(() => undefined);
+            const decision = previous.then(async (): Promise<FileContent> => {
+                const content = await fetched;
+                if (!('text' in content)) {
+                    return content;
+                }
+                total += content.text.length;
+                return total > maxBytes ? { tooLarge: true } : content;
+            });
+            previous = decision.catch(() => undefined);
+            decisions.set(key, decision);
+            return decision;
         },
     };
 }
@@ -243,7 +255,7 @@ export async function compareVersions(
     to: number,
     { context = 3, withHunks = true, maxBytes = MAX_COMPARISON_BYTES }: Partial<FileOptions> & { maxBytes?: number } = {},
 ): Promise<Comparison> {
-    const src = budgeted(source, maxBytes);
+    const src = budgetedSource(source, maxBytes);
     const vb = versions[to - 1];
     if (!vb || from < 0 || from >= to) {
         throw new InvalidComparisonError(`Comparaison invalide : ${from} → ${to}`);

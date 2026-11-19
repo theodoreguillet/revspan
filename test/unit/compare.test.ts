@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FileDiff } from '../../src/shared/api.ts';
 import {
-    compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource, type CompareVersion, type FileContent,
+    budgetedSource, compareVersions, fileSides, placeThreads, summarizeVersion, type CompareSource, type CompareVersion, type FileContent,
 } from '../../src/server/core/compare.ts';
 import { scenario } from '../support/fake-repo.ts';
 
@@ -186,6 +186,30 @@ describe('per-comparison content cap', () => {
     it('marks the files beyond the byte cap as too large, like a huge file', async () => {
         const { files } = await compareVersions(many(['a.ts', 'b.ts', 'c.ts'], 100), oneVersion, 0, 1, { maxBytes: 250 });
         expect(files.map((f) => [f.path, f.tooLarge])).toEqual([['a.ts', false], ['b.ts', false], ['c.ts', true]]);
+    });
+
+    it('refuses the tail of the file order even when the fetches resolve out of order', async () => {
+        const gates = new Map<string, () => void>();
+        const src: CompareSource = {
+            diffstat: async () => ['a.ts', 'b.ts', 'c.ts'].map((n) => ({ status: 'added' as const, oldPath: null, newPath: n, added: 1, removed: 0 })),
+            content: (hash, path) => (hash === 'new'
+                ? new Promise((resolve) => { gates.set(path, () => resolve({ text: 'x'.repeat(100) })); })
+                : Promise.resolve({ missing: true as const })),
+        };
+        const running = compareVersions(src, oneVersion, 0, 1, { maxBytes: 250 });
+        await new Promise((r) => setTimeout(r, 0));
+        ['c.ts', 'a.ts', 'b.ts'].forEach((n) => gates.get(n)!());
+        expect((await running).files.map((f) => [f.path, f.tooLarge])).toEqual([['a.ts', false], ['b.ts', false], ['c.ts', true]]);
+    });
+
+    it('answers the same way when a key is requested again', async () => {
+        const src = budgetedSource({ diffstat: async () => [], content: async (hash) => ({ text: 'x'.repeat(100) + hash }) }, 250);
+        const first = await src.content('h1', 'p');
+        await src.content('h2', 'p');
+        await src.content('h3', 'p');
+        expect(await src.content('h1', 'p')).toBe(first);
+        expect('text' in first).toBe(true);
+        expect(await src.content('h3', 'p')).toEqual({ tooLarge: true });
     });
 
     it('keeps everything under the cap', async () => {

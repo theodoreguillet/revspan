@@ -68,8 +68,8 @@ export async function startApp({
     const store = new Store(dir);
     const secrets = await createSecretStore({ dir, env });
     const cache = new Cache(path.join(dir, 'cache'));
-    // Fire-and-forget: trimming the disk cache never delays or breaks the startup.
-    cache.evictDisk().catch((error: unknown) => console.warn(`revspan: cannot trim the cache (${(error as Error).message})`));
+    // Never delays or breaks the startup; repeated daily for a long-lived server.
+    const stopEviction = cache.scheduleEviction();
     const { settings, home, prs } = createServices({ store, secrets, cache, baseUrl: env.REVSPAN_BITBUCKET_API ?? DEFAULT_BASE_URL, fetchImpl });
 
     let bound = 0;
@@ -98,6 +98,7 @@ export async function startApp({
         home,
         openUrl: (hash = '') => openUrlOf(url, secret, hash),
         close: () => new Promise((resolve) => {
+            stopEviction();
             server.closeAllConnections();
             server.close(() => resolve());
         }),

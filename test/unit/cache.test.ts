@@ -200,6 +200,16 @@ describe('evictDisk', () => {
         expect(await cache.evictDisk({ now: NOW + DAY + 1 })).toEqual({ removed: 1 });
     });
 
+    it('never removes a file being written (.tmp)', async () => {
+        const dir = tempDir();
+        const tmp = put(dir, 'aa01', 10, 90).replace(/\.json$/, '.json.123.tmp');
+        fs.renameSync(path.join(dir, 'aa', 'aa01.json'), tmp);
+        const t = new Date(NOW - 90 * DAY);
+        fs.utimesSync(tmp, t, t);
+        await new Cache(dir).evictDisk({ now: NOW, maxBytes: 0 });
+        expect(fs.existsSync(tmp)).toBe(true);
+    });
+
     it('is a no-op without a disk directory', async () => {
         expect(await new Cache(null).evictDisk({ now: NOW })).toEqual({ removed: 0 });
     });

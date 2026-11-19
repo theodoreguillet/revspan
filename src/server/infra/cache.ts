@@ -129,7 +129,7 @@ export class Cache {
         }
         const stamp = path.join(dir, EVICT_STAMP);
         try {
-            if (now - (await fsp.stat(stamp)).mtimeMs < DAY_MS) {
+            if (now - Number(await fsp.readFile(stamp, 'utf8')) < DAY_MS) {
                 return { removed: 0 };
             }
         } catch {
@@ -142,6 +142,9 @@ export class Cache {
             }
             const subDir = path.join(dir, sub.name);
             for (const name of await fsp.readdir(subDir)) {
+                if (!name.endsWith('.json')) {
+                    continue;
+                }
                 try {
                     const file = path.join(subDir, name);
                     const info = await fsp.stat(file);
@@ -169,8 +172,18 @@ export class Cache {
             }
         }
         await fsp.writeFile(stamp, String(now), { mode: 0o600 });
-        await fsp.utimes(stamp, new Date(now), new Date(now));
         return { removed };
+    }
+
+    /** Trims the disk cache now and then every day (a long-lived process); returns the function that stops it. */
+    scheduleEviction(onError: (error: Error) => void = (error) => console.warn(`revspan: cannot trim the cache (${error.message})`)): () => void {
+        const run = (): void => {
+            this.evictDisk().catch((error: unknown) => onError(error as Error));
+        };
+        run();
+        const timer = setInterval(run, DAY_MS);
+        timer.unref();
+        return () => clearInterval(timer);
     }
 
     /**
