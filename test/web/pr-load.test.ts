@@ -189,13 +189,13 @@ describe('PR page writes without waiting for a reload', () => {
             expect(discussion.draft(at(8).key)).toBe('These lines\n\nOlder note');
         });
 
-        it('Shift+click with no composer, on another file or on a removed line: a plain click', () => {
+        it('Shift+click with no composer, or on another file: a plain click', () => {
             const discussion = useDiscussion(ref, usePrLoad(ref, detail));
             discussion.openComposer(at(8), true);
             expect(discussion.composer.value).toEqual(at(8));
             discussion.openComposer(at(3, 'src/B.ts'), true);
             expect(discussion.composer.value).toEqual(at(3, 'src/B.ts'));
-            discussion.openComposer(at(6, 'src/B.ts', '-'), true);
+            discussion.openComposer(at(6, 'src/B.ts', '-'));
             expect(discussion.composer.value).toEqual(at(6, 'src/B.ts', '-'));
             // from a removed line's composer, Shift+click on a new-side line opens that line alone
             discussion.openComposer(at(7, 'src/B.ts'), true);
@@ -204,6 +204,27 @@ describe('PR page writes without waiting for a reload', () => {
             discussion.closeComposer();
             discussion.openComposer(at(9, 'src/B.ts'), true);
             expect(discussion.composer.value).toEqual(at(9, 'src/B.ts'));
+        });
+
+        it('Shift+click on a removed line while a new-side composer is open is ignored: the composer and its range stay', () => {
+            const discussion = useDiscussion(ref, usePrLoad(ref, detail));
+            discussion.openComposer(at(5));
+            discussion.openComposer(at(6, 'src/A.ts', '-'), true);
+            expect(discussion.composer.value).toEqual(at(5));
+            discussion.setDraft(at(5).key, 'These lines');
+            discussion.openComposer(at(8), true);
+            const range = discussion.composer.value;
+            expect(range).toMatchObject({ line: 8, startLine: 5 });
+            discussion.openComposer(at(6, 'src/A.ts', '-'), true);
+            discussion.openComposer(at(2, 'src/B.ts', '-'), true);
+            expect(discussion.composer.value).toEqual(range);
+            expect(discussion.draft(at(8).key)).toBe('These lines');
+            // the range still grows from the line first clicked
+            discussion.openComposer(at(9), true);
+            expect(discussion.composer.value).toMatchObject({ line: 9, startLine: 5 });
+            // a plain click on a removed line opens its own composer, as before
+            discussion.openComposer(at(6, 'src/A.ts', '-'));
+            expect(discussion.composer.value).toEqual(at(6, 'src/A.ts', '-'));
         });
 
         it('sends startTo in one request, shows the range at once, and restores the range if the send fails', async () => {

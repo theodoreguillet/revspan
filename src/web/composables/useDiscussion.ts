@@ -54,11 +54,15 @@ export function useDiscussion(prRef: PrRef, load: PrLoad) {
     /**
      * "+" on a line. `extend` (Shift+click) while a new-side composer is open in the same file, on a new-side line: the
      * composer takes the range from the line first clicked to this one (it moves under the range's last line, and the
-     * text typed goes with it). Otherwise (no composer, another file, a removed line): this line alone.
+     * text typed goes with it). On a removed line, it is ignored: a range covers the new side only, and a slip must not
+     * lose the range being made. Otherwise (no composer, another file, a plain click): this line alone.
      */
     function openComposer(target: ComposerTarget, extend = false): void {
         const current = composer.value;
         if (extend && current) {
+            if (current.kind === 'new' && target.kind === 'old') {
+                return;
+            }
             const range = rangeTarget(anchorOf(current), target);
             if (range) {
                 moveDraft(current.key, range.key);

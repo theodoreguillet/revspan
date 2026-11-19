@@ -380,10 +380,10 @@ the author's remain. Details: [docs/DESIGN.md](docs/DESIGN.md). Routes: [docs/AP
   its banner.
 - **Comment on a line**: only on the latest version (Bitbucket anchors comments on the current version). On a deleted
   line, the tool posts a general comment that quotes the line. A range of lines covers the new side only: `Shift+click`
-  on a deleted line's **+** starts a new comment on that line, and a range may span lines hidden between two hunks. A
-  range written in Bitbucket on removed lines shows its lines in the thread, at file level like any comment on removed
-  lines. A range relocated onto another version keeps its lines when its first line still comes before its last one,
-  otherwise it shows on its last line.
+  on a deleted line's **+** is ignored while a comment on new lines is open (it keeps its range; a plain click comments
+  the deleted line), and a range may span lines hidden between two hunks. A range written in Bitbucket on removed lines
+  shows its lines in the thread, at file level like any comment on removed lines. A range relocated onto another
+  version keeps its lines when its first line still comes before its last one, otherwise it shows on its last line.
 - **Go to definition** reads patterns on the displayed lines, not the code: a local name defined in several functions
   lists them all, a definition outside the hunks is found only with "whole file" (or through its import), and only
   relative TS / JS imports lead to a file of the PR (no path aliases such as `@/`, no Python or Java packages).
